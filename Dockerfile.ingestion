@@ -1,0 +1,76 @@
+# Dockerfile für Covina Ingestion Backend
+# =========================================
+# 
+# Multi-stage build mit Worker Pool Support
+# 
+# Build:   docker build -f Dockerfile.ingestion -t covina-ingestion-backend:latest .
+# Run:     docker run -p 45679:45679 covina-ingestion-backend:latest
+#
+# Version: 1.0
+# Date:    11. Oktober 2025
+
+# ========================================
+# STAGE 1: Builder (Dependencies)
+# ========================================
+FROM python:3.11-slim as builder
+
+LABEL maintainer="Covina System"
+LABEL description="Covina Ingestion Backend - Document Upload, Job Processing, WebSocket"
+
+# Set working directory
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    libpq-dev \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# ========================================
+# STAGE 2: Runtime
+# ========================================
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Python packages from builder
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Copy application code
+COPY . .
+
+# Create necessary directories
+RUN mkdir -p logs data/temp uploads
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PORT=45679
+ENV WORKERS_IO=18
+ENV WORKERS_CPU=18
+
+# Expose ports (HTTP + WebSocket)
+EXPOSE 45679
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:45679/health || exit 1
+
+# Run application
+CMD ["python", "ingestion_backend.py"]

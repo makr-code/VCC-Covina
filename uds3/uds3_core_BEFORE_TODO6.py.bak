@@ -1,0 +1,4514 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Optimized Unified Database Strategy v3.0 - With Security & Quality Framework
+Umfassende Verwaltung ALLER verwaltungsrechtlicher Dokumente
+
+DOKUMENTBEREICH:
+- Normative Ebene: Gesetze, Verordnungen, Ausführungsbestimmungen, Richtlinien
+- Verwaltungsentscheidungen: Bescheide, Verfügungen, Planfeststellungen
+- Gerichtsentscheidungen: VG/OVG/BVerwG/BVerfG-Entscheidungen (nur ein Teilbereich!)
+- Verwaltungsinterne Dokumente: Aktennotizen, Gutachten, Korrespondenz
+
+DATENBANKROLLEN:
+Vector DB: Semantische Suche über alle Dokumenttypen, Cross-Domain-Ähnlichkeit
+Graph DB: Normenhierarchien, Verwaltungsverfahren, Behördenstrukturen, Präzedenzfälle
+Relational DB: Metadaten, Fristen, Verfahrensstatus, Compliance-Monitoring
+
+Erweitert um:
+- Advanced Data Security (Hash-Werte, UUIDs, Verschlüsselung)
+- Data Quality Management (Scoring, Validation, Monitoring)
+- Integrity Verification und Quality Assurance
+"""
+
+import logging
+import hashlib
+import os
+import uuid
+from typing import Dict, List, Optional, Any
+from typing import Optional, Any
+from datetime import datetime
+from dataclasses import dataclass
+from enum import Enum
+
+# Import Security & Quality Framework
+try:
+    # KONSOLIDIERT: Nur noch uds3_security_quality.py verwenden
+    from uds3_security_quality import (
+        SecurityLevel,
+        DataSecurityManager,
+        create_security_manager,
+        DataQualityManager,
+        QualityMetric,
+        create_quality_manager,
+    )
+
+    SECURITY_QUALITY_AVAILABLE = True
+except ImportError:
+    SECURITY_QUALITY_AVAILABLE = False
+    print("Warning: Security & Quality Framework not available")
+
+# Import UDS3 Relations Core
+try:
+    from uds3_relations_data_framework import (
+        UDS3RelationsDataFramework,
+        get_uds3_relations_framework,
+    )
+
+    UDS3_RELATIONS_AVAILABLE = True
+except ImportError:
+    UDS3_RELATIONS_AVAILABLE = False
+    print("Warning: UDS3 Relations Data Framework not available")
+
+# Identity Service Integration
+try:
+    from uds3_identity_service import get_identity_service, IdentityServiceError
+
+    IDENTITY_SERVICE_AVAILABLE = True
+except ImportError:
+    IDENTITY_SERVICE_AVAILABLE = False
+    get_identity_service = None  # type: ignore
+    IdentityServiceError = Exception  # type: ignore
+
+# Saga Orchestrator Integration
+try:
+    from .uds3_saga_orchestrator import (
+        get_saga_orchestrator,
+        SagaDefinition,
+        SagaExecutionError,
+        SagaExecutionResult,
+        SagaStatus,
+        SagaStep,
+    )
+
+    SAGA_ORCHESTRATOR_AVAILABLE = True
+except ImportError:
+    try:
+        from uds3_saga_orchestrator import (
+            get_saga_orchestrator,
+            SagaDefinition,
+            SagaExecutionError,
+            SagaExecutionResult,
+            SagaStatus,
+            SagaStep,
+        )
+
+        SAGA_ORCHESTRATOR_AVAILABLE = True
+    except ImportError:
+        SAGA_ORCHESTRATOR_AVAILABLE = False
+        get_saga_orchestrator = None  # type: ignore
+        SagaDefinition = None  # type: ignore
+        SagaExecutionError = Exception  # type: ignore
+        SagaExecutionResult = None  # type: ignore
+        SagaStatus = None  # type: ignore
+        SagaStep = None  # type: ignore
+
+try:
+    from database.saga_crud import SagaDatabaseCRUD  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    # Provide a lightweight fallback implementation so the core library can be
+    # instantiated in environments where the optional `database.saga_crud`
+    # module isn't available (e.g. during unit tests). This avoids trying to
+    # instantiate `typing.Any` which raises at runtime.
+    class SagaDatabaseCRUD:  # pragma: no cover - simple test stub
+        def __init__(self, manager_getter=None, manager=None, **kwargs):
+            self._manager_getter = manager_getter
+            self._manager = manager
+
+        def _get_manager(self):
+            if self._manager is not None:
+                return self._manager
+            if callable(self._manager_getter):
+                try:
+                    return self._manager_getter()
+                except Exception:
+                    return None
+            return None
+
+        # Create operations
+        def vector_create(self, document_id, chunks, metadata):
+            return {"id": document_id}
+
+        def graph_create(self, document_id, properties):
+            return {"id": document_id}
+
+        def relational_create(self, document_data):
+            if isinstance(document_data, dict):
+                return {"id": document_data.get("document_id")}
+            return {"id": None}
+
+        def file_create(self, asset_id, payload):
+            return {"asset_id": asset_id}
+
+        # Read operations
+        def vector_read(self, document_id):
+            return {}
+
+        def graph_read(self, identifier):
+            return {}
+
+        def relational_read(self, document_id):
+            return {}
+
+        def file_read(self, asset_id):
+            return {}
+
+        # Update operations
+        def vector_update(self, document_id, updates):
+            return True
+
+        def graph_update(self, identifier, updates):
+            return True
+
+        def relational_update(self, document_id, updates):
+            return True
+
+        def file_update(self, asset_id, updates):
+            return True
+
+        # Delete operations
+        def vector_delete(self, document_id):
+            return True
+
+        def graph_delete(self, identifier):
+            return True
+
+        def relational_delete(self, document_id):
+            return True
+
+        def file_delete(self, asset_id):
+            return True
+
+try:
+    from database.adapter_governance import AdapterGovernanceError  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    AdapterGovernanceError = Exception  # type: ignore
+
+logger = logging.getLogger(__name__)
+
+
+class DatabaseRole(Enum):
+    """Definiert die Hauptrollen der verschiedenen Datenbank-Typen für Verwaltungsrecht"""
+
+    VECTOR = "semantic_search"  # Semantische Suche über alle Dokumenttypen
+    GRAPH = "admin_relationships"  # Verwaltungsstrukturen, Normenhierarchien, Verfahren
+    RELATIONAL = "admin_metadata"  # Metadaten, Fristen, Verfahrensstatus
+    FILE = "file_storage"  # Speicherung der Originaldateien (optional)
+
+
+class OperationType(Enum):
+    """Definiert die verfügbaren CRUD-Operationen"""
+
+    CREATE = "create"
+    READ = "read"
+    UPDATE = "update"
+    DELETE = "delete"
+    MERGE = "merge"  # Upsert-Operation
+    ARCHIVE = "archive"  # Soft Delete
+    RESTORE = "restore"  # Restore from Archive
+
+
+class SyncStrategy(Enum):
+    """Synchronisationsstrategien zwischen Datenbanken"""
+
+    IMMEDIATE = "immediate"  # Sofortige Synchronisation
+    DEFERRED = "deferred"  # Verzögerte Batch-Synchronisation
+    EVENTUAL = "eventual"  # Eventual Consistency
+    MANUAL = "manual"  # Manuelle Synchronisation
+
+
+@dataclass
+class DatabaseOptimization:
+    """Optimierungsstrategien für spezifische Datenbank-Typen"""
+
+    vector_dimensions: int = 1536  # OpenAI Ada-002 Standard
+    vector_similarity_metric: str = "cosine"
+    graph_index_properties: List[str] = None
+    relational_indexes: List[str] = None
+    batch_sizes: Dict[str, int] = None
+
+
+class UnifiedDatabaseStrategy:
+    """
+    Erweiterte Unified Database Strategy mit Security & Quality Framework
+
+    VECTOR DB (ChromaDB/Pinecone):
+    - Semantische Suche in Dokumenteninhalten
+    - Content-Embedding für Ähnlichkeitssuche
+    - Chunk-basierte Vektoren für granulare Suche
+
+    GRAPH DB (Neo4j/ArangoDB):
+    - Dokument-Beziehungen und Vernetzung
+    - Autorennetzwerke und Zitationsnetze
+    - Rechtsprechungs-Hierarchien
+
+    RELATIONAL DB (SQLite/PostgreSQL):
+    - Strukturierte Metadaten und Keywords
+    - Schnelle Filterung und Indexierung
+    - Statistiken und Aggregationen
+
+    ERWEITERT UM:
+    - Data Security: Hash-basierte Integrität, UUIDs, Verschlüsselung
+    - Data Quality: Multi-dimensionale Qualitätsbewertung
+    - Cross-Database Validation: Konsistenzprüfung zwischen DBs
+    """
+
+    version = "UDS3.0_optimized"  # Version für Database-API-Logging
+
+    def __init__(
+        self,
+        security_level: "SecurityLevel" = None,
+        strict_quality: bool = False,
+        *,
+        enforce_governance: bool = True,
+        naming_config: Optional[Dict[str, Any]] = None,
+        enable_dynamic_naming: bool = True,
+    ):
+        # Initialize core managers and integrations (clean, consistently-indented)
+        # Security & Quality
+        if SECURITY_QUALITY_AVAILABLE:
+            self.security_manager = create_security_manager(
+                security_level or SecurityLevel.INTERNAL
+            )
+            self.quality_manager = create_quality_manager(strict_quality)
+        else:
+            self.security_manager = None
+            self.quality_manager = None
+
+        # Relations framework
+        if UDS3_RELATIONS_AVAILABLE:
+            try:
+                self.relations_framework = get_uds3_relations_framework()
+                self.relations_enabled = True
+                logger.info("✅ UDS3 Relations Data Framework integriert")
+            except Exception:
+                self.relations_framework = None
+                self.relations_enabled = False
+                logger.warning(
+                    "⚠️ UDS3 Relations Data Framework konnte nicht initialisiert werden"
+                )
+        else:
+            self.relations_framework = None
+            self.relations_enabled = False
+
+        # Identity service
+        if IDENTITY_SERVICE_AVAILABLE and get_identity_service is not None:
+            try:
+                self.identity_service = get_identity_service()
+                logger.info("✅ UDS3 Identity Service integriert")
+            except IdentityServiceError as exc:
+                self.identity_service = None
+                logger.warning(
+                    f"⚠️ UDS3 Identity Service konnte nicht initialisiert werden: {exc}"
+                )
+            except Exception as exc:
+                self.identity_service = None
+                logger.error(f"🚨 UDS3 Identity Service Fehler: {exc}")
+        else:
+            self.identity_service = None
+
+        # Saga orchestrator
+        if SAGA_ORCHESTRATOR_AVAILABLE and get_saga_orchestrator is not None:
+            try:
+                self.saga_orchestrator = get_saga_orchestrator()
+                logger.info("✅ UDS3 Saga Orchestrator integriert")
+            except Exception as exc:
+                self.saga_orchestrator = None
+                logger.warning(
+                    f"⚠️ UDS3 Saga Orchestrator konnte nicht initialisiert werden: {exc}"
+                )
+        else:
+            self.saga_orchestrator = None
+
+        # Naming Strategy (NEU!)
+        self.enable_dynamic_naming = enable_dynamic_naming
+        self.naming_manager = None
+        if enable_dynamic_naming:
+            try:
+                from uds3_naming_integration import NamingContextManager
+                self.naming_manager = NamingContextManager(**(naming_config or {}))
+                logger.info("✅ UDS3 Dynamic Naming Strategy aktiviert")
+            except ImportError as exc:
+                logger.warning(f"⚠️ Dynamic Naming nicht verfügbar: {exc}")
+                self.enable_dynamic_naming = False
+            except Exception as exc:
+                logger.warning(f"⚠️ Naming Strategy Fehler: {exc}")
+                self.enable_dynamic_naming = False
+
+        # Database and governance placeholders
+        self._database_manager = None
+        self._adapter_governance = None
+        self.enforce_governance = enforce_governance
+        self.saga_crud = SagaDatabaseCRUD(manager_getter=self._resolve_database_manager)
+        
+        # Wrap SagaCRUD with Dynamic Naming (falls aktiviert)
+        if self.enable_dynamic_naming and self.naming_manager:
+            try:
+                from uds3_naming_integration import create_naming_enabled_saga_crud
+                self.saga_crud = create_naming_enabled_saga_crud(
+                    saga_crud_instance=self.saga_crud,
+                    naming_manager=self.naming_manager
+                )
+                logger.info("✅ SagaCRUD mit Dynamic Naming erweitert")
+            except Exception as exc:
+                logger.warning(f"⚠️ SagaCRUD Naming-Wrapper Fehler: {exc}")
+
+        # Basic structures
+        self.document_mapping: dict[Any, Any] = {}
+        self.batch_operations: list[Any] = []
+        self.batch_size = 100
+
+        self.optimization_config = DatabaseOptimization(
+            batch_sizes={"vector": 50, "graph": 100, "relational": 200}
+        )
+
+        # Database roles
+        self.database_roles = {
+            DatabaseRole.VECTOR: {
+                "primary_data": ["content_embeddings", "chunk_vectors"],
+                "use_cases": [
+                    "semantic_search",
+                    "similarity_matching",
+                    "content_discovery",
+                ],
+                "storage_format": "embeddings",
+                "optimization": "high_dimensional_search",
+            },
+            DatabaseRole.GRAPH: {
+                "primary_data": ["relationships", "hierarchies", "networks"],
+                "use_cases": ["traversal_queries", "path_finding", "network_analysis"],
+                "storage_format": "nodes_and_edges",
+                "optimization": "relationship_traversal",
+            },
+            DatabaseRole.RELATIONAL: {
+                "primary_data": ["metadata", "keywords", "statistics"],
+                "use_cases": ["fast_filtering", "aggregations", "keyword_search"],
+                "storage_format": "structured_tables",
+                "optimization": "indexed_queries",
+            },
+            DatabaseRole.FILE: {
+                "primary_data": [
+                    "original_files",
+                    "binary_assets",
+                    "supplemental_material",
+                ],
+                "use_cases": [
+                    "archival_storage",
+                    "evidence_persistence",
+                    "reprocessing_source",
+                ],
+                "storage_format": "filesystem_or_object_store",
+                "optimization": "hierarchical_storage_tier",
+            },
+        }
+
+        # Schemas and strategies
+        self.vector_schema = self._create_vector_schema()
+        self.graph_schema = self._create_graph_schema()
+        self.relational_schema = self._create_relational_schema()
+        self.file_storage_schema = self._create_file_storage_schema()
+
+        self.sync_rules = self._create_sync_rules()
+        self.crud_strategies = self._create_crud_strategies()
+        self.conflict_resolution = self._create_conflict_resolution_rules()
+
+    def _resolve_database_manager(self):
+        if self._database_manager is not None:
+            return self._database_manager
+        try:
+            from database import database_api  # type: ignore
+
+            self._database_manager = database_api.get_database_manager()
+        except (
+            Exception
+        ) as exc:  # pragma: no cover - Fallback falls globale Factory scheitert
+            logger.debug("Falle auf lokalen DatabaseManager zurück: %s", exc)
+            try:
+                from database.database_manager import DatabaseManager  # type: ignore
+            except Exception:
+
+                class DatabaseManager:  # type: ignore
+                    def __init__(self, cfg=None):
+                        self._cfg = cfg or {}
+
+                    def get_adapter_governance(self):
+                        return None
+
+            try:
+                # Versuche zentrale neue Config im Paket uds3
+                from . import config as _config
+
+                def _get_database_backend_dict():
+                    # Erwartetes Format: { 'postgis': {...}, 'vector': {...}, ... }
+                    return {k: v for k, v in _config.DATABASES.items()}
+
+                config_like = type(
+                    "C",
+                    (),
+                    {
+                        "get_database_backend_dict": staticmethod(
+                            _get_database_backend_dict
+                        )
+                    },
+                )
+                cfg_obj = config_like()
+            except Exception:
+                # Fallback: alte Erwartungen weiter unterstützen
+                try:
+                    # Legacy fallback: try to import a top-level `config` module if present
+                    # Prefer the package-local `uds3.config` where possible
+                    from config import config  # type: ignore
+
+                    cfg_obj = config
+                except Exception:
+                    try:
+                        from . import config as _config
+
+                        class _LocalConfigLike:
+                            @staticmethod
+                            def get_database_backend_dict():
+                                try:
+                                    return {k: v for k, v in _config.DATABASES.items()}
+                                except Exception:
+                                    return {}
+
+                        cfg_obj = _LocalConfigLike()
+                    except Exception:
+
+                        class _ConfigStub:  # type: ignore
+                            def get_database_backend_dict(self):
+                                return {}
+
+                        cfg_obj = _ConfigStub()
+
+            self._database_manager = DatabaseManager(
+                cfg_obj.get_database_backend_dict()
+            )
+        return self._database_manager
+
+    def _get_adapter_governance(self):
+        if self._adapter_governance is not None:
+            return self._adapter_governance
+        manager = self._resolve_database_manager()
+        getter = getattr(manager, "get_adapter_governance", None)
+        if callable(getter):
+            self._adapter_governance = getter()
+        return self._adapter_governance
+
+    def _enforce_adapter_governance(
+        self, backend_key: str, operation: str, payload: Any
+    ) -> None:
+        if not self.enforce_governance:
+            return
+        governance = self._get_adapter_governance()
+        if not governance:
+            return
+        try:
+            governance.ensure_operation_allowed(backend_key, operation)
+            governance.enforce_payload(backend_key, operation, payload)
+        except AdapterGovernanceError as exc:
+            raise SagaExecutionError(str(exc))
+
+    def _create_vector_schema(self) -> Dict:
+        """Optimiertes Schema für Vector Database"""
+        return {
+            "collections": {
+                "document_chunks": {
+                    "embedding_field": "content_vector",
+                    "metadata_fields": [
+                        "document_id",  # Referenz für Cross-DB Queries
+                        "chunk_index",
+                        "content_preview",  # Für Suchergebnisse
+                        "section_title",
+                        "chunk_type",  # 'paragraph', 'heading', 'table', etc.
+                        "content_length",
+                        "language",
+                        "created_at",
+                    ],
+                    "vector_config": {
+                        "dimensions": 1536,
+                        "similarity_metric": "cosine",
+                        "index_type": "hnsw",  # Hierarchical Navigable Small World
+                    },
+                },
+                "document_summaries": {
+                    "embedding_field": "summary_vector",
+                    "metadata_fields": [
+                        "document_id",
+                        "summary_text",
+                        "key_topics",
+                        "document_type",
+                        "confidence_score",
+                        "created_at",
+                    ],
+                },
+            },
+            "search_strategies": {
+                "semantic_search": {
+                    "collection": "document_chunks",
+                    "k_results": 50,
+                    "similarity_threshold": 0.7,
+                    "rerank": True,
+                },
+                "document_discovery": {
+                    "collection": "document_summaries",
+                    "k_results": 20,
+                    "similarity_threshold": 0.75,
+                },
+            },
+        }
+
+    def _create_graph_schema(self) -> Dict:
+        """Optimiertes Schema für Graph Database"""
+        return {
+            "node_types": {
+                "Document": {
+                    "primary_key": "id",
+                    "indexes": ["file_hash", "rechtsgebiet", "created_at"],
+                    "properties": {
+                        "essential": ["id", "title", "file_path", "file_hash"],
+                        "metadata": ["rechtsgebiet", "behoerde", "document_type"],
+                        "computed": [
+                            "chunk_count",
+                            "relationship_count",
+                            "centrality_score",
+                        ],
+                    },
+                },
+                "Author": {
+                    "primary_key": "normalized_name",
+                    "indexes": ["name", "organization"],
+                    "properties": {
+                        "essential": ["id", "name", "normalized_name"],
+                        "metadata": ["organization", "role", "expertise_areas"],
+                        "computed": [
+                            "document_count",
+                            "citation_count",
+                            "authority_score",
+                        ],
+                    },
+                },
+                "LegalEntity": {
+                    "primary_key": "entity_id",
+                    "indexes": ["entity_type", "jurisdiction"],
+                    "properties": {
+                        "essential": ["entity_id", "name", "entity_type"],
+                        "metadata": [
+                            "jurisdiction",
+                            "legal_form",
+                            "establishment_date",
+                        ],
+                        "computed": ["mention_count", "case_involvement"],
+                    },
+                },
+                "Concept": {
+                    "primary_key": "concept_id",
+                    "indexes": ["domain", "confidence"],
+                    "properties": {
+                        "essential": ["concept_id", "term", "domain"],
+                        "metadata": ["definition", "synonyms", "related_terms"],
+                        "computed": ["frequency", "importance_score"],
+                    },
+                },
+            },
+            "relationship_types": {
+                "CONTAINS": {
+                    "from": "Document",
+                    "to": "DocumentChunk",
+                    "properties": ["chunk_index", "section_type"],
+                    "traversal_weight": 1.0,
+                },
+                "CITES": {
+                    "from": "Document",
+                    "to": "Document",
+                    "properties": ["citation_type", "relevance_score", "context"],
+                    "traversal_weight": 0.8,
+                },
+                "AUTHORED_BY": {
+                    "from": "Document",
+                    "to": "Author",
+                    "properties": ["role", "contribution_type"],
+                    "traversal_weight": 0.9,
+                },
+                "MENTIONS": {
+                    "from": "Document",
+                    "to": "LegalEntity",
+                    "properties": ["mention_count", "context_type", "sentiment"],
+                    "traversal_weight": 0.6,
+                },
+                "RELATES_TO": {
+                    "from": "Document",
+                    "to": "Concept",
+                    "properties": ["relevance_score", "extraction_method"],
+                    "traversal_weight": 0.7,
+                },
+                "SUPERSEDES": {
+                    "from": "Document",
+                    "to": "Document",
+                    "properties": ["supersession_date", "legal_basis"],
+                    "traversal_weight": 0.95,
+                },
+            },
+            "traversal_strategies": {
+                "citation_network": {
+                    "relationships": ["CITES", "SUPERSEDES"],
+                    "max_depth": 3,
+                    "direction": "both",
+                },
+                "concept_expansion": {
+                    "relationships": ["RELATES_TO", "MENTIONS"],
+                    "max_depth": 2,
+                    "direction": "outgoing",
+                },
+            },
+        }
+
+    def _create_relational_schema(self) -> Dict:
+        """Optimiertes Schema für Relational Database"""
+        return {
+            "tables": {
+                "documents_metadata": {
+                    "primary_key": "document_id",
+                    "indexes": [
+                        {"columns": ["rechtsgebiet"], "type": "btree"},
+                        {"columns": ["behoerde"], "type": "btree"},
+                        {"columns": ["document_type"], "type": "btree"},
+                        {"columns": ["created_at"], "type": "btree"},
+                        {"columns": ["file_hash"], "type": "unique"},
+                        {
+                            "columns": ["title"],
+                            "type": "gin_trgm",
+                        },  # PostgreSQL Trigram
+                    ],
+                    "columns": {
+                        "document_id": "VARCHAR(32) PRIMARY KEY",
+                        "title": "TEXT NOT NULL",
+                        "file_path": "TEXT NOT NULL",
+                        "file_hash": "VARCHAR(64) UNIQUE",
+                        "file_size": "INTEGER",
+                        "rechtsgebiet": "VARCHAR(100)",
+                        "behoerde": "VARCHAR(200)",
+                        "document_type": "VARCHAR(50)",
+                        "language": 'CHAR(2) DEFAULT "de"',
+                        "chunk_count": "INTEGER DEFAULT 0",
+                        "processing_status": 'VARCHAR(20) DEFAULT "pending"',
+                        "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                        "updated_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                    },
+                },
+                "keywords_index": {
+                    "primary_key": "id",
+                    "indexes": [
+                        {"columns": ["keyword"], "type": "gin_trgm"},
+                        {"columns": ["document_id"], "type": "btree"},
+                        {"columns": ["frequency"], "type": "btree"},
+                        {"columns": ["keyword", "document_id"], "type": "unique"},
+                    ],
+                    "columns": {
+                        "id": "SERIAL PRIMARY KEY",
+                        "document_id": "VARCHAR(32) REFERENCES documents_metadata(document_id)",
+                        "keyword": "VARCHAR(200) NOT NULL",
+                        "frequency": "INTEGER NOT NULL",
+                        "context_type": "VARCHAR(50)",  # 'title', 'content', 'summary'
+                        "extraction_method": "VARCHAR(50)",  # 'tfidf', 'ner', 'manual'
+                        "confidence": "DECIMAL(3,2) DEFAULT 1.0",
+                        "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                    },
+                },
+                "processing_statistics": {
+                    "primary_key": "id",
+                    "indexes": [
+                        {"columns": ["document_id"], "type": "btree"},
+                        {"columns": ["processing_stage"], "type": "btree"},
+                        {"columns": ["created_at"], "type": "btree"},
+                    ],
+                    "columns": {
+                        "id": "SERIAL PRIMARY KEY",
+                        "document_id": "VARCHAR(32) REFERENCES documents_metadata(document_id)",
+                        "processing_stage": "VARCHAR(50) NOT NULL",
+                        "duration_ms": "INTEGER",
+                        "memory_usage_mb": "INTEGER",
+                        "tokens_processed": "INTEGER",
+                        "vectors_created": "INTEGER",
+                        "relationships_created": "INTEGER",
+                        "status": 'VARCHAR(20) DEFAULT "completed"',
+                        "error_message": "TEXT",
+                        "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                    },
+                },
+                "administrative_identities": {
+                    "primary_key": "uuid",
+                    "indexes": [
+                        {"columns": ["aktenzeichen"], "type": "btree"},
+                        {"columns": ["status"], "type": "btree"},
+                    ],
+                    "columns": {
+                        "uuid": "VARCHAR(36) PRIMARY KEY",
+                        "aktenzeichen": "VARCHAR(120) UNIQUE",
+                        "status": 'VARCHAR(32) DEFAULT "registered"',
+                        "source_system": "VARCHAR(100)",
+                        "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                        "updated_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                    },
+                },
+                "administrative_identity_mappings": {
+                    "primary_key": "uuid",
+                    "indexes": [
+                        {"columns": ["aktenzeichen"], "type": "btree"},
+                        {"columns": ["relational_id"], "type": "btree"},
+                        {"columns": ["graph_id"], "type": "btree"},
+                        {"columns": ["vector_id"], "type": "btree"},
+                        {"columns": ["file_storage_id"], "type": "btree"},
+                    ],
+                    "columns": {
+                        "uuid": "VARCHAR(36) PRIMARY KEY REFERENCES administrative_identities(uuid)",
+                        "aktenzeichen": "VARCHAR(120)",
+                        "relational_id": "VARCHAR(64)",
+                        "graph_id": "VARCHAR(64)",
+                        "vector_id": "VARCHAR(64)",
+                        "file_storage_id": "VARCHAR(64)",
+                        "metadata": "JSONB",
+                        "updated_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                    },
+                },
+                "administrative_identity_audit": {
+                    "primary_key": "audit_id",
+                    "indexes": [
+                        {"columns": ["uuid"], "type": "btree"},
+                        {"columns": ["action"], "type": "btree"},
+                    ],
+                    "columns": {
+                        "audit_id": "VARCHAR(36) PRIMARY KEY",
+                        "uuid": "VARCHAR(36) NOT NULL REFERENCES administrative_identities(uuid)",
+                        "action": "VARCHAR(64) NOT NULL",
+                        "actor": "VARCHAR(100)",
+                        "details": "JSONB",
+                        "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                    },
+                },
+                "administrative_identity_metrics": {
+                    "primary_key": "metric_id",
+                    "indexes": [
+                        {"columns": ["aktenzeichen"], "type": "btree"},
+                        {"columns": ["metric_name"], "type": "btree"},
+                        {"columns": ["observed_at"], "type": "btree"},
+                    ],
+                    "columns": {
+                        "metric_id": "VARCHAR(36) PRIMARY KEY",
+                        "aktenzeichen": "VARCHAR(120) NOT NULL REFERENCES administrative_identities(aktenzeichen)",
+                        "metric_name": "VARCHAR(64) NOT NULL",
+                        "metric_value": "DECIMAL(12,4) NOT NULL",
+                        "units": "VARCHAR(16)",
+                        "metadata": "JSONB",
+                        "observed_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                    },
+                },
+                "administrative_identity_traces": {
+                    "primary_key": "trace_id",
+                    "indexes": [
+                        {"columns": ["aktenzeichen"], "type": "btree"},
+                        {"columns": ["stage"], "type": "btree"},
+                        {"columns": ["observed_at"], "type": "btree"},
+                    ],
+                    "columns": {
+                        "trace_id": "VARCHAR(36) PRIMARY KEY",
+                        "aktenzeichen": "VARCHAR(120) NOT NULL REFERENCES administrative_identities(aktenzeichen)",
+                        "stage": "VARCHAR(64) NOT NULL",
+                        "status": "VARCHAR(20) NOT NULL",
+                        "details": "JSONB",
+                        "observed_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                    },
+                },
+            },
+            "query_strategies": {
+                "keyword_search": {
+                    "table": "keywords_index",
+                    "search_type": "fulltext",
+                    "ranking": "frequency DESC, confidence DESC",
+                },
+                "metadata_filtering": {
+                    "table": "documents_metadata",
+                    "filter_fields": ["rechtsgebiet", "behoerde", "document_type"],
+                    "sort_options": ["created_at", "title", "file_size"],
+                },
+                "identity_lookup": {
+                    "table": "administrative_identities",
+                    "filter_fields": ["aktenzeichen", "status"],
+                    "sort_options": ["created_at", "aktenzeichen"],
+                },
+            },
+        }
+
+    def _create_sync_rules(self) -> Dict:
+        """Definiert Synchronisationsregeln zwischen den Datenbanken"""
+        return {
+            "document_creation": {
+                "trigger": "new_document",
+                "sequence": [
+                    {
+                        "target": "relational",
+                        "operation": "insert_metadata",
+                        "data": "document_properties",
+                    },
+                    {
+                        "target": "graph",
+                        "operation": "create_document_node",
+                        "data": "essential_properties",
+                    },
+                    {
+                        "target": "vector",
+                        "operation": "create_embeddings",
+                        "data": "content_chunks",
+                    },
+                ],
+            },
+            "relationship_update": {
+                "trigger": "new_relationship",
+                "sequence": [
+                    {
+                        "target": "graph",
+                        "operation": "create_relationship",
+                        "data": "relationship_data",
+                    },
+                    {
+                        "target": "relational",
+                        "operation": "update_statistics",
+                        "data": "relationship_count",
+                    },
+                ],
+            },
+            "content_update": {
+                "trigger": "content_change",
+                "sequence": [
+                    {
+                        "target": "vector",
+                        "operation": "update_embeddings",
+                        "data": "new_content",
+                    },
+                    {
+                        "target": "relational",
+                        "operation": "update_keywords",
+                        "data": "extracted_keywords",
+                    },
+                    {
+                        "target": "relational",
+                        "operation": "update_timestamp",
+                        "data": "updated_at",
+                    },
+                ],
+            },
+        }
+
+    def create_optimized_processing_plan(
+        self, file_path: str, content: str, chunks: List[str], **metadata
+    ) -> Dict:
+        """
+        Erstellt einen optimierten Verarbeitungsplan für alle drei DB-Typen
+
+        Args:
+            file_path: Pfad zur Datei
+            content: Volltext des Dokuments
+            chunks: Liste der Text-Chunks
+            **metadata: Zusätzliche Metadaten
+
+        Returns:
+            Dict: Optimierter Processing-Plan mit DB-spezifischen Operationen
+        """
+        document_id = self._generate_document_id(file_path, content[:1000])
+
+        plan = {
+            "strategy_version": "3.0_optimized",
+            "document_id": document_id,
+            "created_at": datetime.now().isoformat(),
+            "databases": {
+                "vector": self._create_vector_operations(document_id, chunks, metadata),
+                "graph": self._create_graph_operations(document_id, content, metadata),
+                "relational": self._create_relational_operations(
+                    document_id, file_path, content, metadata
+                ),
+                "file_storage": self._create_file_storage_operations(
+                    document_id, file_path, content, metadata
+                ),
+            },
+            "sync_plan": self._create_sync_plan(document_id),
+            "optimization_hints": self._create_optimization_hints(chunks, metadata),
+        }
+
+        return plan
+
+    # ========== CRUD OPERATIONS ==========
+
+    def create_secure_document(
+        self,
+        file_path: str,
+        content: str,
+        chunks: List[str],
+        security_level: "SecurityLevel" = None,
+        **metadata,
+    ) -> Dict:
+        """
+        Erstellt ein neues Dokument mit erweiterten Security & Quality Features
+
+        Args:
+            file_path: Pfad zur Quelldatei
+            content: Dokumenteninhalt
+            chunks: Text-Chunks für Vektorisierung
+            security_level: Sicherheitsstufe für das Dokument
+            **metadata: Zusätzliche Metadaten
+
+        Returns:
+            Dict: Vollständiges Ergebnis inkl. Security- und Quality-Informationen
+        """
+        create_result = {
+            "operation_type": "CREATE_SECURE_DOCUMENT",
+            "timestamp": datetime.now().isoformat(),
+            "file_path": file_path,
+            "success": False,
+            "security_info": {},
+            "quality_score": {},
+            "database_operations": {},
+            "validation_results": {},
+            "issues": [],
+        }
+
+        metadata_copy = dict(metadata)
+        context = {
+            "file_path": file_path,
+            "content": content,
+            "chunks": chunks,
+            "metadata": metadata_copy,
+            "security_level": security_level,
+            "create_result": create_result,
+        }
+        if metadata_copy.get("aktenzeichen"):
+            context["identity_key"] = metadata_copy["aktenzeichen"]
+            context["aktenzeichen"] = metadata_copy["aktenzeichen"]
+
+        step_specs = self._build_create_document_step_specs(context)
+        saga_status = None
+
+        try:
+            if self.saga_orchestrator and SagaDefinition and SagaStep:
+                saga_definition = SagaDefinition(
+                    name="create_secure_document",
+                    steps=[
+                        SagaStep(
+                            name=spec["name"],
+                            action=spec["action"],
+                            compensation=spec["compensation"],
+                        )
+                        for spec in step_specs
+                    ],
+                )
+                saga_execution = self.saga_orchestrator.execute(
+                    saga_definition, context
+                )
+                context = saga_execution.context
+                saga_status = saga_execution.status
+                create_result["saga"] = {
+                    "saga_id": saga_execution.saga_id,
+                    "status": saga_execution.status.value,
+                    "errors": saga_execution.errors,
+                    "compensation_errors": saga_execution.compensation_errors,
+                }
+                create_result["issues"].extend(saga_execution.errors)
+                create_result["issues"].extend(saga_execution.compensation_errors)
+            else:
+                local_result = self._execute_saga_steps_locally(step_specs, context)
+                context = local_result["context"]
+                saga_status = local_result["status"]
+                if local_result["errors"] or local_result["compensation_errors"]:
+                    create_result.setdefault("saga", {})
+                    create_result["saga"].update(
+                        {
+                            "status": str(getattr(saga_status, "value", saga_status)),
+                            "errors": local_result["errors"],
+                            "compensation_errors": local_result["compensation_errors"],
+                        }
+                    )
+                    create_result["issues"].extend(local_result["errors"])
+                    create_result["issues"].extend(local_result["compensation_errors"])
+
+            # Erfolg wurde in den Saga-Schritten bestimmt (Validation-Step)
+            if create_result["success"] and saga_status is not None:
+                create_result.setdefault("saga", {})
+                create_result["saga"].setdefault(
+                    "status", getattr(saga_status, "value", str(saga_status))
+                )
+
+        except Exception as exc:
+            create_result["success"] = False
+            create_result["error"] = str(exc)
+            logger.error(f"Secure document creation failed: {exc}")
+
+        return create_result
+
+    def update_secure_document(
+        self,
+        document_id: str,
+        updates: Dict[str, Any],
+        *,
+        sync_strategy: SyncStrategy = SyncStrategy.IMMEDIATE,
+    ) -> Dict[str, Any]:
+        """Aktualisiert ein bestehendes Dokument über alle Backends via Saga."""
+
+        update_result: Dict[str, Any] = {
+            "operation_type": "UPDATE_SECURE_DOCUMENT",
+            "document_id": document_id,
+            "timestamp": datetime.now().isoformat(),
+            "sync_strategy": sync_strategy.value,
+            "updates": dict(updates or {}),
+            "success": False,
+            "database_operations": {},
+            "validation_results": {},
+            "issues": [],
+        }
+
+        context = {
+            "document_id": document_id,
+            "updates": dict(updates or {}),
+            "sync_strategy": sync_strategy,
+            "update_result": update_result,
+        }
+        updates_copy = context["updates"]
+        if updates_copy.get("aktenzeichen"):
+            context["identity_key"] = updates_copy["aktenzeichen"]
+            context["aktenzeichen"] = updates_copy["aktenzeichen"]
+        mapping = self.document_mapping.get(document_id)
+        if mapping:
+            if mapping.get("identity_key"):
+                context.setdefault("identity_key", mapping["identity_key"])
+                context.setdefault("aktenzeichen", mapping["identity_key"])
+            if mapping.get("uuid"):
+                context.setdefault("identity_uuid", mapping["uuid"])
+
+        step_specs = self._build_update_document_step_specs(context)
+        saga_status = None
+
+        try:
+            if self.saga_orchestrator and SagaDefinition and SagaStep:
+                saga_definition = SagaDefinition(
+                    name="update_secure_document",
+                    steps=[
+                        SagaStep(
+                            name=spec["name"],
+                            action=spec["action"],
+                            compensation=spec["compensation"],
+                        )
+                        for spec in step_specs
+                    ],
+                )
+                saga_execution = self.saga_orchestrator.execute(
+                    saga_definition, context
+                )
+                context = saga_execution.context
+                saga_status = saga_execution.status
+                update_result["saga"] = {
+                    "saga_id": saga_execution.saga_id,
+                    "status": saga_execution.status.value,
+                    "errors": saga_execution.errors,
+                    "compensation_errors": saga_execution.compensation_errors,
+                }
+                update_result["issues"].extend(saga_execution.errors)
+                update_result["issues"].extend(saga_execution.compensation_errors)
+            else:
+                local_result = self._execute_saga_steps_locally(step_specs, context)
+                context = local_result["context"]
+                saga_status = local_result["status"]
+                if local_result["errors"] or local_result["compensation_errors"]:
+                    update_result.setdefault("saga", {})
+                    update_result["saga"].update(
+                        {
+                            "status": str(getattr(saga_status, "value", saga_status)),
+                            "errors": local_result["errors"],
+                            "compensation_errors": local_result["compensation_errors"],
+                        }
+                    )
+                    update_result["issues"].extend(local_result["errors"])
+                    update_result["issues"].extend(local_result["compensation_errors"])
+
+            if update_result["success"] and saga_status is not None:
+                update_result.setdefault("saga", {})
+                update_result["saga"].setdefault(
+                    "status", getattr(saga_status, "value", str(saga_status))
+                )
+
+        except Exception as exc:  # pragma: no cover - Schutz gegen unerwartete Fehler
+            update_result["success"] = False
+            update_result["error"] = str(exc)
+            logger.error("Secure document update failed: %s", exc, exc_info=True)
+
+        return update_result
+
+    def delete_secure_document(
+        self,
+        document_id: str,
+        *,
+        soft_delete: bool = True,
+        cascade_delete: bool = True,
+    ) -> Dict[str, Any]:
+        """Löscht oder archiviert ein Dokument saga-gestützt über alle Backends."""
+
+        delete_result: Dict[str, Any] = {
+            "operation_type": "ARCHIVE_SECURE_DOCUMENT"
+            if soft_delete
+            else "DELETE_SECURE_DOCUMENT",
+            "document_id": document_id,
+            "timestamp": datetime.now().isoformat(),
+            "soft_delete": soft_delete,
+            "cascade_delete": cascade_delete,
+            "success": False,
+            "database_operations": {},
+            "issues": [],
+        }
+
+        context = {
+            "document_id": document_id,
+            "soft_delete": soft_delete,
+            "cascade_delete": cascade_delete,
+            "delete_result": delete_result,
+        }
+        mapping = self.document_mapping.get(document_id)
+        if mapping:
+            if mapping.get("identity_key"):
+                context.setdefault("identity_key", mapping["identity_key"])
+                context.setdefault("aktenzeichen", mapping["identity_key"])
+            if mapping.get("uuid"):
+                context.setdefault("identity_uuid", mapping["uuid"])
+
+        step_specs = self._build_delete_document_step_specs(context)
+        saga_status = None
+
+        try:
+            if self.saga_orchestrator and SagaDefinition and SagaStep:
+                saga_definition = SagaDefinition(
+                    name="delete_secure_document",
+                    steps=[
+                        SagaStep(
+                            name=spec["name"],
+                            action=spec["action"],
+                            compensation=spec["compensation"],
+                        )
+                        for spec in step_specs
+                    ],
+                )
+                saga_execution = self.saga_orchestrator.execute(
+                    saga_definition, context
+                )
+                context = saga_execution.context
+                saga_status = saga_execution.status
+                delete_result["saga"] = {
+                    "saga_id": saga_execution.saga_id,
+                    "status": saga_execution.status.value,
+                    "errors": saga_execution.errors,
+                    "compensation_errors": saga_execution.compensation_errors,
+                }
+                delete_result["issues"].extend(saga_execution.errors)
+                delete_result["issues"].extend(saga_execution.compensation_errors)
+            else:
+                local_result = self._execute_saga_steps_locally(step_specs, context)
+                context = local_result["context"]
+                saga_status = local_result["status"]
+                if local_result["errors"] or local_result["compensation_errors"]:
+                    delete_result.setdefault("saga", {})
+                    delete_result["saga"].update(
+                        {
+                            "status": str(getattr(saga_status, "value", saga_status)),
+                            "errors": local_result["errors"],
+                            "compensation_errors": local_result["compensation_errors"],
+                        }
+                    )
+                    delete_result["issues"].extend(local_result["errors"])
+                    delete_result["issues"].extend(local_result["compensation_errors"])
+
+            if delete_result["success"] and saga_status is not None:
+                delete_result.setdefault("saga", {})
+                delete_result["saga"].setdefault(
+                    "status", getattr(saga_status, "value", str(saga_status))
+                )
+
+        except Exception as exc:  # pragma: no cover - Schutz gegen unerwartete Fehler
+            delete_result["success"] = False
+            delete_result["error"] = str(exc)
+            logger.error("Secure document delete failed: %s", exc, exc_info=True)
+
+        return delete_result
+
+    def create_document_operation(
+        self, file_path: str, content: str, chunks: List[str], **metadata
+    ) -> Dict:
+        """
+        Erstellt eine CREATE-Operation für ein neues Dokument
+
+        Returns:
+            Dict: Vollständiger CREATE-Operationsplan
+        """
+        return self.create_optimized_processing_plan(
+            file_path, content, chunks, **metadata
+        )
+
+    # ------------------------------------------------------------------
+    # Saga-Unterstützung für Dokument-Erstellung
+    # ------------------------------------------------------------------
+    def _build_create_document_step_specs(
+        self, context: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        create_result = context["create_result"]
+        metadata = context["metadata"]
+
+        def _mark_optional_skip(
+            result_dict: Dict[str, Any], message: Optional[str]
+        ) -> Dict[str, Any]:
+            result_dict["success"] = True
+            result_dict["skipped"] = True
+            if message:
+                result_dict.setdefault("warning", message)
+                create_result["issues"].append(message)
+            return result_dict
+
+        def _is_optional_backend_error(message: Optional[str]) -> bool:
+            if not message:
+                return False
+            lowered = message.lower()
+            return any(
+                phrase in lowered
+                for phrase in [
+                    "nicht konfiguriert",
+                    "nicht verfügbar",
+                    "not configured",
+                    "not available",
+                ]
+            )
+
+        def security_action(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            metadata_local = ctx["metadata"]
+            file_path_local = ctx["file_path"]
+            content_local = ctx["content"]
+            security_lvl = ctx["security_level"]
+            issues = create_result["issues"]
+            aktenzeichen = metadata_local.get("aktenzeichen")
+
+            try:
+                content_bytes = (content_local or "").encode("utf-8")
+            except AttributeError:
+                content_bytes = b""
+            file_hash = hashlib.sha256(content_bytes).hexdigest()
+            metadata_local.setdefault("file_hash", file_hash)
+            metadata_local.setdefault("file_path", file_path_local)
+            metadata_local.setdefault("file_size", len(content_bytes))
+
+            identity_record = None
+            document_uuid: Optional[str] = None
+            document_id: Optional[str] = None
+
+            if self.security_manager:
+                security_info = self.security_manager.generate_secure_document_id(
+                    content_local,
+                    file_path_local,
+                    security_lvl or SecurityLevel.INTERNAL,
+                )
+                create_result["security_info"] = security_info or {}
+                create_result["security_info"].setdefault("file_hash", file_hash)
+                document_id = security_info.get("document_id")
+                document_uuid = security_info.get("document_uuid")
+
+                audit_entry = self.security_manager.create_audit_log_entry(
+                    "CREATE_DOCUMENT",
+                    document_id,
+                    details={"file_path": file_path_local},
+                )
+                create_result["audit_entry"] = audit_entry
+
+                if document_uuid is None and document_id:
+                    document_uuid = self._infer_uuid_from_document_id(document_id)
+
+                if self.identity_service and document_uuid:
+                    try:
+                        identity_record = self.identity_service.ensure_identity(
+                            document_uuid,
+                            aktenzeichen=aktenzeichen,
+                            source_system="uds3.security",
+                            actor="uds3_core",
+                        )
+                    except IdentityServiceError as exc:
+                        issues.append(f"Identity-Service Fehler: {exc}")
+                elif self.identity_service:
+                    identity_record = self.identity_service.generate_uuid(
+                        source_system="uds3.security",
+                        aktenzeichen=aktenzeichen,
+                        actor="uds3_core",
+                    )
+                    document_uuid = identity_record.uuid
+                    if not document_id:
+                        document_id = self._format_document_id(document_uuid)
+                    create_result.setdefault("security_info", {})["document_uuid"] = (
+                        document_uuid
+                    )
+                    create_result["security_info"].setdefault(
+                        "document_id", document_id
+                    )
+            else:
+                if self.identity_service:
+                    identity_record = self.identity_service.generate_uuid(
+                        source_system="uds3.core",
+                        aktenzeichen=aktenzeichen,
+                        actor="uds3_core",
+                    )
+                    document_uuid = identity_record.uuid
+                    document_id = self._format_document_id(document_uuid)
+                    create_result["security_info"] = {
+                        "document_id": document_id,
+                        "document_uuid": document_uuid,
+                        "file_hash": file_hash,
+                    }
+                else:
+                    generated_uuid = uuid.uuid4()
+                    document_uuid = str(generated_uuid)
+                    document_id = f"doc_{generated_uuid.hex}"
+                    create_result["security_info"] = {
+                        "document_id": document_id,
+                        "file_hash": file_hash,
+                    }
+
+            identity_key_candidate = metadata_local.get("aktenzeichen")
+            if identity_record is not None:
+                identity_key_candidate = (
+                    getattr(identity_record, "identity_key", None)
+                    or getattr(identity_record, "aktenzeichen", None)
+                    or (
+                        identity_record.get("identity_key")
+                        if isinstance(identity_record, dict)
+                        else None
+                    )
+                    or (
+                        identity_record.get("aktenzeichen")
+                        if isinstance(identity_record, dict)
+                        else None
+                    )
+                    or getattr(identity_record, "uuid", None)
+                    or (
+                        identity_record.get("uuid")
+                        if isinstance(identity_record, dict)
+                        else None
+                    )
+                    or identity_key_candidate
+                )
+                ctx["identity_uuid"] = (
+                    getattr(identity_record, "uuid", None)
+                    or getattr(identity_record, "identity_uuid", None)
+                    or (
+                        identity_record.get("uuid")
+                        if isinstance(identity_record, dict)
+                        else None
+                    )
+                    or (
+                        identity_record.get("identity_uuid")
+                        if isinstance(identity_record, dict)
+                        else None
+                    )
+                )
+
+            if identity_key_candidate:
+                ctx["identity_key"] = identity_key_candidate
+                ctx["aktenzeichen"] = identity_key_candidate
+                metadata_local.setdefault("aktenzeichen", identity_key_candidate)
+
+            ctx["document_uuid"] = document_uuid
+            ctx["document_id"] = document_id
+            ctx["identity_record"] = identity_record
+            ctx["document_data"] = {
+                "document_id": document_id,
+                "id": document_id,
+                "uuid": document_uuid,
+                "identity_key": ctx.get("identity_key") or identity_key_candidate,
+                "title": metadata_local.get("title", os.path.basename(file_path_local)),
+                "content": content_local,
+                "file_path": file_path_local,
+                "file_hash": metadata_local.get("file_hash", file_hash),
+                "file_size": metadata_local.get("file_size"),
+                "created_at": datetime.now().isoformat(),
+                **metadata_local,
+            }
+            return None
+
+        def security_compensation(ctx: Dict[str, Any]) -> None:
+            ctx.setdefault("compensations", []).append("security_identity_reset")
+
+        def vector_action(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            document_id = ctx["document_id"]
+            result = self._execute_vector_create(
+                document_id,
+                ctx["content"],
+                ctx["chunks"],
+                ctx.get("metadata"),
+            )
+            if not result.get("success", False):
+                error_message = result.get("error")
+                if _is_optional_backend_error(error_message):
+                    result = _mark_optional_skip(result, error_message)
+                else:
+                    raise SagaExecutionError(
+                        error_message or "Vector DB Operation fehlgeschlagen"
+                    )
+            ctx["vector_result"] = result
+            create_result["database_operations"]["vector"] = result
+            return None
+
+        def vector_compensation(ctx: Dict[str, Any]) -> None:
+            vector_payload = ctx.get("vector_result") or {}
+            if vector_payload.get("skipped"):
+                return
+            chunk_ids = vector_payload.get("chunk_ids")
+            collection = vector_payload.get("collection", "document_chunks")
+            document_id = ctx.get("document_id")
+            if document_id:
+                crud_result = self.saga_crud.vector_delete(
+                    document_id,
+                    collection=collection,
+                    chunk_ids=chunk_ids,
+                )
+                if not crud_result.success and crud_result.error:
+                    create_result["issues"].append(
+                        f"Vector-Kompensation fehlgeschlagen: {crud_result.error}"
+                    )
+
+        def graph_action(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            document_id = ctx["document_id"]
+            result = self._execute_graph_create(
+                document_id, ctx["content"], ctx["metadata"]
+            )
+            if not result.get("success", False):
+                error_message = result.get("error")
+                if _is_optional_backend_error(error_message):
+                    result = _mark_optional_skip(result, error_message)
+                else:
+                    raise SagaExecutionError(
+                        error_message or "Graph DB Operation fehlgeschlagen"
+                    )
+            ctx["graph_result"] = result
+            create_result["database_operations"]["graph"] = result
+            return None
+
+        def graph_compensation(ctx: Dict[str, Any]) -> None:
+            graph_payload = ctx.get("graph_result") or {}
+            if graph_payload.get("skipped"):
+                return
+            identifier = graph_payload.get("graph_id") or graph_payload.get("id")
+            if identifier is None and ctx.get("document_id"):
+                identifier = f"Document::{ctx['document_id']}"
+            if identifier:
+                crud_result = self.saga_crud.graph_delete(identifier)
+                if not crud_result.success and crud_result.error:
+                    create_result["issues"].append(
+                        f"Graph-Kompensation fehlgeschlagen: {crud_result.error}"
+                    )
+
+        def relational_action(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            result = self._execute_relational_create(ctx["document_data"])
+            ctx["relational_result"] = result
+            create_result["database_operations"]["relational"] = result
+            if not result.get("success", False):
+                error_message = result.get("error")
+                if _is_optional_backend_error(error_message):
+                    create_result["issues"].append(error_message)
+                    return None
+                raise SagaExecutionError(
+                    error_message or "Relationale Operation fehlgeschlagen"
+                )
+            return None
+
+        def relational_compensation(ctx: Dict[str, Any]) -> None:
+            relational_payload = ctx.get("relational_result") or {}
+            document_id = relational_payload.get("document_id") or ctx.get(
+                "document_id"
+            )
+            if document_id:
+                crud_result = self.saga_crud.relational_delete(document_id)
+                if not crud_result.success and crud_result.error:
+                    create_result["issues"].append(
+                        f"Relationale Kompensation fehlgeschlagen: {crud_result.error}"
+                    )
+
+        def file_storage_action(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            result = self._execute_file_storage_create(
+                ctx["document_id"],
+                ctx["file_path"],
+                ctx["metadata"],
+                ctx.get("content"),
+            )
+            if not result.get("success", False):
+                error_message = result.get("error")
+                if _is_optional_backend_error(error_message):
+                    result = _mark_optional_skip(result, error_message)
+                else:
+                    raise SagaExecutionError(
+                        error_message or "File-Storage Operation fehlgeschlagen"
+                    )
+            ctx["file_storage_result"] = result
+            create_result["database_operations"]["file_storage"] = result
+            return None
+
+        def file_storage_compensation(ctx: Dict[str, Any]) -> None:
+            payload = ctx.get("file_storage_result") or {}
+            if payload.get("skipped"):
+                return
+            asset_id = payload.get("asset_id") or payload.get("file_storage_id")
+            if asset_id:
+                crud_result = self.saga_crud.file_delete(asset_id)
+                if not crud_result.success and crud_result.error:
+                    create_result["issues"].append(
+                        f"File-Storage Kompensation fehlgeschlagen: {crud_result.error}"
+                    )
+
+        def identity_binding_action(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            if not self.identity_service or not ctx.get("document_uuid"):
+                return None
+            try:
+                identity_record = self.identity_service.bind_backend_ids(
+                    ctx["document_uuid"],
+                    relational_id=ctx.get("relational_result", {}).get("relational_id"),
+                    graph_id=ctx.get("graph_result", {}).get("graph_id"),
+                    vector_id=ctx.get("vector_result", {}).get("vector_id"),
+                    file_storage_id=ctx.get("file_storage_result", {}).get(
+                        "file_storage_id"
+                    ),
+                    metadata={"document_id": ctx.get("document_id")},
+                    actor="uds3_core",
+                )
+                ctx["identity_record"] = identity_record
+                create_result["identity"] = {
+                    "uuid": identity_record.uuid,
+                    "aktenzeichen": identity_record.aktenzeichen,
+                    "status": identity_record.status,
+                    "mappings": identity_record.mappings,
+                }
+            except IdentityServiceError as exc:
+                create_result["issues"].append(
+                    f"Identity-Mapping fehlgeschlagen: {exc}"
+                )
+            return None
+
+        def validation_action(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            vector_result = ctx.get("vector_result", {})
+            graph_result = ctx.get("graph_result", {})
+            relational_result = ctx.get("relational_result", {})
+            file_storage_result = ctx.get("file_storage_result")
+            document_id = ctx.get("document_id")
+            document_data = ctx.get("document_data", {})
+
+            if self.quality_manager:
+                quality_result = self.quality_manager.calculate_document_quality_score(
+                    document_data,
+                    vector_result,
+                    graph_result,
+                    relational_result,
+                )
+                create_result["quality_score"] = quality_result
+                if (
+                    quality_result["overall_score"]
+                    < self.quality_manager.config.minimum_quality_score
+                ):
+                    create_result["issues"].extend(quality_result["issues"])
+                    create_result["quality_warnings"] = quality_result[
+                        "recommendations"
+                    ]
+
+            validation_result = self._validate_cross_db_consistency(
+                document_id,
+                vector_result,
+                graph_result,
+                relational_result,
+                file_storage_result,
+            )
+            create_result["validation_results"] = validation_result
+
+            if self.security_manager and create_result.get("security_info"):
+                integrity_check = self.security_manager.verify_document_integrity(
+                    document_id,
+                    ctx["content"],
+                    ctx["file_path"],
+                    create_result["security_info"],
+                )
+                create_result["security_validation"] = integrity_check
+
+            all_db_success = all(
+                result.get("success", False) or result.get("skipped", False)
+                for result in create_result["database_operations"].values()
+            )
+            validation_success = validation_result.get("overall_valid", True)
+            create_result["success"] = all_db_success and validation_success
+
+            if create_result["success"]:
+                self.document_mapping[document_id] = {
+                    "uuid": ctx.get("document_uuid"),
+                    "identity_key": ctx.get("identity_key") or ctx.get("aktenzeichen"),
+                    "vector_id": vector_result.get("vector_id"),
+                    "graph_id": graph_result.get("graph_id"),
+                    "relational_id": relational_result.get("relational_id"),
+                    "file_storage_id": (file_storage_result or {}).get(
+                        "file_storage_id"
+                    )
+                    if file_storage_result
+                    else None,
+                }
+            return None
+
+        return [
+            {
+                "name": "security_and_identity",
+                "action": security_action,
+                "compensation": security_compensation,
+            },
+            {
+                "name": "vector_create",
+                "action": vector_action,
+                "compensation": vector_compensation,
+            },
+            {
+                "name": "graph_create",
+                "action": graph_action,
+                "compensation": graph_compensation,
+            },
+            {
+                "name": "relational_create",
+                "action": relational_action,
+                "compensation": relational_compensation,
+            },
+            {
+                "name": "file_storage_create",
+                "action": file_storage_action,
+                "compensation": file_storage_compensation,
+            },
+            {
+                "name": "identity_mapping",
+                "action": identity_binding_action,
+                "compensation": None,
+            },
+            {
+                "name": "validation_and_finalize",
+                "action": validation_action,
+                "compensation": None,
+            },
+        ]
+
+    def _build_update_document_step_specs(
+        self, context: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        update_result = context["update_result"]
+        updates = context["updates"]
+
+        def _mark_optional_skip(
+            result_dict: Dict[str, Any], message: Optional[str]
+        ) -> Dict[str, Any]:
+            payload = dict(result_dict)
+            payload["success"] = True
+            payload["skipped"] = True
+            if message:
+                payload.setdefault("warning", message)
+                update_result["issues"].append(message)
+            return payload
+
+        def _is_optional_backend_error(message: Optional[str]) -> bool:
+            if not message:
+                return False
+            lowered = message.lower()
+            return any(
+                phrase in lowered
+                for phrase in [
+                    "nicht konfiguriert",
+                    "nicht verfügbar",
+                    "not configured",
+                    "not available",
+                ]
+            )
+
+        def _ensure_document_uuid(ctx: Dict[str, Any]) -> None:
+            if ctx.get("document_uuid"):
+                return
+            mapping = self.document_mapping.get(ctx["document_id"])
+            if mapping and mapping.get("uuid"):
+                ctx["document_uuid"] = mapping["uuid"]
+                if mapping.get("identity_key"):
+                    ctx.setdefault("identity_key", mapping["identity_key"])
+                    ctx.setdefault("aktenzeichen", mapping["identity_key"])
+                return
+            inferred = self._infer_uuid_from_document_id(ctx["document_id"])
+            if inferred:
+                ctx["document_uuid"] = inferred
+
+        def load_current_state(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            document_id = ctx["document_id"]
+            previous: Dict[str, Any] = {}
+            issues = update_result["issues"]
+
+            _ensure_document_uuid(ctx)
+
+            if self.identity_service and ctx.get("document_uuid"):
+                try:
+                    record = self.identity_service.ensure_identity(
+                        ctx["document_uuid"],
+                        source_system="uds3.core",
+                        status="existing",
+                        actor="uds3_core",
+                    )
+                    previous["identity"] = {
+                        "uuid": record.uuid,
+                        "aktenzeichen": record.aktenzeichen,
+                        "status": record.status,
+                        "mappings": record.mappings,
+                    }
+                    ctx["document_uuid"] = record.uuid
+                    ctx["identity_uuid"] = record.uuid
+                    if record.aktenzeichen:
+                        ctx["identity_key"] = record.aktenzeichen
+                        ctx["aktenzeichen"] = record.aktenzeichen
+                except IdentityServiceError as exc:
+                    issues.append(f"Identity Lookup fehlgeschlagen: {exc}")
+
+            relational_snapshot = self.saga_crud.relational_read(document_id)
+            relational_payload = relational_snapshot.to_payload()
+            previous["relational"] = relational_payload
+            if relational_snapshot.success and relational_payload.get("records"):
+                current_record = dict(relational_payload["records"][0])
+                ctx["current_metadata"] = current_record
+                ctx.setdefault("metadata", dict(current_record))
+                aktenzeichen = current_record.get("aktenzeichen")
+                if aktenzeichen:
+                    ctx["identity_key"] = ctx.get("identity_key") or aktenzeichen
+                    ctx["aktenzeichen"] = ctx.get("aktenzeichen") or aktenzeichen
+                if current_record.get("uuid"):
+                    ctx["identity_uuid"] = ctx.get(
+                        "identity_uuid"
+                    ) or current_record.get("uuid")
+            else:
+                issues.append(
+                    relational_payload.get("error")
+                    or "Relationale Daten nicht gefunden"
+                )
+
+            if self._requires_vector_update(updates):
+                vector_snapshot = self.saga_crud.vector_read(document_id)
+                previous["vector"] = vector_snapshot.to_payload()
+                if not vector_snapshot.success and vector_snapshot.error:
+                    issues.append(
+                        f"Vector Snapshot fehlgeschlagen: {vector_snapshot.error}"
+                    )
+
+            if self._requires_graph_update(updates):
+                mapping = self.document_mapping.get(document_id, {})
+                identifier = mapping.get("graph_id") or f"Document::{document_id}"
+                graph_snapshot = self.saga_crud.graph_read(identifier)
+                graph_payload = graph_snapshot.to_payload()
+                previous["graph"] = graph_payload
+                if graph_snapshot.success:
+                    ctx["graph_identifier"] = graph_payload.get(
+                        "identifier", identifier
+                    )
+                elif graph_snapshot.error:
+                    issues.append(
+                        f"Graph Snapshot fehlgeschlagen: {graph_snapshot.error}"
+                    )
+
+            if self._requires_file_storage_update(updates):
+                mapping = self.document_mapping.get(document_id, {})
+                asset_id = mapping.get("file_storage_id") or f"fs_{document_id}"
+                file_snapshot = self.saga_crud.file_read(asset_id)
+                previous["file_storage"] = file_snapshot.to_payload()
+                if file_snapshot.success:
+                    ctx["file_asset_id"] = asset_id
+                elif file_snapshot.error:
+                    issues.append(
+                        f"File Snapshot fehlgeschlagen: {file_snapshot.error}"
+                    )
+
+            ctx["previous_state"] = previous
+            update_result["previous_state"] = previous
+            return None
+
+        def vector_update_action(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            if not self._requires_vector_update(updates):
+                payload = _mark_optional_skip({"success": True}, None)
+                update_result["database_operations"]["vector"] = payload
+                ctx["vector_update_result"] = payload
+                return None
+
+            new_chunks = ctx["updates"].get("chunks") or []
+            if not new_chunks and ctx["updates"].get("content"):
+                new_chunks = [ctx["updates"]["content"]]
+            if not new_chunks:
+                previous_vector = (ctx.get("previous_state") or {}).get("vector", {})
+                new_chunks = previous_vector.get("documents") or []
+            metadata_payload: Dict[str, Any] = {}
+            previous_vector = (ctx.get("previous_state") or {}).get("vector", {})
+            metadatas = previous_vector.get("metadatas")
+            if isinstance(metadatas, list) and metadatas:
+                metadata_payload.update(metadatas[0] or {})
+            metadata_payload.setdefault("document_id", ctx["document_id"])
+
+            self._enforce_adapter_governance(
+                "vector",
+                OperationType.UPDATE.value,
+                {
+                    "document_id": ctx["document_id"],
+                    "chunks": list(new_chunks or []),
+                    "metadata": metadata_payload,
+                },
+            )
+
+            crud_result = self.saga_crud.vector_update(
+                ctx["document_id"], new_chunks, metadata_payload
+            )
+            payload = crud_result.to_payload()
+            if not payload.get("success", False):
+                error_message = payload.get("error")
+                if _is_optional_backend_error(error_message):
+                    payload = _mark_optional_skip(payload, error_message)
+                else:
+                    raise SagaExecutionError(
+                        error_message or "Vector Update fehlgeschlagen"
+                    )
+
+            ctx["vector_update_result"] = payload
+            update_result["database_operations"]["vector"] = payload
+            return None
+
+        def vector_update_compensation(ctx: Dict[str, Any]) -> None:
+            payload = ctx.get("vector_update_result") or {}
+            if payload.get("skipped"):
+                return
+            previous_vector = (ctx.get("previous_state") or {}).get("vector", {})
+            chunks = previous_vector.get("documents") or []
+            if not chunks:
+                return
+            metadata_payload: Dict[str, Any] = {}
+            metadatas = previous_vector.get("metadatas")
+            if isinstance(metadatas, list) and metadatas:
+                metadata_payload.update(metadatas[0] or {})
+            metadata_payload.setdefault("document_id", ctx["document_id"])
+            self._enforce_adapter_governance(
+                "vector",
+                OperationType.UPDATE.value,
+                {
+                    "document_id": ctx["document_id"],
+                    "chunks": list(chunks or []),
+                    "metadata": metadata_payload,
+                },
+            )
+            crud_result = self.saga_crud.vector_update(
+                ctx["document_id"], chunks, metadata_payload
+            )
+            if not crud_result.success and crud_result.error:
+                update_result["issues"].append(
+                    f"Vector-Kompensation fehlgeschlagen: {crud_result.error}"
+                )
+
+        def graph_update_action(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            graph_updates = self._extract_graph_updates(updates)
+            if not graph_updates:
+                payload = _mark_optional_skip({"success": True}, None)
+                update_result["database_operations"]["graph"] = payload
+                ctx["graph_update_result"] = payload
+                return None
+
+            identifier = ctx.get("graph_identifier") or self.document_mapping.get(
+                ctx["document_id"], {}
+            ).get("graph_id")
+            if not identifier:
+                identifier = f"Document::{ctx['document_id']}"
+
+            self._enforce_adapter_governance(
+                "graph",
+                OperationType.UPDATE.value,
+                {
+                    "identifier": identifier,
+                    "updates": graph_updates,
+                },
+            )
+
+            crud_result = self.saga_crud.graph_update(identifier, graph_updates)
+            payload = crud_result.to_payload()
+            if not payload.get("success", False):
+                error_message = payload.get("error")
+                if _is_optional_backend_error(error_message):
+                    payload = _mark_optional_skip(payload, error_message)
+                else:
+                    raise SagaExecutionError(
+                        error_message or "Graph Update fehlgeschlagen"
+                    )
+
+            ctx["graph_update_result"] = payload
+            update_result["database_operations"]["graph"] = payload
+            return None
+
+        def graph_update_compensation(ctx: Dict[str, Any]) -> None:
+            payload = ctx.get("graph_update_result") or {}
+            if payload.get("skipped"):
+                return
+            previous_graph = (ctx.get("previous_state") or {}).get("graph", {})
+            node_payload = previous_graph.get("node")
+            if not node_payload:
+                return
+            properties = dict(node_payload)
+            properties.setdefault("id", ctx["document_id"])
+            self._enforce_adapter_governance(
+                "graph",
+                OperationType.CREATE.value,
+                {
+                    "document_id": ctx["document_id"],
+                    "properties": properties,
+                },
+            )
+            crud_result = self.saga_crud.graph_create(ctx["document_id"], properties)
+            if not crud_result.success and crud_result.error:
+                update_result["issues"].append(
+                    f"Graph-Kompensation fehlgeschlagen: {crud_result.error}"
+                )
+
+        def relational_update_action(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            relational_updates = self._extract_relational_updates(updates)
+            if not relational_updates:
+                relational_updates = {"updated_at": datetime.now().isoformat()}
+
+            self._enforce_adapter_governance(
+                "relational",
+                OperationType.UPDATE.value,
+                {
+                    "document_id": ctx["document_id"],
+                    "updates": relational_updates,
+                },
+            )
+            crud_result = self.saga_crud.relational_update(
+                ctx["document_id"], relational_updates
+            )
+            payload = crud_result.to_payload()
+            if not payload.get("success", False):
+                error_message = payload.get("error")
+                if _is_optional_backend_error(error_message):
+                    payload = _mark_optional_skip(payload, error_message)
+                else:
+                    raise SagaExecutionError(
+                        error_message or "Relationale Operation fehlgeschlagen"
+                    )
+
+            ctx["relational_update_result"] = payload
+            update_result["database_operations"]["relational"] = payload
+            return None
+
+        def relational_update_compensation(ctx: Dict[str, Any]) -> None:
+            payload = ctx.get("relational_update_result") or {}
+            if payload.get("skipped"):
+                return
+            previous_relational = (ctx.get("previous_state") or {}).get(
+                "relational", {}
+            )
+            records = previous_relational.get("records") or []
+            if not records:
+                return
+            restore_payload = dict(records[0])
+            restore_payload.pop("document_id", None)
+            self._enforce_adapter_governance(
+                "relational",
+                OperationType.UPDATE.value,
+                {
+                    "document_id": ctx["document_id"],
+                    "updates": restore_payload,
+                },
+            )
+            restore_result = self.saga_crud.relational_update(
+                ctx["document_id"], restore_payload
+            )
+            if not restore_result.success and restore_result.error:
+                update_result["issues"].append(
+                    f"Relationale Kompensation fehlgeschlagen: {restore_result.error}"
+                )
+
+        def file_update_action(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            if not self._requires_file_storage_update(updates):
+                payload = _mark_optional_skip({"success": True}, None)
+                update_result["database_operations"]["file_storage"] = payload
+                ctx["file_update_result"] = payload
+                return None
+
+            asset_id = ctx.get("file_asset_id")
+            self._enforce_adapter_governance(
+                "file",
+                OperationType.UPDATE.value,
+                {
+                    "document_id": ctx["document_id"],
+                    "asset_id": asset_id,
+                    "updates": ctx["updates"],
+                },
+            )
+            payload = self._execute_file_storage_update(
+                ctx["document_id"],
+                new_file_path=ctx["updates"].get("file_path"),
+                asset_id=asset_id,
+                content=ctx["updates"].get("binary_content"),
+            )
+            if not payload.get("success", False):
+                error_message = payload.get("error")
+                if _is_optional_backend_error(error_message):
+                    payload = _mark_optional_skip(payload, error_message)
+                else:
+                    raise SagaExecutionError(
+                        error_message or "File-Storage Update fehlgeschlagen"
+                    )
+
+            ctx["file_update_result"] = payload
+            update_result["database_operations"]["file_storage"] = payload
+            return None
+
+        def file_update_compensation(ctx: Dict[str, Any]) -> None:
+            payload = ctx.get("file_update_result") or {}
+            if payload.get("skipped"):
+                return
+            previous_file = (ctx.get("previous_state") or {}).get("file_storage", {})
+            restore_path = previous_file.get("path")
+            asset_id = ctx.get("file_asset_id")
+            if restore_path:
+                restore_payload = self._execute_file_storage_update(
+                    ctx["document_id"],
+                    new_file_path=restore_path,
+                    asset_id=asset_id,
+                )
+                if not restore_payload.get("success", False) and restore_payload.get(
+                    "error"
+                ):
+                    update_result["issues"].append(
+                        f"File-Storage Kompensation fehlgeschlagen: {restore_payload['error']}"
+                    )
+
+        def identity_update_action(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            if not self.identity_service:
+                return None
+            _ensure_document_uuid(ctx)
+            document_uuid = ctx.get("document_uuid")
+            if not document_uuid:
+                return None
+            try:
+                aktenzeichen = ctx["updates"].get("aktenzeichen")
+                if aktenzeichen:
+                    record = self.identity_service.register_aktenzeichen(
+                        document_uuid,
+                        aktenzeichen,
+                        actor="uds3_core",
+                        status="updated",
+                    )
+                else:
+                    record = self.identity_service.ensure_identity(
+                        document_uuid,
+                        source_system="uds3.core",
+                        status="updated",
+                        actor="uds3_core",
+                    )
+
+                mapping_record = self.identity_service.bind_backend_ids(
+                    document_uuid,
+                    relational_id=ctx.get("relational_update_result", {}).get(
+                        "relational_id"
+                    ),
+                    graph_id=ctx.get("graph_update_result", {}).get("graph_id"),
+                    vector_id=ctx.get("vector_update_result", {}).get("vector_id"),
+                    file_storage_id=ctx.get("file_update_result", {}).get(
+                        "file_storage_id"
+                    ),
+                    metadata={
+                        "document_id": ctx["document_id"],
+                        "updated_fields": list(ctx["updates"].keys()),
+                    },
+                    actor="uds3_core",
+                )
+                update_result["identity"] = {
+                    "uuid": mapping_record.uuid,
+                    "aktenzeichen": mapping_record.aktenzeichen,
+                    "status": mapping_record.status,
+                    "mappings": mapping_record.mappings,
+                }
+                ctx["document_uuid"] = mapping_record.uuid
+            except IdentityServiceError as exc:
+                update_result["issues"].append(f"Identity-Update fehlgeschlagen: {exc}")
+            return None
+
+        def validation_action(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            document_id = ctx["document_id"]
+
+            def _read_state(read_fn) -> Dict[str, Any]:
+                try:
+                    result = read_fn()
+                    payload = result.to_payload()
+                    payload.setdefault("success", result.success)
+                    return payload
+                except Exception as exc:  # pragma: no cover - defensive
+                    return {"success": False, "error": str(exc)}
+
+            if self._requires_vector_update(updates):
+                vector_state = _read_state(
+                    lambda: self.saga_crud.vector_read(document_id)
+                )
+            else:
+                vector_state = ctx.get(
+                    "vector_update_result", {"success": True, "skipped": True}
+                )
+
+            if self._requires_graph_update(updates):
+                identifier = ctx.get("graph_identifier") or self.document_mapping.get(
+                    document_id, {}
+                ).get("graph_id")
+                identifier = identifier or f"Document::{document_id}"
+                vector_identifier = identifier
+                graph_state = _read_state(
+                    lambda: self.saga_crud.graph_read(vector_identifier)
+                )
+            else:
+                graph_state = ctx.get(
+                    "graph_update_result", {"success": True, "skipped": True}
+                )
+
+            relational_state = _read_state(
+                lambda: self.saga_crud.relational_read(document_id)
+            )
+
+            if self._requires_file_storage_update(updates):
+                asset_id = ctx.get("file_asset_id") or f"fs_{document_id}"
+                file_state = _read_state(lambda: self.saga_crud.file_read(asset_id))
+            else:
+                file_state = ctx.get("file_update_result")
+
+            validation_result = self._validate_cross_db_consistency(
+                document_id,
+                vector_state or {},
+                graph_state or {},
+                relational_state or {},
+                file_state or {},
+            )
+            update_result["validation_results"] = validation_result
+
+            all_db_success = all(
+                result.get("success", True)
+                for result in update_result["database_operations"].values()
+            )
+            update_result["success"] = all_db_success and validation_result.get(
+                "overall_valid", True
+            )
+
+            if update_result["success"]:
+                mapping = self.document_mapping.setdefault(document_id, {})
+                if ctx.get("document_uuid"):
+                    mapping["uuid"] = ctx["document_uuid"]
+                vector_id = ctx.get("vector_update_result", {}).get("vector_id")
+                if vector_id is not None:
+                    mapping["vector_id"] = vector_id
+                graph_id = ctx.get("graph_update_result", {}).get("graph_id")
+                if graph_id is not None:
+                    mapping["graph_id"] = graph_id
+                relational_id = ctx.get("relational_update_result", {}).get(
+                    "relational_id"
+                )
+                if relational_id is not None:
+                    mapping["relational_id"] = relational_id
+                file_id = ctx.get("file_update_result", {}).get("file_storage_id")
+                if file_id is not None:
+                    mapping["file_storage_id"] = file_id
+            return None
+
+        return [
+            {
+                "name": "load_current_state",
+                "action": load_current_state,
+                "compensation": None,
+            },
+            {
+                "name": "vector_update",
+                "action": vector_update_action,
+                "compensation": vector_update_compensation,
+            },
+            {
+                "name": "graph_update",
+                "action": graph_update_action,
+                "compensation": graph_update_compensation,
+            },
+            {
+                "name": "relational_update",
+                "action": relational_update_action,
+                "compensation": relational_update_compensation,
+            },
+            {
+                "name": "file_storage_update",
+                "action": file_update_action,
+                "compensation": file_update_compensation,
+            },
+            {
+                "name": "identity_update",
+                "action": identity_update_action,
+                "compensation": None,
+            },
+            {
+                "name": "validation_and_finalize",
+                "action": validation_action,
+                "compensation": None,
+            },
+        ]
+
+    def _build_delete_document_step_specs(
+        self, context: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        delete_result = context["delete_result"]
+
+        def _mark_optional_skip(
+            result_dict: Dict[str, Any], message: Optional[str]
+        ) -> Dict[str, Any]:
+            payload = dict(result_dict)
+            payload["success"] = True
+            payload["skipped"] = True
+            if message:
+                payload.setdefault("warning", message)
+                delete_result["issues"].append(message)
+            return payload
+
+        def _is_optional_backend_error(message: Optional[str]) -> bool:
+            if not message:
+                return False
+            lowered = message.lower()
+            return any(
+                phrase in lowered
+                for phrase in [
+                    "nicht konfiguriert",
+                    "nicht verfügbar",
+                    "not configured",
+                    "not available",
+                ]
+            )
+
+        def _ensure_document_uuid(ctx: Dict[str, Any]) -> None:
+            if ctx.get("document_uuid"):
+                return
+            mapping = self.document_mapping.get(ctx["document_id"])
+            if mapping and mapping.get("uuid"):
+                ctx["document_uuid"] = mapping["uuid"]
+                if mapping.get("identity_key"):
+                    ctx.setdefault("identity_key", mapping["identity_key"])
+                    ctx.setdefault("aktenzeichen", mapping["identity_key"])
+                return
+            inferred = self._infer_uuid_from_document_id(ctx["document_id"])
+            if inferred:
+                ctx["document_uuid"] = inferred
+
+        def load_current_state(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            document_id = ctx["document_id"]
+            previous: Dict[str, Any] = {}
+            issues = delete_result["issues"]
+
+            _ensure_document_uuid(ctx)
+
+            if self.identity_service and ctx.get("document_uuid"):
+                try:
+                    record = self.identity_service.ensure_identity(
+                        ctx["document_uuid"],
+                        source_system="uds3.core",
+                        status="existing",
+                        actor="uds3_core",
+                    )
+                    previous["identity"] = {
+                        "uuid": record.uuid,
+                        "aktenzeichen": record.aktenzeichen,
+                        "status": record.status,
+                        "mappings": record.mappings,
+                    }
+                    ctx["document_uuid"] = record.uuid
+                    ctx["identity_uuid"] = record.uuid
+                    if record.aktenzeichen:
+                        ctx["identity_key"] = record.aktenzeichen
+                        ctx["aktenzeichen"] = record.aktenzeichen
+                except IdentityServiceError as exc:
+                    issues.append(f"Identity Lookup fehlgeschlagen: {exc}")
+
+            relational_snapshot = self.saga_crud.relational_read(document_id)
+            relational_payload = relational_snapshot.to_payload()
+            previous["relational"] = relational_payload
+            if relational_snapshot.success and relational_payload.get("records"):
+                current_record = dict(relational_payload["records"][0])
+                ctx["current_metadata"] = current_record
+                ctx.setdefault("metadata", dict(current_record))
+                aktenzeichen = current_record.get("aktenzeichen")
+                if aktenzeichen:
+                    ctx["identity_key"] = ctx.get("identity_key") or aktenzeichen
+                    ctx["aktenzeichen"] = ctx.get("aktenzeichen") or aktenzeichen
+                if current_record.get("uuid"):
+                    ctx["identity_uuid"] = ctx.get(
+                        "identity_uuid"
+                    ) or current_record.get("uuid")
+            else:
+                issues.append(
+                    relational_payload.get("error")
+                    or "Relationale Daten nicht gefunden"
+                )
+
+            vector_snapshot = self.saga_crud.vector_read(document_id)
+            previous["vector"] = vector_snapshot.to_payload()
+            if not vector_snapshot.success and vector_snapshot.error:
+                issues.append(
+                    f"Vector Snapshot fehlgeschlagen: {vector_snapshot.error}"
+                )
+
+            mapping = self.document_mapping.get(document_id, {})
+            identifier = mapping.get("graph_id") or f"Document::{document_id}"
+            graph_snapshot = self.saga_crud.graph_read(identifier)
+            graph_payload = graph_snapshot.to_payload()
+            previous["graph"] = graph_payload
+            if graph_snapshot.success:
+                ctx["graph_identifier"] = graph_payload.get("identifier", identifier)
+            elif graph_snapshot.error:
+                issues.append(f"Graph Snapshot fehlgeschlagen: {graph_snapshot.error}")
+
+            asset_id = mapping.get("file_storage_id") or f"fs_{document_id}"
+            file_snapshot = self.saga_crud.file_read(asset_id)
+            previous["file_storage"] = file_snapshot.to_payload()
+            if file_snapshot.success:
+                ctx["file_asset_id"] = asset_id
+            elif file_snapshot.error:
+                issues.append(f"File Snapshot fehlgeschlagen: {file_snapshot.error}")
+
+            ctx["previous_state"] = previous
+            delete_result["previous_state"] = previous
+            return None
+
+        def vector_delete_action(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            self._enforce_adapter_governance(
+                "vector",
+                OperationType.DELETE.value,
+                {"document_id": ctx["document_id"]},
+            )
+            crud_result = self.saga_crud.vector_delete(ctx["document_id"])
+            payload = crud_result.to_payload()
+            if not payload.get("success", False):
+                error_message = payload.get("error")
+                if _is_optional_backend_error(error_message):
+                    payload = _mark_optional_skip(payload, error_message)
+                else:
+                    raise SagaExecutionError(
+                        error_message or "Vector Delete fehlgeschlagen"
+                    )
+            ctx["vector_delete_result"] = payload
+            delete_result["database_operations"]["vector"] = payload
+            return None
+
+        def vector_delete_compensation(ctx: Dict[str, Any]) -> None:
+            payload = ctx.get("vector_delete_result") or {}
+            if payload.get("skipped"):
+                return
+            previous_vector = (ctx.get("previous_state") or {}).get("vector", {})
+            chunks = previous_vector.get("documents") or []
+            if not chunks:
+                return
+            metadata_payload: Dict[str, Any] = {}
+            metadatas = previous_vector.get("metadatas")
+            if isinstance(metadatas, list) and metadatas:
+                metadata_payload.update(metadatas[0] or {})
+            metadata_payload.setdefault("document_id", ctx["document_id"])
+            crud_result = self.saga_crud.vector_update(
+                ctx["document_id"], chunks, metadata_payload
+            )
+            if not crud_result.success and crud_result.error:
+                delete_result["issues"].append(
+                    f"Vector-Kompensation fehlgeschlagen: {crud_result.error}"
+                )
+
+        def graph_delete_action(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            identifier = ctx.get("graph_identifier") or self.document_mapping.get(
+                ctx["document_id"], {}
+            ).get("graph_id")
+            if not identifier:
+                identifier = f"Document::{ctx['document_id']}"
+            self._enforce_adapter_governance(
+                "graph",
+                OperationType.DELETE.value,
+                {"identifier": identifier},
+            )
+            crud_result = self.saga_crud.graph_delete(identifier)
+            payload = crud_result.to_payload()
+            if not payload.get("success", False):
+                error_message = payload.get("error")
+                if _is_optional_backend_error(error_message):
+                    payload = _mark_optional_skip(payload, error_message)
+                else:
+                    raise SagaExecutionError(
+                        error_message or "Graph Delete fehlgeschlagen"
+                    )
+            ctx["graph_delete_result"] = payload
+            delete_result["database_operations"]["graph"] = payload
+            return None
+
+        def graph_delete_compensation(ctx: Dict[str, Any]) -> None:
+            payload = ctx.get("graph_delete_result") or {}
+            if payload.get("skipped"):
+                return
+            previous_graph = (ctx.get("previous_state") or {}).get("graph", {})
+            node_payload = previous_graph.get("node")
+            if not node_payload:
+                return
+            properties = dict(node_payload)
+            properties.setdefault("id", ctx["document_id"])
+            crud_result = self.saga_crud.graph_create(ctx["document_id"], properties)
+            if not crud_result.success and crud_result.error:
+                delete_result["issues"].append(
+                    f"Graph-Kompensation fehlgeschlagen: {crud_result.error}"
+                )
+
+        def relational_delete_action(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            if ctx["soft_delete"]:
+                updates = {"archived": True, "archived_at": datetime.now().isoformat()}
+                self._enforce_adapter_governance(
+                    "relational",
+                    OperationType.UPDATE.value,
+                    {
+                        "document_id": ctx["document_id"],
+                        "updates": updates,
+                    },
+                )
+                crud_result = self.saga_crud.relational_update(
+                    ctx["document_id"], updates
+                )
+            else:
+                self._enforce_adapter_governance(
+                    "relational",
+                    OperationType.DELETE.value,
+                    {"document_id": ctx["document_id"]},
+                )
+                crud_result = self.saga_crud.relational_delete(ctx["document_id"])
+            payload = crud_result.to_payload()
+            if ctx["soft_delete"]:
+                payload["mode"] = "soft"
+            else:
+                payload["mode"] = "hard"
+            if not payload.get("success", False):
+                error_message = payload.get("error")
+                if _is_optional_backend_error(error_message):
+                    payload = _mark_optional_skip(payload, error_message)
+                else:
+                    raise SagaExecutionError(
+                        error_message or "Relationale Delete fehlgeschlagen"
+                    )
+            ctx["relational_delete_result"] = payload
+            delete_result["database_operations"]["relational"] = payload
+            return None
+
+        def relational_delete_compensation(ctx: Dict[str, Any]) -> None:
+            payload = ctx.get("relational_delete_result") or {}
+            if payload.get("skipped"):
+                return
+            previous_relational = (ctx.get("previous_state") or {}).get(
+                "relational", {}
+            )
+            records = previous_relational.get("records") or []
+            if not records:
+                return
+            if ctx["soft_delete"]:
+                restore_payload = dict(records[0])
+                restore_payload.pop("document_id", None)
+                restore_payload.pop("archived", None)
+                restore_payload.pop("archived_at", None)
+                self._enforce_adapter_governance(
+                    "relational",
+                    OperationType.UPDATE.value,
+                    {
+                        "document_id": ctx["document_id"],
+                        "updates": restore_payload,
+                    },
+                )
+                crud_result = self.saga_crud.relational_update(
+                    ctx["document_id"], restore_payload
+                )
+            else:
+                restore_payload = dict(records[0])
+                self._enforce_adapter_governance(
+                    "relational",
+                    OperationType.CREATE.value,
+                    restore_payload,
+                )
+                crud_result = self.saga_crud.relational_create(restore_payload)
+            if not crud_result.success and crud_result.error:
+                delete_result["issues"].append(
+                    f"Relationale Kompensation fehlgeschlagen: {crud_result.error}"
+                )
+
+        def file_delete_action(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            payload = self._execute_file_storage_delete(
+                ctx["document_id"],
+                archive=ctx["soft_delete"],
+                asset_id=ctx.get("file_asset_id"),
+            )
+            if not payload.get("success", False):
+                error_message = payload.get("error")
+                if _is_optional_backend_error(error_message):
+                    payload = _mark_optional_skip(payload, error_message)
+                else:
+                    raise SagaExecutionError(
+                        error_message or "File-Storage Delete fehlgeschlagen"
+                    )
+            ctx["file_delete_result"] = payload
+            delete_result["database_operations"]["file_storage"] = payload
+            return None
+
+        def file_delete_compensation(ctx: Dict[str, Any]) -> None:
+            payload = ctx.get("file_delete_result") or {}
+            if payload.get("skipped"):
+                return
+            previous_file = (ctx.get("previous_state") or {}).get("file_storage", {})
+            restore_path = previous_file.get("path")
+            asset_id = ctx.get("file_asset_id")
+            if restore_path:
+                restore_payload = self._execute_file_storage_update(
+                    ctx["document_id"],
+                    new_file_path=restore_path,
+                    asset_id=asset_id,
+                )
+                if not restore_payload.get("success", False) and restore_payload.get(
+                    "error"
+                ):
+                    delete_result["issues"].append(
+                        f"File-Storage Kompensation fehlgeschlagen: {restore_payload['error']}"
+                    )
+
+        def identity_retire_action(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            if not self.identity_service:
+                return None
+            _ensure_document_uuid(ctx)
+            document_uuid = ctx.get("document_uuid")
+            if not document_uuid:
+                return None
+            status = "archived" if ctx["soft_delete"] else "deleted"
+            try:
+                record = self.identity_service.ensure_identity(
+                    document_uuid,
+                    source_system="uds3.core",
+                    status=status,
+                    actor="uds3_core",
+                )
+                if not ctx["soft_delete"]:
+                    self.identity_service.bind_backend_ids(
+                        document_uuid,
+                        relational_id=None,
+                        graph_id=None,
+                        vector_id=None,
+                        file_storage_id=None,
+                        metadata={"document_id": ctx["document_id"], "deleted": True},
+                        actor="uds3_core",
+                    )
+                delete_result["identity"] = {
+                    "uuid": record.uuid,
+                    "aktenzeichen": record.aktenzeichen,
+                    "status": record.status,
+                    "mappings": record.mappings,
+                }
+                ctx["document_uuid"] = record.uuid
+            except IdentityServiceError as exc:
+                delete_result["issues"].append(f"Identity-Update fehlgeschlagen: {exc}")
+            return None
+
+        def finalize_action(ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            all_db_success = all(
+                result.get("success", True)
+                for result in delete_result["database_operations"].values()
+            )
+            delete_result["success"] = all_db_success
+
+            if delete_result["success"]:
+                if ctx["soft_delete"]:
+                    mapping = self.document_mapping.setdefault(ctx["document_id"], {})
+                    mapping["archived"] = True
+                else:
+                    self.document_mapping.pop(ctx["document_id"], None)
+            return None
+
+        return [
+            {
+                "name": "load_current_state",
+                "action": load_current_state,
+                "compensation": None,
+            },
+            {
+                "name": "vector_delete",
+                "action": vector_delete_action,
+                "compensation": vector_delete_compensation,
+            },
+            {
+                "name": "graph_delete",
+                "action": graph_delete_action,
+                "compensation": graph_delete_compensation,
+            },
+            {
+                "name": "relational_delete",
+                "action": relational_delete_action,
+                "compensation": relational_delete_compensation,
+            },
+            {
+                "name": "file_storage_delete",
+                "action": file_delete_action,
+                "compensation": file_delete_compensation,
+            },
+            {
+                "name": "identity_retire",
+                "action": identity_retire_action,
+                "compensation": None,
+            },
+            {
+                "name": "finalize_delete",
+                "action": finalize_action,
+                "compensation": None,
+            },
+        ]
+
+    def _execute_saga_steps_locally(
+        self, step_specs: List[Dict[str, Any]], context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        executed: List[Dict[str, Any]] = []
+        errors: List[str] = []
+        compensation_errors: List[str] = []
+
+        for spec in step_specs:
+            try:
+                result = spec["action"](context)
+                if result:
+                    context.update(result)
+                executed.append(spec)
+            except Exception as exc:  # pragma: no cover - Fehlerfall in Tests abgedeckt
+                errors.append(
+                    f"Lokaler Saga-Schritt '{spec['name']}' fehlgeschlagen: {exc}"
+                )
+                for previous in reversed(executed):
+                    compensation = previous.get("compensation")
+                    if compensation:
+                        try:
+                            compensation(context)
+                        except Exception as comp_exc:  # pragma: no cover - Fehlerfall
+                            compensation_errors.append(
+                                f"Kompensation für '{previous['name']}' fehlgeschlagen: {comp_exc}"
+                            )
+                break
+
+        if SagaStatus:
+            if errors:
+                status = (
+                    SagaStatus.COMPENSATION_FAILED
+                    if compensation_errors
+                    else SagaStatus.COMPENSATED
+                )
+            else:
+                status = SagaStatus.COMPLETED
+        else:  # pragma: no cover - Fallback falls SagaStatus nicht verfügbar
+            if errors:
+                status = "compensation_failed" if compensation_errors else "compensated"
+            else:
+                status = "completed"
+
+        return {
+            "context": context,
+            "errors": errors,
+            "compensation_errors": compensation_errors,
+            "status": status,
+        }
+
+    def update_document_operation(
+        self,
+        document_id: str,
+        updates: Dict,
+        sync_strategy: SyncStrategy = SyncStrategy.IMMEDIATE,
+    ) -> Dict:
+        """
+        Erstellt eine UPDATE-Operation für ein bestehendes Dokument
+
+        Args:
+            document_id: ID des zu aktualisierenden Dokuments
+            updates: Dictionary mit zu aktualisierenden Feldern
+            sync_strategy: Synchronisationsstrategie zwischen DBs
+
+        Returns:
+            Dict: UPDATE-Operationsplan
+        """
+        operation_plan = {
+            "operation_type": OperationType.UPDATE.value,
+            "document_id": document_id,
+            "sync_strategy": sync_strategy.value,
+            "timestamp": datetime.now().isoformat(),
+            "updates": updates,
+            "databases": {},
+            "validation": {},
+            "rollback_plan": {},
+        }
+
+        # Vector DB Updates
+        if self._requires_vector_update(updates):
+            operation_plan["databases"]["vector"] = {
+                "operations": [
+                    {
+                        "type": "update_embeddings",
+                        "document_id": document_id,
+                        "recompute_required": True,
+                        "updates": self._extract_vector_updates(updates),
+                        "validation": ["embedding_dimension_check"],
+                    }
+                ],
+                "rollback": {
+                    "type": "restore_previous_embeddings",
+                    "backup_required": True,
+                },
+            }
+
+        # Graph DB Updates
+        if self._requires_graph_update(updates):
+            operation_plan["databases"]["graph"] = {
+                "operations": [
+                    {
+                        "type": "update_node_properties",
+                        "node_id": document_id,
+                        "properties": self._extract_graph_updates(updates),
+                        "cascade_updates": self._determine_cascade_updates(updates),
+                    }
+                ],
+                "rollback": {
+                    "type": "restore_node_properties",
+                    "snapshot_required": True,
+                },
+            }
+
+        # Relational DB Updates
+        if self._requires_relational_update(updates):
+            operation_plan["databases"]["relational"] = {
+                "operations": [
+                    {
+                        "type": "update_metadata",
+                        "table": "documents_metadata",
+                        "document_id": document_id,
+                        "updates": self._extract_relational_updates(updates),
+                        "triggers": ["update_statistics", "audit_log"],
+                    }
+                ],
+                "rollback": {"type": "restore_record", "transaction_log": True},
+            }
+
+        # File Storage Updates (z.B. neue Version oder ersetzte Originaldatei)
+        if self._requires_file_storage_update(updates):
+            operation_plan["databases"]["file_storage"] = {
+                "operations": [
+                    {
+                        "type": "store_new_version",
+                        "document_id": document_id,
+                        "file_path": updates.get("file_path"),
+                        "versioning": True,
+                        "retain_old_version": True,
+                    }
+                ],
+                "rollback": {"type": "restore_previous_file_version"},
+            }
+
+        return operation_plan
+
+    def delete_document_operation(
+        self, document_id: str, soft_delete: bool = True, cascade_delete: bool = True
+    ) -> Dict:
+        """
+        Erstellt eine DELETE-Operation für ein Dokument
+
+        Args:
+            document_id: ID des zu löschenden Dokuments
+            soft_delete: Soft Delete (Archive) vs. Hard Delete
+            cascade_delete: Auch verwandte Daten löschen
+
+        Returns:
+            Dict: DELETE-Operationsplan
+        """
+        operation_plan = {
+            "operation_type": OperationType.DELETE.value
+            if not soft_delete
+            else OperationType.ARCHIVE.value,
+            "document_id": document_id,
+            "soft_delete": soft_delete,
+            "cascade_delete": cascade_delete,
+            "timestamp": datetime.now().isoformat(),
+            "databases": {},
+            "cleanup_operations": [],
+            "rollback_plan": {},
+        }
+
+        # Vector DB Deletion
+        operation_plan["databases"]["vector"] = {
+            "operations": [
+                {
+                    "type": "delete_embeddings"
+                    if not soft_delete
+                    else "archive_embeddings",
+                    "document_id": document_id,
+                    "cascade_chunks": cascade_delete,
+                    "cleanup_orphaned_vectors": True,
+                }
+            ],
+            "rollback": {
+                "type": "restore_embeddings",
+                "backup_location": f"backup_vectors_{document_id}",
+            },
+        }
+
+        # Graph DB Deletion
+        operation_plan["databases"]["graph"] = {
+            "operations": [
+                {
+                    "type": "delete_node" if not soft_delete else "archive_node",
+                    "node_id": document_id,
+                    "cascade_relationships": cascade_delete,
+                    "orphan_cleanup": True,
+                }
+            ],
+            "rollback": {
+                "type": "restore_node_and_relationships",
+                "snapshot_required": True,
+            },
+        }
+
+        # Relational DB Deletion
+        operation_plan["databases"]["relational"] = {
+            "operations": [
+                {
+                    "type": "soft_delete_record"
+                    if soft_delete
+                    else "hard_delete_record",
+                    "table": "documents_metadata",
+                    "document_id": document_id,
+                    "audit_trail": True,
+                    "cascade_tables": ["keywords_index", "processing_statistics"]
+                    if cascade_delete
+                    else [],
+                }
+            ],
+            "rollback": {"type": "restore_record", "transaction_log": True},
+        }
+
+        # File Storage Deletion
+        operation_plan["databases"]["file_storage"] = {
+            "operations": [
+                {
+                    "type": "archive_file" if soft_delete else "delete_file",
+                    "document_id": document_id,
+                    "purge_derivatives": cascade_delete,
+                    "store_manifest": soft_delete,
+                }
+            ],
+            "rollback": {"type": "restore_file_from_archive", "integrity_check": True},
+        }
+
+        return operation_plan
+
+    def batch_operation(
+        self, operations: List[Dict], operation_type: OperationType
+    ) -> Dict:
+        """
+        Erstellt eine Batch-Operation für mehrere Dokumente
+
+        Args:
+            operations: Liste von einzelnen Operationen
+            operation_type: Typ der Batch-Operation
+
+        Returns:
+            Dict: Batch-Operationsplan
+        """
+        batch_plan = {
+            "operation_type": operation_type.value,
+            "batch_id": f"batch_{str(uuid.uuid4())}",  # Vollständige UUID für Eindeutigkeit
+            "operation_count": len(operations),
+            "timestamp": datetime.now().isoformat(),
+            "batch_config": {},
+            "databases": {
+                "vector": {
+                    "batches": [],
+                    "batch_size": self.optimization_config.batch_sizes["vector"],
+                },
+                "graph": {
+                    "batches": [],
+                    "batch_size": self.optimization_config.batch_sizes["graph"],
+                },
+                "relational": {
+                    "batches": [],
+                    "batch_size": self.optimization_config.batch_sizes["relational"],
+                },
+            },
+            "error_handling": {
+                "continue_on_error": False,
+                "rollback_on_failure": True,
+                "partial_success_handling": "manual_review",
+            },
+        }
+
+        # Gruppiere Operationen nach DB-Typ und Batch-Größe
+        for db_type, config in batch_plan["databases"].items():
+            db_operations = self._extract_db_operations(operations, db_type)
+            batches = self._create_batches(db_operations, config["batch_size"])
+            config["batches"] = batches
+
+        return batch_plan
+
+    def read_document_operation(
+        self,
+        document_id: str,
+        include_content: bool = True,
+        include_relationships: bool = False,
+    ) -> Dict:
+        """
+        Erstellt eine READ-Operation für ein Dokument
+
+        Args:
+            document_id: ID des zu lesenden Dokuments
+            include_content: Vollständigen Content einschließen
+            include_relationships: Graph-Beziehungen einschließen
+
+        Returns:
+            Dict: READ-Operationsplan
+        """
+        read_plan = {
+            "operation_type": OperationType.READ.value,
+            "document_id": document_id,
+            "include_content": include_content,
+            "include_relationships": include_relationships,
+            "timestamp": datetime.now().isoformat(),
+            "databases": {},
+        }
+
+        # Vector DB Read
+        read_plan["databases"]["vector"] = {
+            "operations": [
+                {
+                    "type": "get_embeddings",
+                    "document_id": document_id,
+                    "include_chunks": include_content,
+                    "similarity_threshold": 0.0,  # Get all chunks
+                }
+            ]
+        }
+
+        # Graph DB Read
+        read_plan["databases"]["graph"] = {
+            "operations": [
+                {
+                    "type": "get_node_with_relationships",
+                    "node_id": document_id,
+                    "include_relationships": include_relationships,
+                    "max_depth": 2 if include_relationships else 0,
+                }
+            ]
+        }
+
+        # Relational DB Read
+        read_plan["databases"]["relational"] = {
+            "operations": [
+                {
+                    "type": "get_document_metadata",
+                    "document_id": document_id,
+                    "include_keywords": include_content,
+                    "include_statistics": True,
+                }
+            ]
+        }
+
+        # File Storage Read
+        read_plan["databases"]["file_storage"] = {
+            "operations": [
+                {
+                    "type": "get_file_info",
+                    "document_id": document_id,
+                    "include_binary": False,
+                    "include_versions": True,
+                }
+            ]
+        }
+
+        return read_plan
+
+    # ========== HELPER METHODS FOR CRUD OPERATIONS ==========
+
+    def _requires_vector_update(self, updates: Dict) -> bool:
+        """Prüft ob Updates Vector DB betreffen"""
+        vector_fields = ["content", "chunks", "text", "title"]
+        return any(field in updates for field in vector_fields)
+
+    def _requires_graph_update(self, updates: Dict) -> bool:
+        """Prüft ob Updates Graph DB betreffen"""
+        graph_fields = ["relationships", "tags", "author", "citations", "rechtsgebiet"]
+        return any(field in updates for field in graph_fields)
+
+    def _requires_relational_update(self, updates: Dict) -> bool:
+        """Prüft ob Updates Relational DB betreffen"""
+        relational_fields = [
+            "metadata",
+            "keywords",
+            "file_path",
+            "file_hash",
+            "behoerde",
+        ]
+        return any(field in updates for field in relational_fields)
+
+    def _requires_file_storage_update(self, updates: Dict) -> bool:
+        """Prüft ob Updates File Storage betreffen"""
+        file_fields = ["file_path", "binary_content", "new_file_version"]
+        return any(field in updates for field in file_fields)
+
+    def _extract_vector_updates(self, updates: Dict) -> Dict:
+        """Extrahiert Vector-relevante Updates"""
+        vector_updates: dict[Any, Any] = {}
+
+        if "content" in updates or "chunks" in updates:
+            vector_updates["recompute_embeddings"] = True
+            vector_updates["new_content"] = updates.get("content", "")
+            vector_updates["new_chunks"] = updates.get("chunks", [])
+
+        if "title" in updates:
+            vector_updates["update_summary_embedding"] = True
+            vector_updates["new_title"] = updates["title"]
+
+        return vector_updates
+
+    def _extract_graph_updates(self, updates: Dict) -> Dict:
+        """Extrahiert Graph-relevante Updates"""
+        graph_updates: dict[Any, Any] = {}
+
+        for field in ["author", "rechtsgebiet", "tags"]:
+            if field in updates:
+                graph_updates[field] = updates[field]
+
+        if "citations" in updates:
+            graph_updates["update_relationships"] = True
+            graph_updates["new_citations"] = updates["citations"]
+
+        return graph_updates
+
+    def _extract_relational_updates(self, updates: Dict) -> Dict:
+        """Extrahiert Relational-relevante Updates"""
+        relational_updates: dict[Any, Any] = {}
+
+        metadata_fields = ["file_path", "file_hash", "behoerde", "document_type"]
+        for field in metadata_fields:
+            if field in updates:
+                relational_updates[field] = updates[field]
+
+        if "keywords" in updates:
+            relational_updates["update_keywords"] = True
+            relational_updates["new_keywords"] = updates["keywords"]
+
+        relational_updates["updated_at"] = datetime.now().isoformat()
+
+        return relational_updates
+
+    def _determine_cascade_updates(self, updates: Dict) -> List[str]:
+        """Bestimmt welche Cascade-Updates erforderlich sind"""
+        cascade_updates: list[Any] = []
+
+        if "author" in updates:
+            cascade_updates.append("author_relationships")
+
+        if "rechtsgebiet" in updates:
+            cascade_updates.append("concept_relationships")
+
+        if "citations" in updates:
+            cascade_updates.append("citation_network")
+
+        return cascade_updates
+
+    def _extract_db_operations(
+        self, operations: List[Dict], db_type: str
+    ) -> List[Dict]:
+        """Extrahiert DB-spezifische Operationen aus einer Operation-Liste"""
+        db_operations: list[Any] = []
+
+        for operation in operations:
+            if "databases" in operation and db_type in operation["databases"]:
+                db_operations.extend(
+                    operation["databases"][db_type].get("operations", [])
+                )
+
+        return db_operations
+
+    def _create_batches(
+        self, operations: List[Dict], batch_size: int
+    ) -> List[List[Dict]]:
+        """Teilt Operationen in optimale Batches auf"""
+        batches: list[Any] = []
+
+        for i in range(0, len(operations), batch_size):
+            batch = operations[i : i + batch_size]
+            batches.append(
+                {
+                    "batch_id": f"batch_{i // batch_size + 1}",
+                    "operations": batch,
+                    "size": len(batch),
+                }
+            )
+
+        return batches
+
+    # ========== VALIDATION & CONSISTENCY ==========
+
+    def validate_cross_db_consistency(self, document_id: str) -> Dict:
+        """
+        Validiert Konsistenz eines Dokuments über alle Datenbanken
+
+        Args:
+            document_id: ID des zu validierenden Dokuments
+
+        Returns:
+            Dict: Validation-Ergebnis
+        """
+        validation_result = {
+            "document_id": document_id,
+            "timestamp": datetime.now().isoformat(),
+            "consistent": True,
+            "issues": [],
+            "databases": {
+                "vector": {"exists": False, "chunk_count": 0},
+                "graph": {"exists": False, "relationship_count": 0},
+                "relational": {"exists": False, "metadata_complete": False},
+            },
+        }
+
+        # Vector DB Validation
+        vector_validation = self._validate_vector_consistency(document_id)
+        validation_result["databases"]["vector"] = vector_validation
+
+        # Graph DB Validation
+        graph_validation = self._validate_graph_consistency(document_id)
+        validation_result["databases"]["graph"] = graph_validation
+
+        # Relational DB Validation
+        relational_validation = self._validate_relational_consistency(document_id)
+        validation_result["databases"]["relational"] = relational_validation
+
+        # Cross-DB Consistency Checks
+        consistency_issues = self._check_cross_db_consistency(
+            vector_validation, graph_validation, relational_validation
+        )
+
+        if consistency_issues:
+            validation_result["consistent"] = False
+            validation_result["issues"] = consistency_issues
+
+        return validation_result
+
+    def _validate_vector_consistency(self, document_id: str) -> Dict:
+        """Validiert Vector DB Konsistenz"""
+        return {
+            "exists": True,  # Mock implementation
+            "chunk_count": 5,
+            "embedding_dimensions": 1536,
+            "issues": [],
+        }
+
+    def _validate_graph_consistency(self, document_id: str) -> Dict:
+        """Validiert Graph DB Konsistenz"""
+        return {
+            "exists": True,  # Mock implementation
+            "relationship_count": 3,
+            "node_properties_complete": True,
+            "orphaned_relationships": 0,
+            "issues": [],
+        }
+
+    def _validate_relational_consistency(self, document_id: str) -> Dict:
+        """Validiert Relational DB Konsistenz"""
+        return {
+            "exists": True,  # Mock implementation
+            "metadata_complete": True,
+            "keyword_count": 15,
+            "foreign_key_violations": 0,
+            "issues": [],
+        }
+
+    def _check_cross_db_consistency(
+        self, vector_val: Dict, graph_val: Dict, relational_val: Dict
+    ) -> List[str]:
+        """Prüft Konsistenz zwischen den Datenbanken"""
+        issues: list[Any] = []
+
+        # Existence Check
+        if not all(
+            [vector_val["exists"], graph_val["exists"], relational_val["exists"]]
+        ):
+            issues.append("Document exists in some but not all databases")
+
+        # Data Completeness Check
+        if vector_val["chunk_count"] == 0 and relational_val["keyword_count"] > 0:
+            issues.append("Content inconsistency: keywords exist but no vector chunks")
+
+        return issues
+
+    # ================================================================
+    # UDS3 RELATIONS INTEGRATION
+    # ================================================================
+
+    def create_uds3_relation(
+        self,
+        relation_type: str,
+        source_id: str,
+        target_id: str,
+        properties: Optional[Dict[Any, Any]] = None,
+    ) -> Dict:
+        """
+        Erstellt eine UDS3-konforme Relation
+
+        Args:
+            relation_type: UDS3-Relation-Typ aus Almanach
+            source_id: ID des Quell-Nodes
+            target_id: ID des Ziel-Nodes
+            properties: Zusätzliche Properties
+
+        Returns:
+            Dict: UDS3-Relation-Erstellungsergebnis mit Database-Operations
+        """
+        if not self.relations_enabled:
+            return {
+                "success": False,
+                "error": "UDS3 Relations Framework nicht verfügbar",
+                "database_operations": {},
+            }
+
+        # Erstelle Relation über UDS3 Framework
+        relation_result = self.relations_framework.create_relation_instance(
+            relation_type, source_id, target_id, properties
+        )
+
+        if relation_result["success"]:
+            # Erweitere mit UDS3-spezifischen Database-Operations
+            relation_result["uds3_database_operations"] = (
+                self._enhance_database_operations(
+                    relation_result["database_operations"], relation_type
+                )
+            )
+
+            logger.info(
+                f"✅ UDS3 Relation erstellt: {relation_type} ({source_id} -> {target_id})"
+            )
+
+        return relation_result
+
+    def get_uds3_relation_schema(self, relation_type: Optional[str] = None) -> Dict:
+        """
+        Holt UDS3-Relations-Schema
+
+        Args:
+            relation_type: Spezifischer Relation-Typ oder None für alle
+
+        Returns:
+            Dict: UDS3-Relations-Schema
+        """
+        if not self.relations_enabled:
+            return {"error": "UDS3 Relations Framework nicht verfügbar"}
+
+        if relation_type:
+            return self.relations_framework.get_relation_definition(relation_type)
+        else:
+            return {
+                "total_relations": len(self.relations_framework.almanach.relations),
+                "performance_stats": self.relations_framework.get_performance_stats(),
+                "database_schemas": {
+                    "graph": self.relations_framework.get_relation_schema_for_database(
+                        "graph"
+                    ),
+                    "vector": self.relations_framework.get_relation_schema_for_database(
+                        "vector"
+                    ),
+                    "relational": self.relations_framework.get_relation_schema_for_database(
+                        "relational"
+                    ),
+                },
+            }
+
+    def validate_uds3_relations_consistency(self) -> Dict:
+        """
+        Validiert UDS3-Relations-Konsistenz über alle Datenbanken
+
+        Returns:
+            Dict: UDS3-Relations-Konsistenz-Report
+        """
+        if not self.relations_enabled:
+            return {"error": "UDS3 Relations Framework nicht verfügbar"}
+
+        validation_result = {
+            "timestamp": datetime.now().isoformat(),
+            "uds3_consistent": True,
+            "framework_stats": self.relations_framework.get_performance_stats(),
+            "database_consistency": {},
+            "recommendations": [],
+        }
+
+        # Prüfe Database-spezifische Konsistenz
+        for db_type in ["graph", "vector", "relational"]:
+            schema = self.relations_framework.get_relation_schema_for_database(db_type)
+
+            validation_result["database_consistency"][db_type] = {
+                "total_relations": schema["total_relations"],
+                "constraints_needed": len(schema["constraints"]),
+                "indexes_needed": len(schema["indexes"]),
+                "optimizations_available": len(schema["optimizations"]),
+            }
+
+            # Empfehlungen basierend auf Schema
+            if schema["total_relations"] > 10 and len(schema["indexes"]) == 0:
+                validation_result["recommendations"].append(
+                    f"Erstelle Indexes für {db_type} DB für bessere Performance"
+                )
+
+        return validation_result
+
+    def _enhance_database_operations(
+        self, base_operations: Dict, relation_type: str
+    ) -> Dict:
+        """
+        Erweitert Database-Operations mit UDS3-spezifischen Optimierungen
+
+        Args:
+            base_operations: Basis Database-Operations
+            relation_type: Relation-Typ für spezifische Optimierungen
+
+        Returns:
+            Dict: Erweiterte Database-Operations
+        """
+        enhanced_operations = base_operations.copy()
+
+        # UDS3-spezifische Erweiterungen
+        if relation_type.startswith("UDS3_LEGAL_"):
+            # Legal Relations bekommen zusätzliche Compliance-Checks
+            if "graph" in enhanced_operations:
+                enhanced_operations["graph"]["compliance_validation"] = True
+                enhanced_operations["graph"]["legal_audit_trail"] = True
+
+        elif relation_type.startswith("UDS3_SEMANTIC_"):
+            # Semantic Relations bekommen Vector-DB Updates
+            if "vector" not in enhanced_operations:
+                enhanced_operations["vector"] = {
+                    "operation": "UPDATE_SEMANTIC_INDEX",
+                    "relation_type": relation_type,
+                }
+
+        # Performance-Optimierungen für kritische Relations
+        if relation_type in ["PART_OF", "CONTAINS_CHUNK", "NEXT_CHUNK"]:
+            for db_ops in enhanced_operations.values():
+                if isinstance(db_ops, dict):
+                    db_ops["performance_priority"] = "high"
+                    db_ops["batch_optimization"] = True
+
+        return enhanced_operations
+
+    def export_uds3_schema_for_databases(self) -> Dict[str, str]:
+        """
+        Exportiert UDS3-Schema für alle Database-Typen
+
+        Returns:
+            Dict: Database-spezifische Schema-Exports
+        """
+        if not self.relations_enabled:
+            return {"error": "UDS3 Relations Framework nicht verfügbar"}
+
+        exports: dict[Any, Any] = {}
+
+        try:
+            # Neo4j Cypher Schema
+            graph_schema = self.relations_framework.get_relation_schema_for_database(
+                "graph"
+            )
+            exports["neo4j_cypher"] = self._generate_neo4j_schema(graph_schema)
+
+            # Vector DB Schema
+            vector_schema = self.relations_framework.get_relation_schema_for_database(
+                "vector"
+            )
+            exports["vector_schema"] = self._generate_vector_schema(vector_schema)
+
+            # SQL Schema
+            relational_schema = (
+                self.relations_framework.get_relation_schema_for_database("relational")
+            )
+            exports["sql_schema"] = self._generate_sql_schema(relational_schema)
+
+        except Exception as e:
+            exports["error"] = f"Schema-Export fehlgeschlagen: {str(e)}"
+
+        return exports
+
+    def _generate_neo4j_schema(self, graph_schema: Dict) -> str:
+        """Generiert Neo4j Cypher Schema"""
+        cypher_lines: list[Any] = []
+        cypher_lines.append("// UDS3 Relations Schema für Neo4j")
+        cypher_lines.append("// Auto-generiert vom UDS3 Core")
+        cypher_lines.append("")
+
+        # Constraints
+        for constraint in graph_schema["constraints"]:
+            cypher_lines.append(f"// Constraint: {constraint}")
+            cypher_lines.append(
+                f"CREATE CONSTRAINT {constraint}_constraint IF NOT EXISTS FOR (n:Node) REQUIRE n.id IS UNIQUE;"
+            )
+
+        cypher_lines.append("")
+
+        # Indexes
+        for index in graph_schema["indexes"]:
+            cypher_lines.append(f"// Index: {index}")
+            cypher_lines.append(
+                f"CREATE INDEX {index}_index IF NOT EXISTS FOR ()-[r:{index.upper()}]-() ON (r.uds3_created_at);"
+            )
+
+        return "\n".join(cypher_lines)
+
+    def _generate_vector_schema(self, vector_schema: Dict) -> str:
+        """Generiert Vector DB Schema"""
+        schema_lines: list[Any] = []
+        schema_lines.append("# UDS3 Relations Schema für Vector DB")
+        schema_lines.append("# Collections und Metadaten-Struktur")
+        schema_lines.append("")
+
+        for relation_name in vector_schema["relations"]:
+            schema_lines.append(f"# Relation: {relation_name}")
+            schema_lines.append(f"collection_{relation_name.lower()}_metadata:")
+            schema_lines.append("  - relation_id: string")
+            schema_lines.append(f"  - relation_type: {relation_name}")
+            schema_lines.append("  - source_id: string")
+            schema_lines.append("  - target_id: string")
+            schema_lines.append("")
+
+        return "\n".join(schema_lines)
+
+    def _generate_sql_schema(self, relational_schema: Dict) -> str:
+        """Generiert SQL Schema"""
+        sql_lines: list[Any] = []
+        sql_lines.append("-- UDS3 Relations Schema für SQL Database")
+        sql_lines.append("-- Relations Metadata Tabellen")
+        sql_lines.append("")
+
+        # Haupttabelle für Relations
+        sql_lines.append("CREATE TABLE IF NOT EXISTS uds3_relations (")
+        sql_lines.append("    instance_id VARCHAR(32) PRIMARY KEY,")
+        sql_lines.append("    relation_type VARCHAR(100) NOT NULL,")
+        sql_lines.append("    source_id VARCHAR(32) NOT NULL,")
+        sql_lines.append("    target_id VARCHAR(32) NOT NULL,")
+        sql_lines.append("    properties_json TEXT,")
+        sql_lines.append("    uds3_priority VARCHAR(20),")
+        sql_lines.append("    performance_weight DECIMAL(4,2),")
+        sql_lines.append("    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,")
+        sql_lines.append("    INDEX idx_relation_type (relation_type),")
+        sql_lines.append("    INDEX idx_source_target (source_id, target_id)")
+        sql_lines.append(");")
+        sql_lines.append("")
+
+        return "\n".join(sql_lines)
+
+    def _create_crud_strategies(self) -> Dict:
+        """Definiert CRUD-Strategien für alle Datenbank-Typen"""
+        return {
+            OperationType.CREATE: {
+                "vector": {
+                    "primary_operation": "add_embeddings",
+                    "validation": ["duplicate_check", "dimension_check"],
+                    "rollback_strategy": "delete_by_id",
+                    "batch_size": 50,
+                },
+                "graph": {
+                    "primary_operation": "create_nodes_and_edges",
+                    "validation": ["node_existence_check", "edge_validity"],
+                    "rollback_strategy": "delete_cascade",
+                    "batch_size": 100,
+                },
+                "relational": {
+                    "primary_operation": "insert_records",
+                    "validation": ["constraint_check", "foreign_key_check"],
+                    "rollback_strategy": "transaction_rollback",
+                    "batch_size": 200,
+                },
+            },
+            OperationType.READ: {
+                "vector": {
+                    "operations": [
+                        "similarity_search",
+                        "get_by_id",
+                        "list_collections",
+                    ],
+                    "optimization": "index_hints",
+                    "cache_strategy": "embedding_cache",
+                },
+                "graph": {
+                    "operations": [
+                        "cypher_query",
+                        "traversal",
+                        "get_node",
+                        "get_relationships",
+                    ],
+                    "optimization": "query_planner",
+                    "cache_strategy": "result_cache",
+                },
+                "relational": {
+                    "operations": ["sql_query", "get_by_id", "filtered_search"],
+                    "optimization": "index_usage",
+                    "cache_strategy": "query_cache",
+                },
+            },
+            OperationType.UPDATE: {
+                "sync_strategy": SyncStrategy.IMMEDIATE,
+                "conflict_resolution": "last_write_wins",
+                "validation_required": True,
+                "operations": {
+                    "vector": {
+                        "primary_operation": "update_embeddings",
+                        "requires_recompute": True,
+                        "affected_indexes": ["similarity_index"],
+                        "cascade_updates": ["related_chunks"],
+                    },
+                    "graph": {
+                        "primary_operation": "update_node_properties",
+                        "requires_reindex": ["property_indexes"],
+                        "cascade_updates": ["connected_nodes"],
+                        "relationship_updates": "conditional",
+                    },
+                    "relational": {
+                        "primary_operation": "update_records",
+                        "requires_reindex": False,
+                        "cascade_updates": ["dependent_tables"],
+                        "triggers": ["audit_log", "statistics_update"],
+                    },
+                },
+            },
+            OperationType.DELETE: {
+                "sync_strategy": SyncStrategy.IMMEDIATE,
+                "soft_delete_preferred": True,
+                "cascade_strategy": "selective",
+                "operations": {
+                    "vector": {
+                        "primary_operation": "delete_embeddings",
+                        "cascade_deletes": ["related_chunks"],
+                        "cleanup_required": ["orphaned_vectors"],
+                        "index_maintenance": True,
+                    },
+                    "graph": {
+                        "primary_operation": "delete_node_cascade",
+                        "relationship_cleanup": "automatic",
+                        "orphan_detection": True,
+                        "index_cleanup": True,
+                    },
+                    "relational": {
+                        "primary_operation": "soft_delete_records",
+                        "foreign_key_handling": "restrict",
+                        "audit_trail": True,
+                        "statistics_update": True,
+                    },
+                },
+            },
+            OperationType.ARCHIVE: {
+                "retention_policy": "90_days",
+                "compression": True,
+                "accessibility": "read_only",
+                "operations": {
+                    "vector": {
+                        "move_to": "archive_collection",
+                        "compress_embeddings": True,
+                        "maintain_searchability": False,
+                    },
+                    "graph": {
+                        "move_to": "archive_subgraph",
+                        "preserve_relationships": True,
+                        "mark_inactive": True,
+                    },
+                    "relational": {
+                        "move_to": "archive_tables",
+                        "maintain_indexes": False,
+                        "compress_data": True,
+                    },
+                },
+                "uds3_audit_log": {
+                    "primary_key": "audit_id",
+                    "indexes": [
+                        {"columns": ["trace_id"], "type": "btree"},
+                        {"columns": ["saga_id"], "type": "btree"},
+                    ],
+                    "columns": {
+                        "audit_id": "VARCHAR(36) PRIMARY KEY",
+                        "saga_id": "VARCHAR(36) NOT NULL",
+                        "trace_id": "VARCHAR(36)",
+                        "step_name": "VARCHAR(128)",
+                        "event_type": "VARCHAR(64)",
+                        "status": "VARCHAR(32)",
+                        "duration_ms": "INTEGER",
+                        "details": "JSONB",
+                        "actor": "VARCHAR(100)",
+                        "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                    },
+                },
+                "uds3_saga_metrics": {
+                    "primary_key": "metric_id",
+                    "indexes": [
+                        {"columns": ["saga_id"], "type": "btree"},
+                        {"columns": ["trace_id"], "type": "btree"},
+                        {"columns": ["step_name"], "type": "btree"},
+                    ],
+                    "columns": {
+                        "metric_id": "VARCHAR(36) PRIMARY KEY",
+                        "saga_id": "VARCHAR(36) NOT NULL",
+                        "trace_id": "VARCHAR(36)",
+                        "step_name": "VARCHAR(128)",
+                        "status": "VARCHAR(32)",
+                        "started_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                        "finished_at": "TIMESTAMP",
+                        "duration_ms": "INTEGER",
+                        "error_message": "TEXT",
+                        "details": "JSONB",
+                    },
+                },
+            },
+        }
+
+    def _create_conflict_resolution_rules(self) -> Dict:
+        """Definiert Konfliktlösungsstrategien"""
+        return {
+            "update_conflicts": {
+                "strategy": "timestamp_based",
+                "fallback": "manual_resolution",
+                "rules": {
+                    "vector_embeddings": "recompute_on_conflict",
+                    "graph_properties": "merge_non_conflicting",
+                    "relational_data": "last_write_wins",
+                },
+            },
+            "cross_db_inconsistency": {
+                "detection_method": "periodic_validation",
+                "resolution_strategy": "authoritative_source",
+                "authority_hierarchy": ["relational", "graph", "vector"],
+                "reconciliation_batch_size": 100,
+            },
+            "concurrent_operations": {
+                "locking_strategy": "optimistic_locking",
+                "retry_policy": {
+                    "max_retries": 3,
+                    "backoff_strategy": "exponential",
+                    "base_delay_ms": 100,
+                },
+            },
+        }
+
+    def _create_vector_operations(
+        self, document_id: str, chunks: List[str], metadata: Dict
+    ) -> Dict:
+        """Erstellt Vector-DB-spezifische Operationen"""
+        return {
+            "operations": [
+                {
+                    "type": "create_embeddings",
+                    "collection": "document_chunks",
+                    "data": [
+                        {
+                            "id": f"{document_id}_chunk_{i:04d}",
+                            "document_id": document_id,
+                            "content": chunk,
+                            "chunk_index": i,
+                            "content_preview": chunk[:200],
+                            "chunk_type": self._determine_chunk_type(chunk),
+                            "content_length": len(chunk),
+                            "metadata": {
+                                "rechtsgebiet": metadata.get("rechtsgebiet"),
+                                "created_at": datetime.now().isoformat(),
+                            },
+                        }
+                        for i, chunk in enumerate(chunks)
+                    ],
+                },
+                {
+                    "type": "create_summary_embedding",
+                    "collection": "document_summaries",
+                    "data": {
+                        "id": f"{document_id}_summary",
+                        "document_id": document_id,
+                        "summary_text": chunks[0][:500]
+                        if chunks
+                        else "",  # Erste 500 Zeichen als Summary
+                        "key_topics": self._extract_key_topics(chunks),
+                        "document_type": metadata.get("document_type", "unknown"),
+                    },
+                },
+            ],
+            "batch_config": {
+                "batch_size": self.optimization_config.batch_sizes["vector"],
+                "parallel_processing": True,
+            },
+        }
+
+    def _create_graph_operations(
+        self, document_id: str, content: str, metadata: Dict
+    ) -> Dict:
+        """Erstellt Graph-DB-spezifische Operationen"""
+        return {
+            "operations": [
+                {
+                    "type": "create_document_node",
+                    "node_type": "Document",
+                    "properties": {
+                        "id": document_id,
+                        "title": metadata.get("title", ""),
+                        "file_path": metadata.get("file_path", ""),
+                        "file_hash": metadata.get("file_hash", ""),
+                        "rechtsgebiet": metadata.get("rechtsgebiet"),
+                        "behoerde": metadata.get("behoerde"),
+                        "document_type": metadata.get("document_type"),
+                        "created_at": datetime.now().isoformat(),
+                    },
+                },
+                {
+                    "type": "create_author_relationships",
+                    "relationships": self._extract_author_relationships(
+                        content, metadata
+                    ),
+                },
+                {
+                    "type": "create_concept_relationships",
+                    "relationships": self._extract_concept_relationships(
+                        content, metadata
+                    ),
+                },
+                {
+                    "type": "create_citation_relationships",
+                    "relationships": self._extract_citations(content),
+                },
+            ],
+            "batch_config": {
+                "batch_size": self.optimization_config.batch_sizes["graph"],
+                "transaction_size": 50,
+            },
+        }
+
+    def _create_relational_operations(
+        self, document_id: str, file_path: str, content: str, metadata: Dict
+    ) -> Dict:
+        """Erstellt Relational-DB-spezifische Operationen"""
+        return {
+            "operations": [
+                {
+                    "type": "insert_metadata",
+                    "table": "documents_metadata",
+                    "data": {
+                        "document_id": document_id,
+                        "title": metadata.get("title", os.path.basename(file_path)),
+                        "file_path": file_path,
+                        "file_hash": metadata.get("file_hash", ""),
+                        "file_size": len(content.encode("utf-8")),
+                        "rechtsgebiet": metadata.get("rechtsgebiet"),
+                        "behoerde": metadata.get("behoerde"),
+                        "document_type": metadata.get("document_type"),
+                        "chunk_count": len(content.split("\n\n")),  # Geschätzte Chunks
+                        "processing_status": "processing",
+                    },
+                },
+                {
+                    "type": "insert_keywords",
+                    "table": "keywords_index",
+                    "data": self._extract_keywords(document_id, content),
+                },
+                {
+                    "type": "insert_statistics",
+                    "table": "processing_statistics",
+                    "data": {
+                        "document_id": document_id,
+                        "processing_stage": "initial_processing",
+                        "tokens_processed": len(content.split()),
+                        "status": "in_progress",
+                    },
+                },
+            ],
+            "batch_config": {
+                "batch_size": self.optimization_config.batch_sizes["relational"],
+                "use_bulk_insert": True,
+            },
+        }
+
+    def _create_sync_plan(self, document_id: str) -> Dict:
+        """Erstellt Synchronisationsplan zwischen den Datenbanken"""
+        return {
+            "phases": [
+                {
+                    "phase": "initialization",
+                    "order": ["relational", "graph", "vector"],
+                    "dependencies": {
+                        "graph": ["relational"],  # Graph braucht Metadaten
+                        "vector": ["relational"],  # Vector braucht document_id
+                    },
+                },
+                {
+                    "phase": "relationship_building",
+                    "order": ["graph", "relational"],
+                    "operations": ["update_relationship_counts", "update_statistics"],
+                },
+                {
+                    "phase": "finalization",
+                    "order": ["relational"],
+                    "operations": ["update_processing_status"],
+                },
+            ]
+        }
+
+    def _create_optimization_hints(self, chunks: List[str], metadata: Dict) -> Dict:
+        """Erstellt Optimierungshinweise für die Verarbeitung"""
+        return {
+            "vector_optimization": {
+                "embedding_priority": "high" if len(chunks) < 50 else "batch",
+                "similarity_indexing": "immediate"
+                if metadata.get("priority") == "high"
+                else "deferred",
+            },
+            "graph_optimization": {
+                "relationship_indexing": "deferred",
+                "traversal_caching": True if len(chunks) > 100 else False,
+            },
+            "relational_optimization": {
+                "index_rebuild": False,  # Nur bei größeren Batches
+                "statistics_update": "immediate",
+            },
+        }
+
+    # Helper Methods
+    def _generate_document_id(self, file_path: str, content_preview: str) -> str:
+        """Generiert eindeutige Document-ID"""
+        hash_input = (
+            f"{os.path.abspath(file_path).replace('\\', '/')}:{content_preview[:1000]}"
+        )
+        return f"doc_{hashlib.sha256(hash_input.encode('utf-8')).hexdigest()[:16]}"
+
+    def _format_document_id(self, document_uuid: str) -> str:
+        """Erzeugt ein standardisiertes document_id-Format aus einer UUID."""
+        normalized = document_uuid.replace("-", "").lower()
+        return f"doc_{normalized}"
+
+    def _infer_uuid_from_document_id(self, document_id: Optional[str]) -> Optional[str]:
+        """Leitet eine UUID aus einer document_id (doc_<hex>) ab."""
+        if not document_id:
+            return None
+        if document_id.startswith("doc_"):
+            raw = document_id[4:]
+            if len(raw) == 32:
+                return f"{raw[0:8]}-{raw[8:12]}-{raw[12:16]}-{raw[16:20]}-{raw[20:]}"
+        return document_id
+
+    def _determine_chunk_type(self, chunk: str) -> str:
+        """Bestimmt den Typ eines Text-Chunks"""
+        if chunk.strip().startswith("#") or len(chunk) < 100:
+            return "heading"
+        elif "|" in chunk and "\n" in chunk:
+            return "table"
+        elif len(chunk) > 2000:
+            return "long_paragraph"
+        else:
+            return "paragraph"
+
+    def _extract_key_topics(self, chunks: List[str]) -> List[str]:
+        """Extrahiert Schlüssel-Topics aus Chunks"""
+        # Vereinfachte Implementation
+        topics = set()
+        legal_terms = ["recht", "gesetz", "urteil", "verordnung", "beschluss"]
+
+        for chunk in chunks[:3]:  # Nur erste 3 Chunks analysieren
+            words = chunk.lower().split()
+            for term in legal_terms:
+                if term in " ".join(words):
+                    topics.add(term)
+
+        return list(topics)[:5]  # Maximal 5 Topics
+
+    def _extract_author_relationships(self, content: str, metadata: Dict) -> List[Dict]:
+        """Extrahiert Autor-Beziehungen"""
+        relationships: list[Any] = []
+
+        if "author" in metadata:
+            relationships.append(
+                {
+                    "type": "AUTHORED_BY",
+                    "from_node": {"type": "Document", "id": "current_document"},
+                    "to_node": {"type": "Author", "name": metadata["author"]},
+                    "properties": {"role": "author", "confidence": 1.0},
+                }
+            )
+
+        return relationships
+
+    def _extract_concept_relationships(
+        self, content: str, metadata: Dict
+    ) -> List[Dict]:
+        """Extrahiert Konzept-Beziehungen"""
+        relationships: list[Any] = []
+
+        if "rechtsgebiet" in metadata:
+            relationships.append(
+                {
+                    "type": "RELATES_TO",
+                    "from_node": {"type": "Document", "id": "current_document"},
+                    "to_node": {"type": "Concept", "term": metadata["rechtsgebiet"]},
+                    "properties": {
+                        "relevance_score": 0.9,
+                        "extraction_method": "metadata",
+                    },
+                }
+            )
+
+        return relationships
+
+    def _extract_citations(self, content: str) -> List[Dict]:
+        """Extrahiert Zitate und Verweise"""
+        # Vereinfachte Implementation - in der Praxis würde hier NLP verwendet
+        citations: list[Any] = []
+
+        # Suche nach Aktenzeichen-Patterns
+        import re
+
+        citation_pattern = r"\d+\s+[A-Z]+\s+\d+/\d+"
+        matches = re.findall(citation_pattern, content)
+
+        for match in matches[:5]:  # Maximal 5 Zitate
+            citations.append(
+                {
+                    "type": "CITES",
+                    "from_node": {"type": "Document", "id": "current_document"},
+                    "to_node": {"type": "Document", "aktenzeichen": match.strip()},
+                    "properties": {
+                        "citation_type": "reference",
+                        "context": "legal_reference",
+                    },
+                }
+            )
+
+        return citations
+
+    def _extract_keywords(self, document_id: str, content: str) -> List[Dict]:
+        """Extrahiert Keywords für Relational DB"""
+        keywords: list[Any] = []
+
+        # Vereinfachte Keyword-Extraktion
+        words = content.lower().split()
+        word_freq: dict[Any, Any] = {}
+
+        for word in words:
+            if len(word) > 4 and word.isalpha():  # Nur Wörter > 4 Zeichen
+                word_freq[word] = word_freq.get(word, 0) + 1
+
+        # Top 20 häufigste Wörter
+        for word, freq in sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[
+            :20
+        ]:
+            keywords.append(
+                {
+                    "document_id": document_id,
+                    "keyword": word,
+                    "frequency": freq,
+                    "context_type": "content",
+                    "extraction_method": "frequency",
+                    "confidence": min(1.0, freq / 10.0),  # Normalisierte Confidence
+                }
+            )
+
+        return keywords
+
+    # Security & Quality Helper Methods
+    def _execute_vector_create(
+        self,
+        document_id: str,
+        content: str,
+        chunks: List[str],
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict:
+        metadata_payload = dict(metadata or {})
+        if content:
+            metadata_payload.setdefault("content_preview", content[:200])
+        self._enforce_adapter_governance(
+            "vector",
+            OperationType.CREATE.value,
+            {
+                "document_id": document_id,
+                "chunks": list(chunks or []),
+                "metadata": metadata_payload,
+            },
+        )
+        result = self.saga_crud.vector_create(document_id, chunks, metadata_payload)
+        return result.to_payload()
+
+    def _execute_graph_create(
+        self, document_id: str, content: str, metadata: Dict
+    ) -> Dict:
+        properties = dict(metadata or {})
+        if content:
+            properties.setdefault("content_preview", content[:200])
+        properties.setdefault("id", document_id)
+        self._enforce_adapter_governance(
+            "graph",
+            OperationType.CREATE.value,
+            {
+                "document_id": document_id,
+                "properties": properties,
+            },
+        )
+        result = self.saga_crud.graph_create(document_id, properties)
+        return result.to_payload()
+
+    def _execute_relational_create(self, document_data: Dict) -> Dict:
+        self._enforce_adapter_governance(
+            "relational",
+            OperationType.CREATE.value,
+            document_data,
+        )
+        result = self.saga_crud.relational_create(document_data)
+        return result.to_payload()
+
+    def _validate_cross_db_consistency(
+        self,
+        document_id: str,
+        vector_data: Dict,
+        graph_data: Dict,
+        relational_data: Dict,
+        file_storage_data: Optional[Dict[Any, Any]] = None,
+    ) -> Dict:
+        """Validiert Konsistenz zwischen allen Datenbanken"""
+        validation_result = {
+            "document_id": document_id,
+            "overall_valid": True,
+            "checks": {},
+            "issues": [],
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        def _is_skipped(data: Optional[Dict[str, Any]]) -> bool:
+            return bool(data and data.get("skipped"))
+
+        vector_skipped = _is_skipped(vector_data)
+        graph_skipped = _is_skipped(graph_data)
+        file_skipped = _is_skipped(file_storage_data)
+
+        # ID Consistency Check
+        id_checks: List[bool] = []
+        if not vector_skipped:
+            id_checks.append(vector_data.get("document_id") == document_id)
+        if not graph_skipped:
+            id_checks.append(graph_data.get("id") == document_id)
+        id_checks.append(relational_data.get("document_id") == document_id)
+        ids_consistent = all(id_checks) if id_checks else True
+        validation_result["checks"]["id_consistency"] = ids_consistent
+
+        if not ids_consistent:
+            validation_result["overall_valid"] = False
+            validation_result["issues"].append("Document ID mismatch between databases")
+
+        # Success Status Check
+        success_checks: list[Any] = []
+        success_checks.append(relational_data.get("success", False))
+        success_checks.append(
+            True if vector_skipped else vector_data.get("success", False)
+        )
+        success_checks.append(
+            True if graph_skipped else graph_data.get("success", False)
+        )
+        if file_storage_data:
+            success_checks.append(
+                True if file_skipped else file_storage_data.get("success", False)
+            )
+        all_successful = all(success_checks)
+        validation_result["checks"]["operation_success"] = all_successful
+
+        if not all_successful:
+            validation_result["overall_valid"] = False
+            validation_result["issues"].append("Not all database operations successful")
+
+        # Data Presence Check
+        data_checks: List[bool] = []
+        if not vector_skipped:
+            data_checks.append(len(vector_data.get("chunks", [])) > 0)
+        if not graph_skipped:
+            data_checks.append(len(graph_data.get("relationships", [])) > 0)
+        data_checks.append(relational_data.get("title") is not None)
+        data_present = all(data_checks) if data_checks else True
+        validation_result["checks"]["data_presence"] = data_present
+
+        if not data_present:
+            validation_result["issues"].append("Missing data in one or more databases")
+
+        # File Storage Presence & Integrity (falls vorhanden)
+        if file_storage_data:
+            if file_skipped:
+                validation_result["checks"]["file_storage"] = True
+            else:
+                file_ok = file_storage_data.get(
+                    "success", False
+                ) and file_storage_data.get("file_storage_id")
+                validation_result["checks"]["file_storage"] = file_ok
+                if not file_ok:
+                    validation_result["overall_valid"] = False
+                    validation_result["issues"].append("File storage operation failed")
+
+        # Quality Validation (if available)
+        if self.quality_manager:
+            cross_db_quality = self.quality_manager.validate_cross_db_quality(
+                document_id, vector_data, graph_data, relational_data
+            )
+            validation_result["quality_validation"] = cross_db_quality
+
+            if cross_db_quality.get("consistency_score", 0) < 0.8:
+                validation_result["issues"].append("Low cross-database quality score")
+
+        return validation_result
+
+    # ================================================================
+    # FILE STORAGE SCHEMA & OPERATIONS
+    # ================================================================
+
+    def _create_file_storage_schema(self) -> Dict:
+        """Erstellt Schema-/Policy-Definition für File Storage Backend (Mock)."""
+        return {
+            "storage_root": "var/uds3/files",
+            "replication": "none",
+            "versioning": True,
+            "retention_policies": {
+                "default": {"min_days": 365, "archive_after_days": 30},
+                "legal_hold": {"min_days": 1825, "immutable": True},
+            },
+            "integrity_checks": {
+                "hash_algorithm": "sha256",
+                "store_original_hash": True,
+                "periodic_rehash_days": 90,
+            },
+        }
+
+    def _create_file_storage_operations(
+        self, document_id: str, file_path: str, content: str, metadata: Dict
+    ) -> Dict:
+        """Erstellt File-Storage-spezifische Operationen."""
+        return {
+            "operations": [
+                {
+                    "type": "store_original_file_reference",
+                    "document_id": document_id,
+                    "original_path": file_path,
+                    "expected_hash": metadata.get("file_hash"),
+                    "category": metadata.get("document_type", "unknown"),
+                    "version": 1,
+                },
+                {
+                    "type": "store_derivative_manifest",
+                    "document_id": document_id,
+                    "entries": [
+                        {
+                            "type": "text_extraction",
+                            "status": "available",
+                            "size": len(content.encode("utf-8")),
+                        }
+                    ],
+                },
+            ],
+            "batch_config": {"parallel_processing": False},
+        }
+
+    # Execution Helper
+    def _execute_file_storage_create(
+        self,
+        document_id: str,
+        file_path: str,
+        metadata: Dict,
+        content: Optional[str] = None,
+    ) -> Dict:
+        source_path = file_path if file_path and os.path.exists(file_path) else None
+        data_bytes = None
+        if source_path is None and content:
+            data_bytes = content.encode("utf-8")
+        self._enforce_adapter_governance(
+            "file",
+            OperationType.CREATE.value,
+            {
+                "document_id": document_id,
+                "source_path": source_path,
+                "metadata": metadata,
+            },
+        )
+        result = self.saga_crud.file_create(
+            document_id,
+            source_path=source_path,
+            data=data_bytes,
+            filename=os.path.basename(file_path) if file_path else None,
+            metadata=metadata,
+        )
+        return result.to_payload()
+
+    def _execute_file_storage_update(
+        self,
+        document_id: str,
+        new_file_path: Optional[str] = None,
+        *,
+        asset_id: Optional[str] = None,
+        content: Optional[str] = None,
+    ) -> Dict:
+        target_asset_id = asset_id or f"fs_{document_id}"
+        source_path = (
+            new_file_path if new_file_path and os.path.exists(new_file_path) else None
+        )
+        data_bytes = None
+        if source_path is None and content:
+            data_bytes = content.encode("utf-8")
+        self._enforce_adapter_governance(
+            "file",
+            OperationType.UPDATE.value,
+            {
+                "document_id": document_id,
+                "asset_id": target_asset_id,
+                "source_path": source_path,
+            },
+        )
+        result = self.saga_crud.file_update(
+            target_asset_id,
+            source_path=source_path,
+            data=data_bytes,
+            metadata={"document_id": document_id},
+        )
+        payload = result.to_payload()
+        payload["document_id"] = document_id
+        return payload
+
+    def _execute_file_storage_delete(
+        self,
+        document_id: str,
+        archive: bool = True,
+        *,
+        asset_id: Optional[str] = None,
+    ) -> Dict:
+        target_asset_id = asset_id or f"fs_{document_id}"
+        self._enforce_adapter_governance(
+            "file",
+            OperationType.DELETE.value,
+            {
+                "document_id": document_id,
+                "asset_id": target_asset_id,
+                "archive": archive,
+            },
+        )
+        result = self.saga_crud.file_delete(target_asset_id)
+        payload = result.to_payload()
+        payload.setdefault("document_id", document_id)
+        payload.setdefault("archived", archive)
+        payload.setdefault("deleted", not archive)
+        return payload
+
+    def _execute_file_storage_read(
+        self, asset_id: str, include_versions: bool = True
+    ) -> Dict:
+        self._enforce_adapter_governance(
+            "file",
+            OperationType.READ.value,
+            {
+                "asset_id": asset_id,
+                "include_versions": include_versions,
+            },
+        )
+        result = self.saga_crud.file_read(asset_id)
+        payload = result.to_payload()
+        payload.setdefault("include_versions", include_versions)
+        return payload
+
+
+# Singleton Instance
+_optimized_unified_strategy: Any = None
+
+
+def get_optimized_unified_strategy() -> UnifiedDatabaseStrategy:
+    """Holt die globale optimierte Unified Database Strategy Instanz."""
+    global _optimized_unified_strategy
+    if _optimized_unified_strategy is None:
+        _optimized_unified_strategy = UnifiedDatabaseStrategy()
+        logger.info("Optimized Unified Database Strategy initialisiert (Version 3.0)")
+    return _optimized_unified_strategy
+
+
+if __name__ == "__main__":
+    print("=== UNIFIED DATABASE STRATEGY v3.0 - SECURITY & QUALITY TEST ===")
+
+    # Test mit Security & Quality Features
+    if SECURITY_QUALITY_AVAILABLE:
+        strategy = UnifiedDatabaseStrategy(
+            security_level=SecurityLevel.CONFIDENTIAL, strict_quality=True
+        )
+        print("✅ Security & Quality Framework aktiviert")
+    else:
+        strategy = UnifiedDatabaseStrategy()
+        print("⚠️  Security & Quality Framework nicht verfügbar - Fallback-Modus")
+
+    test_file_path = "test_arbeitsrecht_kündigungsschutz.pdf"
+    test_content = """
+    Arbeitsrecht und Kündigungsschutz - Rechtliche Grundlagen und Praxis
+    
+    Das deutsche Arbeitsrecht regelt die komplexen Rechtsbeziehungen zwischen Arbeitgebern und Arbeitnehmern.
+    Der Kündigungsschutz bildet einen fundamentalen Eckpfeiler des sozialen Rechtssystems in Deutschland.
+    
+    Rechtliche Grundlagen:
+    Nach § 1 KSchG ist eine Kündigung unwirksam, wenn sie sozial ungerechtfertigt ist.
+    Das Bundesarbeitsgericht (BAG) hat in seinem wegweisenden Urteil 2 AZR 123/21 die Maßstäbe für
+    betriebsbedingte Kündigungen präzisiert und die Sozialauswahl konkretisiert.
+    
+    Praxisrelevante Aspekte:
+    - Abmahnung als milderes Mittel vor verhaltensbedingte Kündigung
+    - Betriebsrat-Anhörung als Verfahrensvoraussetzung
+    - Kündigungsfristen nach § 622 BGB
+    """
+
+    test_chunks = [
+        "Das deutsche Arbeitsrecht regelt die komplexen Rechtsbeziehungen zwischen Arbeitgebern und Arbeitnehmern.",
+        "Der Kündigungsschutz bildet einen fundamentalen Eckpfeiler des sozialen Rechtssystems in Deutschland.",
+        "Nach § 1 KSchG ist eine Kündigung unwirksam, wenn sie sozial ungerechtfertigt ist.",
+        "Das Bundesarbeitsgericht (BAG) hat in seinem wegweisenden Urteil 2 AZR 123/21 die Maßstäbe präzisiert.",
+        "Abmahnung als milderes Mittel vor verhaltensbedingte Kündigung",
+        "Betriebsrat-Anhörung als Verfahrensvoraussetzung bei Kündigungen",
+    ]
+
+    # === SECURE DOCUMENT CREATION TEST ===
+    print("\n=== SECURE DOCUMENT CREATION ===")
+    secure_result = strategy.create_secure_document(
+        test_file_path,
+        test_content,
+        test_chunks,
+        security_level=SecurityLevel.CONFIDENTIAL
+        if SECURITY_QUALITY_AVAILABLE
+        else None,
+        title="Kündigungsschutz im deutschen Arbeitsrecht",
+        rechtsgebiet="Arbeitsrecht",
+        behoerde="Bundesarbeitsgericht",
+        author="Prof. Dr. jur. Maria Arbeitsrechtlerin",
+        keywords=["Kündigung", "Arbeitsrecht", "BAG", "Sozialauswahl"],
+    )
+
+    print(
+        f"✅ Document Creation: {'SUCCESS' if secure_result['success'] else 'FAILED'}"
+    )
+    if secure_result["success"]:
+        print(
+            f"   Document ID: {secure_result['security_info'].get('document_id', 'N/A')}"
+        )
+
+        if "security_info" in secure_result:
+            sec_info = secure_result["security_info"]
+            print(f"   Security Level: {sec_info.get('security_level', 'N/A')}")
+            print(f"   Content Hash: {sec_info.get('content_hash', 'N/A')[:16]}...")
+            print(f"   UUID: {sec_info.get('document_uuid', 'N/A')[:13]}...")
+
+        if "quality_score" in secure_result:
+            quality = secure_result["quality_score"]
+            print(f"   Overall Quality: {quality.get('overall_score', 0):.3f}")
+            print(f"   Completeness: {quality['metrics'].get('completeness', 0):.3f}")
+            print(f"   Consistency: {quality['metrics'].get('consistency', 0):.3f}")
+            print(
+                f"   Semantic Coherence: {quality['metrics'].get('semantic_coherence', 0):.3f}"
+            )
+
+        if secure_result.get("validation_results"):
+            validation = secure_result["validation_results"]
+            print(f"   Cross-DB Valid: {'✅' if validation['overall_valid'] else '❌'}")
+            print(f"   Validation Checks: {len(validation['checks'])} passed")
+
+        if secure_result.get("issues"):
+            print(f"   ⚠️  Issues Found: {len(secure_result['issues'])}")
+            for issue in secure_result["issues"][:3]:  # Show first 3
+                print(f"      - {issue}")
+
+    # === TRADITIONAL PROCESSING PLAN ===
+    print("\n=== TRADITIONAL PROCESSING PLAN ===")
+    plan = strategy.create_optimized_processing_plan(
+        test_file_path,
+        test_content,
+        test_chunks,
+        title="Kündigungsschutz im deutschen Arbeitsrecht",
+        rechtsgebiet="Arbeitsrecht",
+        behoerde="Bundesarbeitsgericht",
+        author="Prof. Dr. jur. Maria Arbeitsrechtlerin",
+    )
+
+    print(f"Strategy Version: {plan['strategy_version']}")
+    print(f"Vector DB Operations: {len(plan['databases']['vector']['operations'])}")
+    print(f"Graph DB Operations: {len(plan['databases']['graph']['operations'])}")
+    print(
+        f"Relational DB Operations: {len(plan['databases']['relational']['operations'])}"
+    )
+
+    # === CRUD OPERATIONS TESTING ===
+    print("\n=== CRUD OPERATIONS TESTING ===")
+
+    document_id = (
+        secure_result["security_info"].get("document_id")
+        if secure_result.get("security_info")
+        else plan["document_id"]
+    )
+
+    # READ Operation
+    print("\n--- READ OPERATION ---")
+    read_op = strategy.read_document_operation(
+        document_id, include_content=True, include_relationships=True
+    )
+    print(f"Read Operation ID: {read_op['document_id']}")
+    for db_type, config in read_op["databases"].items():
+        print(f"- {db_type.upper()}: {len(config['operations'])} operations")
+
+    # UPDATE Operation
+    print("\n--- UPDATE OPERATION ---")
+    update_op = strategy.update_document_operation(
+        document_id,
+        updates={
+            "title": "Aktualisiertes Kündigungsschutzrecht",
+            "content": "Neuer Inhalt mit aktualisierten Rechtsprechungen...",
+            "rechtsgebiet": "Arbeitsrecht",
+            "author": "Prof. Dr. Neue Autorin",
+        },
+        sync_strategy=SyncStrategy.IMMEDIATE,
+    )
+    print(f"Update Operation: {update_op['operation_type']}")
+    print(f"Sync Strategy: {update_op['sync_strategy']}")
+    for db_type, config in update_op["databases"].items():
+        print(f"- {db_type.upper()}: {len(config['operations'])} operations")
+        if "rollback" in config:
+            print(f"  Rollback: {config['rollback']['type']}")
+
+    # DELETE Operation (Soft Delete)
+    print("\n--- DELETE OPERATION (SOFT DELETE) ---")
+    delete_op = strategy.delete_document_operation(
+        document_id, soft_delete=True, cascade_delete=True
+    )
+    print(f"Delete Operation: {delete_op['operation_type']}")
+    print(f"Soft Delete: {delete_op['soft_delete']}")
+    print(f"Cascade Delete: {delete_op['cascade_delete']}")
+    for db_type, config in delete_op["databases"].items():
+        print(f"- {db_type.upper()}: {config['operations'][0]['type']}")
+
+    # BATCH Operation
+    print("\n--- BATCH OPERATION ---")
+    batch_ops = [plan, update_op, delete_op]  # Beispiel-Operationen
+    batch_op = strategy.batch_operation(batch_ops, OperationType.BATCH_UPDATE)
+    print(f"Batch ID: {batch_op['batch_id']}")
+    print(f"Operation Count: {batch_op['operation_count']}")
+    for db_type, config in batch_op["databases"].items():
+        print(f"- {db_type.upper()}: {len(config['batches'])} batches")
+
+    # VALIDATION
+    print("\n--- CONSISTENCY VALIDATION ---")
+    validation = strategy.validate_cross_db_consistency(document_id)
+    print(f"Document Consistent: {validation['consistent']}")
+    for db_type, status in validation["databases"].items():
+        print(f"- {db_type.upper()}: exists={status['exists']}")
+    if validation["issues"]:
+        print(f"Issues found: {validation['issues']}")
+    else:
+        print("✅ No consistency issues detected")
+
+    print("\n🎉 CRUD Operations erfolgreich getestet!")
+
+"""
+VERITAS Protected Module
+WARNING: This file contains embedded protection keys. 
+Modification will be detected and may result in license violations.
+"""
+
+# === VERITAS PROTECTION KEYS (DO NOT MODIFY) ===
+module_name = "uds3_core"
+module_licenced_organization = "VERITAS_TECH_GMBH"
+module_licence_key = "eyJjbGllbnRfaWQi...NzRkYzhl"  # Gekuerzt fuer Sicherheit
+module_organization_key = (
+    "6f5304c29594443086e1ace0011c094614b612c22aa16af9f1a63f02a0c9bf5c"
+)
+module_file_key = "ac150c685e014af9393e689404e974b30d76cd7719a7f51eca9e6a0e6224d114"
+module_version = "1.0"
+module_protection_level = 2
+# === END PROTECTION KEYS ===

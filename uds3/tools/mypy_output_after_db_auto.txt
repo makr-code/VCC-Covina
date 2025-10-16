@@ -1,0 +1,6 @@
+C:\VCC\Covina\uds3\database\scripts\debug_db_start.py:6: SyntaxWarning: invalid escape sequence '\V'
+  $env:PYTHONPATH = 'C:\VVC\Covina'; python -u -m database.scripts.debug_db_start
+uds3\uds3_core_geo.py:613:13: error: Unexpected indent  [syntax]
+                "document_id": doc_id,
+                ^
+Found 1 error in 1 file (errors prevented further checking)

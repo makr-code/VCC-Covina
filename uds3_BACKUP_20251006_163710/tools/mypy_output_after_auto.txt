@@ -1,0 +1,4 @@
+uds3\uds3_core_geo.py:613:13: error: Unexpected indent  [syntax]
+                "document_id": doc_id,
+                ^
+Found 1 error in 1 file (errors prevented further checking)

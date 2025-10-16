@@ -1,0 +1,39 @@
+[
+  {
+    "type": "DatabaseAPIServer",
+    "version": "1.0",
+    "description": "Local developer/test configuration for Covina database adapters",
+    "backends": {
+      "relational_sqlite": {
+        "backend": "sqlite",
+        "database_path": "./data/sqlite_relational.db"
+      },
+      "graph_neo4j": {
+        "backend": "neo4j",
+        "host": "localhost",
+        "port": 7687,
+        "username": "neo4j",
+        "password": "test"
+      },
+      "vector_chromadb": {
+        "backend": "chromadb",
+        "path": "./chroma/vcc_vector_prod.db"
+      },
+      "keyvalue_postgresql": {
+        "backend": "postgresql",
+        "host": "localhost",
+        "port": 5432,
+        "database": "covina",
+        "username": "covina",
+        "password": "covina"
+      },
+      "document_couchdb": {
+        "backend": "couchdb",
+        "host": "localhost",
+        "port": 5984,
+        "username": "admin",
+        "password": "password"
+      }
+    }
+  }
+]

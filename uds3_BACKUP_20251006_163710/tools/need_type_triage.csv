@@ -1,0 +1,14 @@
+file,line,var,context,classification,suggested,fix_snippet
+database/database_api_base.py,34,,database\database_api_base.py:37:9: error: Need type annotation for,External,Any,: Any = None
+uds3/uds3_follow_up_orchestrator.py,138,,uds3\uds3_follow_up_orchestrator.py:138:19: error: Need type annotation for,Auto,Any,: Any = None
+uds3/uds3_follow_up_orchestrator.py,204,,uds3\uds3_follow_up_orchestrator.py:204:19: error: Need type annotation for,Auto,Any,: Any = None
+uds3/uds3_follow_up_orchestrator.py,263,,uds3\uds3_follow_up_orchestrator.py:285:19: error: Need type annotation for,Auto,Any,: Any = None
+uds3/uds3_follow_up_orchestrator.py,378,,uds3\uds3_follow_up_orchestrator.py:378:19: error: Need type annotation for,Auto,Any,: Any = None
+uds3/uds3_epk_process_parser.py,236,,uds3\uds3_epk_process_parser.py:236:24: error: Need type annotation for,Auto,Any,: Any = None
+database/database_manager.py,61,,database\database_manager.py:61:9: error: Need type annotation for,External,Any,: Any = None
+database/database_manager.py,67,,database\database_manager.py:67:9: error: Need type annotation for,External,Any,: Any = None
+database/database_manager.py,905,results,"database\database_manager.py:905:9: error: Need type annotation for ""results""",External,"dict[Any, Any]","results: dict[Any, Any] = {}"
+uds3/uds3_core.py,2719,operation_plan,"uds3\uds3_core.py:2719:26: error: Need type annotation for ""operation_plan""",Manual,"dict[str, Any]","operation_plan: dict[str, Any] = {}"
+uds3/uds3_core_geo.py,612,geo_info,"uds3\uds3_core_geo.py:612:20: error: Need type annotation for ""geo_info""",Auto,"dict[str, Any]","geo_info: dict[str, Any] = {}"
+uds3/uds3_core_geo.py,686,relationships,"uds3\uds3_core_geo.py:686:25: error: Need type annotation for ""relationships""",Auto,list[Any],relationships: list[Any] = []
+uds3/uds3_geo_extension.py,863,result,"uds3\uds3_geo_extension.py:863:18: error: Need type annotation for ""result""",Auto,Any,result: Any = None

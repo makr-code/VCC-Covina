@@ -1,0 +1,20 @@
+# Curation GUI - KI/NLP Requirements
+# =====================================
+
+# Kern-NLP Bibliothek
+spacy>=3.7.0
+
+# Deutsche Sprachmodelle (wird automatisch installiert wenn nicht vorhanden)
+# Manuell installieren mit: python -m spacy download de_core_news_lg
+# de_core_news_lg  # Beste Qualität, ~500MB
+# de_core_news_sm  # Fallback, kleineres Modell
+
+# Dokumenten-Verarbeitung
+pypdf>=3.17.0          # PDF Textextraktion
+python-docx>=1.1.0     # Word Dokumente
+openpyxl>=3.1.0        # Excel Support (optional)
+
+# Zusätzliche NLP-Tools (optional, für erweiterte Features)
+# langdetect>=1.0.9    # Sprach-Erkennung
+# textstat>=0.7.3      # Lesbarkeits-Analyse
+# keybert>=0.8.3       # Erweiterte Keyword-Extraktion

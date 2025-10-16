@@ -1,0 +1,969 @@
+#!/usr/bin/env python3
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+VERITAS Protected Module
+WARNING: This file contains embedded protection keys.
+Modification will be detected and may result in license violations.
+"""
+
+# === VERITAS PROTECTION KEYS (DO NOT MODIFY) ===
+module_name = "uds3_quality"
+module_licenced_organization = "VERITAS_TECH_GMBH"
+module_licence_key = "eyJjbGllbnRfaWQi...NzRkYzhl"  # Gekuerzt fuer Sicherheit
+module_organization_key = (
+    "6f5304c29594443086e1ace0011c094614b612c22aa16af9f1a63f02a0c9bf5c"
+)
+module_file_key = "ab2d81e066c2ba71868f8b63f285f4d0a7216dbe4b9773d324f5613074b19b27"
+module_version = "1.0"
+module_protection_level = 1
+# === END PROTECTION KEYS ===
+"""
+VERITAS Protected Module
+WARNING: This file contains embedded protection keys. 
+Modification will be detected and may result in license violations.
+"""
+
+
+"""
+UDS3 Quality Framework
+Comprehensive Quality Management for Unified Database Strategy v3.0
+
+Features:
+- 7-Dimensional Quality Assessment
+- Cross-Database Quality Validation
+- Automated Quality Scoring
+- Issue Detection & Recommendations
+- Quality Monitoring & Reporting
+- Real-time Quality Metrics
+"""
+
+import logging
+from datetime import datetime
+from typing import Dict, List, Any
+from typing import Optional, Any
+from dataclasses import dataclass
+from enum import Enum
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+class QualityMetric(Enum):
+    """Qualitätsmetriken für die 7-dimensionale Bewertung"""
+
+    COMPLETENESS = "completeness"  # Vollständigkeit
+    CONSISTENCY = "consistency"  # Konsistenz
+    ACCURACY = "accuracy"  # Genauigkeit
+    VALIDITY = "validity"  # Gültigkeit
+    UNIQUENESS = "uniqueness"  # Eindeutigkeit
+    TIMELINESS = "timeliness"  # Aktualität
+    SEMANTIC_COHERENCE = "semantic_coherence"  # Semantische Kohärenz
+
+
+@dataclass
+class QualityConfig:
+    """Konfiguration für Datenqualität"""
+
+    minimum_quality_score: float = 0.75
+    completeness_threshold: float = 0.90
+    consistency_check_interval: int = 3600  # Sekunden
+    semantic_validation: bool = True
+    auto_correction: bool = False
+    quality_monitoring: bool = True
+
+
+class DataQualityManager:
+    """
+    Verwaltet Datenqualität über alle Datenbank-Typen hinweg
+
+    Features:
+    - 7-dimensionale Qualitätsbewertung
+    - Cross-Database Konsistenzprüfung
+    - Automatische Fehlererkennung
+    - Qualitätsverbesserungsvorschläge
+    - Performance-Monitoring
+    """
+
+    def __init__(self, config: QualityConfig = None):
+        """
+        Initialisiert DataQualityManager
+
+        Args:
+            config: Quality-Konfiguration (optional)
+        """
+        self.config = config or QualityConfig()
+
+        # Quality Weights für gewichtete Gesamtbewertung
+        self.quality_weights = {
+            QualityMetric.COMPLETENESS: 0.20,  # 20% - Vollständigkeit
+            QualityMetric.CONSISTENCY: 0.18,  # 18% - Konsistenz
+            QualityMetric.ACCURACY: 0.16,  # 16% - Genauigkeit
+            QualityMetric.VALIDITY: 0.14,  # 14% - Gültigkeit
+            QualityMetric.UNIQUENESS: 0.12,  # 12% - Eindeutigkeit
+            QualityMetric.TIMELINESS: 0.10,  # 10% - Aktualität
+            QualityMetric.SEMANTIC_COHERENCE: 0.10,  # 10% - Semantische Kohärenz
+        }
+
+        # Quality Rules für verschiedene Datentypen
+        self.quality_rules = self._create_quality_rules()
+
+    def _create_quality_rules(self) -> Dict:
+        """Definiert Qualitätsregeln für verschiedene Datentypen"""
+        return {
+            "document": {
+                "required_fields": [
+                    "id",
+                    "title",
+                    "content",
+                    "file_path",
+                    "created_at",
+                ],
+                "min_content_length": 10,
+                "max_content_length": 1000000,
+                "title_max_length": 500,
+                "valid_file_extensions": [".pdf", ".docx", ".txt", ".html", ".md"],
+                "content_encoding": "utf-8",
+            },
+            "chunks": {
+                "required_fields": ["id", "document_id", "content", "chunk_index"],
+                "min_chunk_length": 50,
+                "max_chunk_length": 2000,
+                "overlap_tolerance": 0.1,
+                "semantic_rules": {
+                    "min_coherence_with_parent": 0.8,
+                    "max_topic_drift": 0.2,
+                },
+            },
+            "relationships": {
+                "required_fields": ["from_node_id", "to_node_id", "relationship_type"],
+                "valid_relationship_types": [
+                    "CONTAINS",
+                    "FOLLOWS",
+                    "CITES",
+                    "AUTHORED_BY",
+                    "RELATES_TO",
+                ],
+                "bidirectional_consistency": True,
+                "orphan_tolerance": 0.0,
+            },
+        }
+
+    def calculate_document_quality_score(
+        self,
+        document_data: Dict,
+        vector_data: Optional[Dict[Any, Any]] = None,
+        graph_data: Optional[Dict[Any, Any]] = None,
+        relational_data: Optional[Dict[Any, Any]] = None,
+    ) -> Dict:
+        """
+        Berechnet umfassenden Qualitätsscore für ein Dokument
+
+        Args:
+            document_data: Grundlegende Dokumentdaten
+            vector_data: Vector-DB Daten (optional)
+            graph_data: Graph-DB Daten (optional)
+            relational_data: Relational-DB Daten (optional)
+
+        Returns:
+            Dict: Detailliertes Qualitätsergebnis
+        """
+        quality_result = {
+            "document_id": document_data.get("id", "unknown"),
+            "overall_score": 0.0,
+            "timestamp": datetime.now().isoformat(),
+            "metrics": {},
+            "issues": [],
+            "recommendations": [],
+        }
+
+        # Completeness Score
+        completeness_score = self._calculate_completeness_score(
+            document_data, vector_data, graph_data, relational_data
+        )
+        quality_result["metrics"][QualityMetric.COMPLETENESS.value] = completeness_score
+
+        # Consistency Score
+        consistency_score = self._calculate_consistency_score(
+            document_data, vector_data, graph_data, relational_data
+        )
+        quality_result["metrics"][QualityMetric.CONSISTENCY.value] = consistency_score
+
+        # Accuracy Score
+        accuracy_score = self._calculate_accuracy_score(document_data)
+        quality_result["metrics"][QualityMetric.ACCURACY.value] = accuracy_score
+
+        # Validity Score
+        validity_score = self._calculate_validity_score(document_data)
+        quality_result["metrics"][QualityMetric.VALIDITY.value] = validity_score
+
+        # Uniqueness Score
+        uniqueness_score = self._calculate_uniqueness_score(document_data)
+        quality_result["metrics"][QualityMetric.UNIQUENESS.value] = uniqueness_score
+
+        # Timeliness Score
+        timeliness_score = self._calculate_timeliness_score(document_data)
+        quality_result["metrics"][QualityMetric.TIMELINESS.value] = timeliness_score
+
+        # Semantic Coherence Score
+        semantic_score = self._calculate_semantic_coherence_score(
+            document_data, vector_data
+        )
+        quality_result["metrics"][QualityMetric.SEMANTIC_COHERENCE.value] = (
+            semantic_score
+        )
+
+        # Calculate Overall Score
+        overall_score = 0.0
+        for metric_name, score in quality_result["metrics"].items():
+            try:
+                metric_enum = QualityMetric(metric_name)
+                if metric_enum in self.quality_weights:
+                    overall_score += score * self.quality_weights[metric_enum]
+            except ValueError:
+                # Skip unknown metrics
+                continue
+
+        quality_result["overall_score"] = round(overall_score, 3)
+
+        # Generate Issues and Recommendations
+        quality_result["issues"] = self._identify_quality_issues(
+            quality_result["metrics"]
+        )
+        quality_result["recommendations"] = self._generate_quality_recommendations(
+            quality_result["metrics"]
+        )
+
+        return quality_result
+
+    def _calculate_completeness_score(
+        self, doc_data: Dict, vector_data: Dict, graph_data: Dict, relational_data: Dict
+    ) -> float:
+        """Berechnet Vollständigkeits-Score"""
+        rules = self.quality_rules.get("document", {})
+        required_fields = rules.get("required_fields", [])
+
+        present_fields = sum(
+            1 for field in required_fields if field in doc_data and doc_data[field]
+        )
+        completeness = present_fields / len(required_fields) if required_fields else 1.0
+
+        # Cross-DB Completeness Bonus
+        db_presence_bonus = 0.0
+        if vector_data:
+            db_presence_bonus += 0.1
+        if graph_data:
+            db_presence_bonus += 0.1
+        if relational_data:
+            db_presence_bonus += 0.1
+
+        return min(1.0, completeness + db_presence_bonus)
+
+    def _calculate_consistency_score(
+        self, doc_data: Dict, vector_data: Dict, graph_data: Dict, relational_data: Dict
+    ) -> float:
+        """Berechnet Konsistenz-Score zwischen Datenbanken"""
+        if not all([vector_data, graph_data, relational_data]):
+            return 0.8  # Partial penalty for missing data
+
+        consistency_checks: list[Any] = []
+
+        # ID Consistency
+        doc_id = doc_data.get("id")
+        if doc_id:
+            vector_id_match = vector_data.get("document_id") == doc_id
+            graph_id_match = graph_data.get("id") == doc_id
+            relational_id_match = relational_data.get("document_id") == doc_id
+
+            consistency_checks.extend(
+                [vector_id_match, graph_id_match, relational_id_match]
+            )
+
+        # Content Consistency (simplified)
+        title_consistency = doc_data.get("title") == relational_data.get(
+            "title", doc_data.get("title")
+        )
+        consistency_checks.append(title_consistency)
+
+        return (
+            sum(consistency_checks) / len(consistency_checks)
+            if consistency_checks
+            else 1.0
+        )
+
+    def _calculate_accuracy_score(self, doc_data: Dict) -> float:
+        """Berechnet Genauigkeits-Score"""
+        accuracy_score = 1.0
+
+        # Content Length Check
+        content = doc_data.get("content", "")
+        rules = self.quality_rules.get("document", {})
+
+        min_length = rules.get("min_content_length", 0)
+        max_length = rules.get("max_content_length", float("inf"))
+
+        if len(content) < min_length:
+            accuracy_score *= 0.7
+        elif len(content) > max_length:
+            accuracy_score *= 0.8
+
+        # Title Length Check
+        title = doc_data.get("title", "")
+        title_max_length = rules.get("title_max_length", 500)
+
+        if len(title) > title_max_length:
+            accuracy_score *= 0.9
+
+        return accuracy_score
+
+    def _calculate_validity_score(self, doc_data: Dict) -> float:
+        """Berechnet Gültigkeits-Score"""
+        validity_score = 1.0
+
+        # File Extension Check
+        file_path = doc_data.get("file_path", "")
+        if file_path:
+            rules = self.quality_rules.get("document", {})
+            valid_extensions = rules.get("valid_file_extensions", [])
+
+            if valid_extensions:
+                file_extension = (
+                    "." + file_path.split(".")[-1] if "." in file_path else ""
+                )
+                if file_extension.lower() not in [
+                    ext.lower() for ext in valid_extensions
+                ]:
+                    validity_score *= 0.8
+
+        # Required Field Format Check
+        if "id" in doc_data:
+            doc_id = doc_data["id"]
+            if not doc_id.startswith("doc_"):
+                validity_score *= 0.9
+
+        return validity_score
+
+    def _calculate_uniqueness_score(self, doc_data: Dict) -> float:
+        """Berechnet Eindeutigkeits-Score (vereinfacht)"""
+        # In einer echten Implementierung würde hier gegen die DB geprüft
+        return 1.0  # Annahme: Eindeutigkeit durch ID gewährleistet
+
+    def _calculate_timeliness_score(self, doc_data: Dict) -> float:
+        """Berechnet Aktualitäts-Score"""
+        created_at = doc_data.get("created_at")
+        if not created_at:
+            return 0.8  # Penalty für fehlenden Timestamp
+
+        try:
+            creation_time = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            age_days = (datetime.now() - creation_time).days
+
+            # Timeliness Score basierend auf Alter
+            if age_days <= 1:
+                return 1.0
+            elif age_days <= 7:
+                return 0.9
+            elif age_days <= 30:
+                return 0.8
+            elif age_days <= 365:
+                return 0.7
+            else:
+                return 0.6
+
+        except ValueError:
+            return 0.5  # Penalty für ungültiges Datumsformat
+
+    def _calculate_semantic_coherence_score(
+        self, doc_data: Dict, vector_data: Dict
+    ) -> float:
+        """Berechnet Semantische Kohärenz-Score"""
+        if not self.config.semantic_validation:
+            return 1.0
+
+        # Simplified semantic coherence check
+        content = doc_data.get("content", "")
+        title = doc_data.get("title", "")
+
+        if not content or not title:
+            return 0.6
+
+        # Basic semantic checks
+        coherence_score = 1.0
+
+        # Title-Content Coherence (simplified)
+        title_words = set(title.lower().split())
+        content_words = set(content.lower().split()[:100])  # First 100 words
+
+        if title_words and content_words:
+            overlap = len(title_words.intersection(content_words))
+            title_coverage = overlap / len(title_words) if title_words else 0
+
+            if title_coverage < 0.3:  # Less than 30% title words in content
+                coherence_score *= 0.8
+
+        # Legal Document Structure Check
+        legal_indicators = [
+            "§",
+            "Art.",
+            "Abs.",
+            "BGB",
+            "StGB",
+            "GG",
+            "Urteil",
+            "Beschluss",
+        ]
+        legal_terms_found = sum(1 for term in legal_indicators if term in content)
+
+        if legal_terms_found >= 2:
+            coherence_score *= 1.1  # Bonus for legal structure
+
+        return min(1.0, coherence_score)
+
+    def _identify_quality_issues(self, metrics: Dict) -> List[str]:
+        """Identifiziert Qualitätsprobleme basierend auf Metriken"""
+        issues: list[Any] = []
+
+        for metric_name, score in metrics.items():
+            if score < 0.6:
+                issues.append(f"Critical: {metric_name} score below 60% ({score:.3f})")
+            elif score < 0.8:
+                issues.append(f"Warning: {metric_name} score below 80% ({score:.3f})")
+
+        # Specific issue patterns
+        if metrics.get("completeness", 1.0) < 0.9:
+            issues.append("Missing required document fields")
+
+        if metrics.get("consistency", 1.0) < 0.8:
+            issues.append("Inconsistency detected across databases")
+
+        if metrics.get("semantic_coherence", 1.0) < 0.7:
+            issues.append("Poor semantic coherence between title and content")
+
+        return issues
+
+    def _generate_quality_recommendations(self, metrics: Dict) -> List[str]:
+        """Generiert Verbesserungsvorschläge basierend auf Metriken"""
+        recommendations: list[Any] = []
+
+        # Completeness recommendations
+        if metrics.get("completeness", 1.0) < 0.9:
+            recommendations.append(
+                "Complete missing required fields (title, content, metadata)"
+            )
+
+        # Consistency recommendations
+        if metrics.get("consistency", 1.0) < 0.8:
+            recommendations.append(
+                "Synchronize document information across all databases"
+            )
+
+        # Accuracy recommendations
+        if metrics.get("accuracy", 1.0) < 0.8:
+            recommendations.append(
+                "Review and correct content length and format issues"
+            )
+
+        # Validity recommendations
+        if metrics.get("validity", 1.0) < 0.8:
+            recommendations.append("Ensure proper file extensions and ID formats")
+
+        # Semantic recommendations
+        if metrics.get("semantic_coherence", 1.0) < 0.7:
+            recommendations.append(
+                "Improve title-content alignment and document structure"
+            )
+
+        # Timeliness recommendations
+        if metrics.get("timeliness", 1.0) < 0.7:
+            recommendations.append("Review document currency and update if necessary")
+
+        # General recommendation if overall quality is low
+        overall_avg = sum(metrics.values()) / len(metrics) if metrics else 0
+        if overall_avg < self.config.minimum_quality_score:
+            recommendations.append("Document requires comprehensive quality review")
+
+        return recommendations
+
+    def validate_cross_db_quality(
+        self, document_id: str, sqlite_data: Dict, chromadb_data: Dict, neo4j_data: Dict
+    ) -> Dict:
+        """
+        Validiert Qualität und Konsistenz über Datenbank-Grenzen hinweg
+
+        Args:
+            document_id: Document-ID
+            sqlite_data: SQLite-Daten
+            chromadb_data: ChromaDB-Daten
+            neo4j_data: Neo4j-Daten
+
+        Returns:
+            Dict: Cross-DB Quality Assessment
+        """
+        cross_db_result = {
+            "document_id": document_id,
+            "validation_time": datetime.now().isoformat(),
+            "databases_checked": ["sqlite", "chromadb", "neo4j"],
+            "consistency_score": 0.0,
+            "data_alignment": {},
+            "discrepancies": [],
+            "recommendations": [],
+        }
+
+        try:
+            alignment_checks: list[Any] = []
+
+            # ID Consistency
+            sqlite_id = sqlite_data.get("id") or sqlite_data.get("document_id")
+            chromadb_id = chromadb_data.get("document_id")
+            neo4j_id = neo4j_data.get("id")
+
+            id_consistency = (
+                sqlite_id == document_id
+                and chromadb_id == document_id
+                and neo4j_id == document_id
+            )
+            alignment_checks.append(id_consistency)
+            cross_db_result["data_alignment"]["id_consistency"] = id_consistency
+
+            if not id_consistency:
+                cross_db_result["discrepancies"].append(
+                    {
+                        "field": "document_id",
+                        "sqlite": sqlite_id,
+                        "chromadb": chromadb_id,
+                        "neo4j": neo4j_id,
+                    }
+                )
+
+            # Title Consistency
+            sqlite_title = sqlite_data.get("title", "")
+            neo4j_title = neo4j_data.get("title", "")
+
+            title_consistency = (
+                (sqlite_title == neo4j_title) if sqlite_title and neo4j_title else True
+            )
+            alignment_checks.append(title_consistency)
+            cross_db_result["data_alignment"]["title_consistency"] = title_consistency
+
+            if not title_consistency:
+                cross_db_result["discrepancies"].append(
+                    {"field": "title", "sqlite": sqlite_title, "neo4j": neo4j_title}
+                )
+
+            # Content Hash Consistency
+            sqlite_hash = sqlite_data.get("content_hash")
+            chromadb_hash = chromadb_data.get("content_hash")
+
+            hash_consistency = (
+                (sqlite_hash == chromadb_hash)
+                if sqlite_hash and chromadb_hash
+                else True
+            )
+            alignment_checks.append(hash_consistency)
+            cross_db_result["data_alignment"]["hash_consistency"] = hash_consistency
+
+            if not hash_consistency:
+                cross_db_result["discrepancies"].append(
+                    {
+                        "field": "content_hash",
+                        "sqlite": sqlite_hash,
+                        "chromadb": chromadb_hash,
+                    }
+                )
+
+            # Overall Consistency Score
+            cross_db_result["consistency_score"] = sum(alignment_checks) / len(
+                alignment_checks
+            )
+
+            # Generate Recommendations
+            if cross_db_result["consistency_score"] < 0.9:
+                cross_db_result["recommendations"].append(
+                    "Synchronize inconsistent data across databases"
+                )
+
+            if len(cross_db_result["discrepancies"]) > 0:
+                cross_db_result["recommendations"].append(
+                    "Review and resolve data discrepancies"
+                )
+
+            if not id_consistency:
+                cross_db_result["recommendations"].append(
+                    "Critical: Fix document ID inconsistencies immediately"
+                )
+
+            cross_db_result["validation_success"] = True
+
+        except Exception as e:
+            logger.error(f"Cross-DB quality validation failed: {e}")
+            cross_db_result["validation_success"] = False
+            cross_db_result["error"] = str(e)
+
+        return cross_db_result
+
+    def generate_quality_report(self, document_assessments: List[Dict]) -> Dict:
+        """
+        Generiert umfassenden Qualitätsbericht für mehrere Dokumente
+
+        Args:
+            document_assessments: Liste von Qualitätsbewertungen
+
+        Returns:
+            Dict: Umfassender Qualitätsbericht
+        """
+        report = {
+            "report_id": f"quality_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            "generation_time": datetime.now().isoformat(),
+            "total_documents": len(document_assessments),
+            "summary_statistics": {},
+            "quality_distribution": {},
+            "common_issues": {},
+            "recommendations": {},
+            "action_items": [],
+        }
+
+        if not document_assessments:
+            return report
+
+        try:
+            # Summary Statistics
+            overall_scores = [
+                doc.get("overall_score", 0) for doc in document_assessments
+            ]
+            report["summary_statistics"] = {
+                "average_quality_score": sum(overall_scores) / len(overall_scores),
+                "median_quality_score": sorted(overall_scores)[
+                    len(overall_scores) // 2
+                ],
+                "min_quality_score": min(overall_scores),
+                "max_quality_score": max(overall_scores),
+                "documents_below_threshold": sum(
+                    1
+                    for score in overall_scores
+                    if score < self.config.minimum_quality_score
+                ),
+            }
+
+            # Quality Distribution
+            score_ranges = {
+                "excellent": (0.9, 1.0),
+                "good": (0.8, 0.9),
+                "acceptable": (0.7, 0.8),
+                "poor": (0.6, 0.7),
+                "critical": (0.0, 0.6),
+            }
+
+            for range_name, (min_score, max_score) in score_ranges.items():
+                count = sum(
+                    1 for score in overall_scores if min_score <= score < max_score
+                )
+                report["quality_distribution"][range_name] = {
+                    "count": count,
+                    "percentage": (count / len(overall_scores)) * 100,
+                }
+
+            # Common Issues Analysis
+            all_issues: list[Any] = []
+            for doc in document_assessments:
+                all_issues.extend(doc.get("issues", []))
+
+            issue_frequency: dict[Any, Any] = {}
+            for issue in all_issues:
+                issue_frequency[issue] = issue_frequency.get(issue, 0) + 1
+
+            report["common_issues"] = dict(
+                sorted(issue_frequency.items(), key=lambda x: x[1], reverse=True)[:10]
+            )
+
+            # Metric-specific Analysis
+            metric_averages: dict[Any, Any] = {}
+            for metric in QualityMetric:
+                metric_scores: list[Any] = []
+                for doc in document_assessments:
+                    if metric.value in doc.get("metrics", {}):
+                        metric_scores.append(doc["metrics"][metric.value])
+
+                if metric_scores:
+                    metric_averages[metric.value] = sum(metric_scores) / len(
+                        metric_scores
+                    )
+
+            report["metric_averages"] = metric_averages
+
+            # Generate Action Items
+            if report["summary_statistics"]["documents_below_threshold"] > 0:
+                report["action_items"].append(
+                    {
+                        "priority": "high",
+                        "action": f"Review and improve {report['summary_statistics']['documents_below_threshold']} documents below quality threshold",
+                        "documents_affected": report["summary_statistics"][
+                            "documents_below_threshold"
+                        ],
+                    }
+                )
+
+            # Most common issue action
+            if report["common_issues"]:
+                most_common_issue = max(
+                    report["common_issues"].items(), key=lambda x: x[1]
+                )
+                report["action_items"].append(
+                    {
+                        "priority": "medium",
+                        "action": f"Address common issue: {most_common_issue[0]}",
+                        "documents_affected": most_common_issue[1],
+                    }
+                )
+
+            # Lowest scoring metric
+            if metric_averages:
+                lowest_metric = min(metric_averages.items(), key=lambda x: x[1])
+                if lowest_metric[1] < 0.8:
+                    report["action_items"].append(
+                        {
+                            "priority": "medium",
+                            "action": f"Focus on improving {lowest_metric[0]} (avg: {lowest_metric[1]:.3f})",
+                            "metric": lowest_metric[0],
+                        }
+                    )
+
+        except Exception as e:
+            logger.error(f"Quality report generation failed: {e}")
+            report["generation_error"] = str(e)
+
+        return report
+
+    def monitor_quality_trends(self, historical_assessments: List[Dict]) -> Dict:
+        """
+        Überwacht Qualitätstrends über Zeit
+
+        Args:
+            historical_assessments: Chronologische Liste von Qualitätsbewertungen
+
+        Returns:
+            Dict: Trend-Analyse
+        """
+        trend_analysis = {
+            "analysis_time": datetime.now().isoformat(),
+            "data_points": len(historical_assessments),
+            "trends": {},
+            "alerts": [],
+            "recommendations": [],
+        }
+
+        if len(historical_assessments) < 2:
+            trend_analysis["insufficient_data"] = True
+            return trend_analysis
+
+        try:
+            # Sort by timestamp
+            sorted_assessments = sorted(
+                historical_assessments, key=lambda x: x.get("timestamp", "")
+            )
+
+            # Overall quality trend
+            scores = [doc.get("overall_score", 0) for doc in sorted_assessments]
+
+            if len(scores) >= 10:
+                # Linear regression (simplified)
+                n = len(scores)
+                x_avg = (n - 1) / 2  # Average index
+                y_avg = sum(scores) / n  # Average score
+
+                slope_numerator = sum(
+                    (i - x_avg) * (scores[i] - y_avg) for i in range(n)
+                )
+                slope_denominator = sum((i - x_avg) ** 2 for i in range(n))
+
+                if slope_denominator != 0:
+                    slope = slope_numerator / slope_denominator
+                    trend_analysis["trends"]["overall_quality"] = {
+                        "direction": "improving"
+                        if slope > 0.01
+                        else "declining"
+                        if slope < -0.01
+                        else "stable",
+                        "slope": slope,
+                        "significance": "high"
+                        if abs(slope) > 0.05
+                        else "medium"
+                        if abs(slope) > 0.02
+                        else "low",
+                    }
+
+            # Recent vs. Historical comparison
+            recent_scores = (
+                scores[-5:] if len(scores) >= 10 else scores[-len(scores) // 2 :]
+            )
+            historical_scores = (
+                scores[:-5] if len(scores) >= 10 else scores[: len(scores) // 2]
+            )
+
+            if recent_scores and historical_scores:
+                recent_avg = sum(recent_scores) / len(recent_scores)
+                historical_avg = sum(historical_scores) / len(historical_scores)
+
+                improvement = recent_avg - historical_avg
+                trend_analysis["trends"]["recent_performance"] = {
+                    "recent_average": recent_avg,
+                    "historical_average": historical_avg,
+                    "improvement": improvement,
+                    "improvement_percentage": (improvement / historical_avg) * 100
+                    if historical_avg > 0
+                    else 0,
+                }
+
+                # Alerts
+                if improvement < -0.1:  # 10% decline
+                    trend_analysis["alerts"].append(
+                        {
+                            "type": "quality_decline",
+                            "severity": "high",
+                            "message": f"Significant quality decline detected: {improvement:.3f}",
+                        }
+                    )
+                elif improvement > 0.1:  # 10% improvement
+                    trend_analysis["alerts"].append(
+                        {
+                            "type": "quality_improvement",
+                            "severity": "info",
+                            "message": f"Quality improvement detected: +{improvement:.3f}",
+                        }
+                    )
+
+            # Metric-specific trends
+            for metric in QualityMetric:
+                metric_scores: list[Any] = []
+                for doc in sorted_assessments:
+                    if metric.value in doc.get("metrics", {}):
+                        metric_scores.append(doc["metrics"][metric.value])
+
+                if len(metric_scores) >= 5:
+                    recent_metric = sum(metric_scores[-3:]) / 3
+                    historical_metric = (
+                        sum(metric_scores[:-3]) / len(metric_scores[:-3])
+                        if len(metric_scores) > 3
+                        else recent_metric
+                    )
+
+                    metric_change = recent_metric - historical_metric
+                    if abs(metric_change) > 0.1:
+                        trend_analysis["trends"][f"{metric.value}_trend"] = {
+                            "direction": "improving"
+                            if metric_change > 0
+                            else "declining",
+                            "change": metric_change,
+                        }
+
+        except Exception as e:
+            logger.error(f"Quality trend analysis failed: {e}")
+            trend_analysis["analysis_error"] = str(e)
+
+        return trend_analysis
+
+
+def create_quality_manager(config: QualityConfig = None) -> DataQualityManager:
+    """
+    Factory Function für DataQualityManager
+
+    Args:
+        config: Quality-Konfiguration (optional)
+
+    Returns:
+        DataQualityManager: Konfigurierter Quality Manager
+    """
+    return DataQualityManager(config)
+
+
+def assess_document_quality(
+    document_data: Dict,
+    vector_data: Optional[Dict[Any, Any]] = None,
+    graph_data: Optional[Dict[Any, Any]] = None,
+    relational_data: Optional[Dict[Any, Any]] = None,
+    config: QualityConfig = None,
+) -> Dict:
+    """
+    Standalone Funktion zur Qualitätsbewertung
+
+    Args:
+        document_data: Dokumentdaten
+        vector_data: Vector-DB Daten (optional)
+        graph_data: Graph-DB Daten (optional)
+        relational_data: Relational-DB Daten (optional)
+        config: Quality-Konfiguration (optional)
+
+    Returns:
+        Dict: Qualitätsbewertung
+    """
+    quality_mgr = create_quality_manager(config)
+    return quality_mgr.calculate_document_quality_score(
+        document_data, vector_data, graph_data, relational_data
+    )
+
+
+# Export Functions
+__all__ = [
+    "QualityMetric",
+    "QualityConfig",
+    "DataQualityManager",
+    "create_quality_manager",
+    "assess_document_quality",
+]
+
+# Alias für Kompatibilität mit veritas_app.py
+QualityManager = DataQualityManager
+
+
+# DataQualityLevel Enum für veritas_app.py Kompatibilität
+class DataQualityLevel(Enum):
+    """Qualitätsstufen für Dokumente"""
+
+    EXCELLENT = "excellent"  # > 0.9
+    GOOD = "good"  # 0.8 - 0.9
+    ACCEPTABLE = "acceptable"  # 0.7 - 0.8
+    POOR = "poor"  # 0.6 - 0.7
+    CRITICAL = "critical"  # < 0.6
+
+
+if __name__ == "__main__":
+    # Demo der Quality-Funktionen
+    print("📊 UDS3 Quality Framework Demo")
+    print("=" * 40)
+
+    # Quality Manager erstellen
+    quality_mgr = create_quality_manager()
+
+    # Test Document
+    test_document = {
+        "id": "doc_test123456789",
+        "title": "Bundesverfassungsgericht Urteil zu Datenschutz",
+        "content": "Das Bundesverfassungsgericht hat in seinem wegweisenden Urteil entschieden, dass die Grundrechte der Bürger in digitalen Räumen besonderen Schutz genießen. Die Entscheidung stärkt den Datenschutz erheblich.",
+        "file_path": "bverfg_datenschutz_2024.pdf",
+        "created_at": datetime.now().isoformat(),
+        "rechtsgebiet": "Datenschutzrecht",
+        "gericht": "Bundesverfassungsgericht",
+    }
+
+    # Quality Assessment
+    quality_result = quality_mgr.calculate_document_quality_score(test_document)
+
+    print(f"✅ Document ID: {quality_result['document_id']}")
+    print(f"✅ Overall Score: {quality_result['overall_score']:.3f}")
+    print(f"✅ Issues: {len(quality_result['issues'])}")
+    print(f"✅ Recommendations: {len(quality_result['recommendations'])}")
+
+    # Show top metrics
+    print("\n📈 Top Quality Metrics:")
+    sorted_metrics = sorted(
+        quality_result["metrics"].items(), key=lambda x: x[1], reverse=True
+    )
+    for metric, score in sorted_metrics[:3]:
+        print(f"   {metric}: {score:.3f}")
+
+    if quality_result["recommendations"]:
+        print("\n💡 Recommendations:")
+        for rec in quality_result["recommendations"][:3]:
+            print(f"   • {rec}")
+
+    print("\n🎉 Quality Demo completed!")

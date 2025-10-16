@@ -1,0 +1,6 @@
+{"timestamp": "2025-10-02T09:10:36.627231", "operation_id": "test-cleanup-partial", "failed_chunks": ["chunk-7", "chunk-8", "chunk-9"], "status": "PENDING_MANUAL_CLEANUP"}
+{"timestamp": "2025-10-02T09:10:36.643796", "operation_id": "test-log-failures", "failed_chunks": ["chunk-0", "chunk-1", "chunk-2"], "status": "PENDING_MANUAL_CLEANUP"}
+{"timestamp": "2025-10-02T09:14:33.360973", "operation_id": "test-cleanup-partial", "failed_chunks": ["chunk-7", "chunk-8", "chunk-9"], "status": "PENDING_MANUAL_CLEANUP"}
+{"timestamp": "2025-10-02T09:14:33.374657", "operation_id": "test-log-failures", "failed_chunks": ["chunk-0", "chunk-1", "chunk-2"], "status": "PENDING_MANUAL_CLEANUP"}
+{"timestamp": "2025-10-02T09:16:43.680029", "operation_id": "test-cleanup-partial", "failed_chunks": ["chunk-7", "chunk-8", "chunk-9"], "status": "PENDING_MANUAL_CLEANUP"}
+{"timestamp": "2025-10-02T09:16:43.693321", "operation_id": "test-log-failures", "failed_chunks": ["chunk-0", "chunk-1", "chunk-2"], "status": "PENDING_MANUAL_CLEANUP"}

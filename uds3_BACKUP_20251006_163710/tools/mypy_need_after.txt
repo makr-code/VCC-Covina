@@ -1,0 +1,28 @@
+
+  uds3\tools\mypy_output_after_codmod.txt:121:database\database_api_base.py:34:39: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+> uds3\tools\mypy_output_after_codmod.txt:122:database\database_api_base.py:37:9: error: Need type annotation for
+  uds3\tools\mypy_output_after_codmod.txt:547:                          ^~~~~~~~~
+> uds3\tools\mypy_output_after_codmod.txt:548:uds3\uds3_follow_up_orchestrator.py:138:19: error: Need type annotation for
+  uds3\tools\mypy_output_after_codmod.txt:579:                                                        ^~~~~~~~~~~~~~~~~~~~~
+> uds3\tools\mypy_output_after_codmod.txt:580:uds3\uds3_follow_up_orchestrator.py:204:19: error: Need type annotation for
+  uds3\tools\mypy_output_after_codmod.txt:668:uds3\uds3_follow_up_orchestrator.py:263:13: note:     def __setitem__(self, slice[Any, Any, Any], Iterable[Any], /) -> None
+> uds3\tools\mypy_output_after_codmod.txt:669:uds3\uds3_follow_up_orchestrator.py:285:19: error: Need type annotation for
+  uds3\tools\mypy_output_after_codmod.txt:708:                                                              ^~~~~~~~~~~~~
+> uds3\tools\mypy_output_after_codmod.txt:709:uds3\uds3_follow_up_orchestrator.py:378:19: error: Need type annotation for
+  uds3\tools\mypy_output_after_codmod.txt:783:                                                  ^~~~
+> uds3\tools\mypy_output_after_codmod.txt:784:uds3\uds3_epk_process_parser.py:236:24: error: Need type annotation for
+  uds3\tools\mypy_output_after_codmod.txt:1389:    ^
+> uds3\tools\mypy_output_after_codmod.txt:1390:database\database_manager.py:61:9: error: Need type annotation for
+  uds3\tools\mypy_output_after_codmod.txt:1393:            ^~~~~~~~~~~~~~~~~~~
+> uds3\tools\mypy_output_after_codmod.txt:1394:database\database_manager.py:67:9: error: Need type annotation for
+  uds3\tools\mypy_output_after_codmod.txt:1479:database\database_manager.py:890:109: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+> uds3\tools\mypy_output_after_codmod.txt:1480:database\database_manager.py:905:9: error: Need type annotation for "results"
+  uds3\tools\mypy_output_after_codmod.txt:1777:                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+> uds3\tools\mypy_output_after_codmod.txt:1778:uds3\uds3_core.py:2719:26: error: Need type annotation for "operation_plan" 
+  uds3\tools\mypy_output_after_codmod.txt:2016:                        ^~~~
+> uds3\tools\mypy_output_after_codmod.txt:2017:uds3\uds3_core_geo.py:612:20: error: Need type annotation for "geo_info" 
+  uds3\tools\mypy_output_after_codmod.txt:2020:                       ^
+> uds3\tools\mypy_output_after_codmod.txt:2021:uds3\uds3_core_geo.py:686:25: error: Need type annotation for "relationships" 
+  uds3\tools\mypy_output_after_codmod.txt:2104:                    ^~~~~~~~~~~~~~~
+> uds3\tools\mypy_output_after_codmod.txt:2105:uds3\uds3_geo_extension.py:863:18: error: Need type annotation for "result" 
+

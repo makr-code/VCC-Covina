@@ -1,0 +1,30 @@
+# UDS3 minimal runtime & dev requirements
+# Pinned where reasonable; adjust versions per your environment.
+
+# Core / common libs
+requests>=2.31.0
+Flask>=2.0.0
+numpy>=1.26.0
+pydantic>=2.7.0
+cryptography>=40.0.0
+
+# Database/Geo/Graph (optional; enable when needed)
+# neo4j>=5.0.0
+# psycopg2-binary>=2.9.9
+# pyproj>=3.5.0
+# shapely>=2.1.0
+
+# Vector DB / LLM clients (optional)
+# chromadb
+# pinecone-client
+# ollama-client (or other LLM client)
+
+# Dev tools
+pytest>=7.0.0
+ruff>=0.20.0
+black>=23.9.0
+
+# Notes:
+# - Internal/proprietary modules (e.g., vpb_sqlite_db, collection_manager, veritas_relations_almanach)
+#   are not listed here: they are either part of the enterprise environment or provided as
+#   private wheels. Add them to your environment as required.

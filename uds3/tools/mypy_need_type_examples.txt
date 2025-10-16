@@ -1,0 +1,85 @@
+
+  uds3\tools\mypy_output.txt:66:uds3\third_party_stubs\veritas_relations_almanach.py:11:45: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to 
+no_implicit_optional=True
+  uds3\tools\mypy_output.txt:67:uds3\third_party_stubs\veritas_relations_almanach.py:11:45: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+> uds3\tools\mypy_output.txt:68:uds3\uds3_strategic_insights_analysis.py:349:9: error: Need type annotation for
+  uds3\tools\mypy_output.txt:121:database\database_api_base.py:34:39: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+  uds3\tools\mypy_output.txt:122:database\database_api_base.py:34:39: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+> uds3\tools\mypy_output.txt:123:database\database_api_base.py:37:9: error: Need type annotation for
+  uds3\tools\mypy_output.txt:293:    from neo4j import GraphDatabase
+  uds3\tools\mypy_output.txt:294:    ^
+> uds3\tools\mypy_output.txt:295:uds3\uds3_relations_core.py:96:9: error: Need type annotation for
+  uds3\tools\mypy_output.txt:334:                validation_result["inconsistencies"].append(
+  uds3\tools\mypy_output.txt:335:                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+> uds3\tools\mypy_output.txt:336:uds3\uds3_relations_core.py:781:9: error: Need type annotation for "stats"
+  uds3\tools\mypy_output.txt:427:                    report["quality_distribution"][range_name] = {
+  uds3\tools\mypy_output.txt:428:                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+> uds3\tools\mypy_output.txt:429:uds3\uds3_quality.py:671:13: error: Need type annotation for "issue_frequency"
+  uds3\tools\mypy_output.txt:552:                task_type=task_type,
+  uds3\tools\mypy_output.txt:553:                          ^~~~~~~~~
+> uds3\tools\mypy_output.txt:554:uds3\uds3_follow_up_orchestrator.py:138:19: error: Need type annotation for
+  uds3\tools\mypy_output.txt:584:    ... UDS3-Datenbankintegration abgeschlossen: {len(results['operations'])}...
+  uds3\tools\mypy_output.txt:585:                                                        ^~~~~~~~~~~~~~~~~~~~~
+> uds3\tools\mypy_output.txt:586:uds3\uds3_follow_up_orchestrator.py:204:19: error: Need type annotation for
+  uds3\tools\mypy_output.txt:673:uds3\uds3_follow_up_orchestrator.py:263:13: note:     def __setitem__(self, SupportsIndex, Any, /) -> None
+  uds3\tools\mypy_output.txt:674:uds3\uds3_follow_up_orchestrator.py:263:13: note:     def __setitem__(self, slice[Any, Any, Any], Iterable[Any], /) -> None
+> uds3\tools\mypy_output.txt:675:uds3\uds3_follow_up_orchestrator.py:285:19: error: Need type annotation for
+  uds3\tools\mypy_output.txt:713:    ...me_remaining": self._estimate_time_remaining(doc_type, current_stage),
+  uds3\tools\mypy_output.txt:714:                                                              ^~~~~~~~~~~~~
+> uds3\tools\mypy_output.txt:715:uds3\uds3_follow_up_orchestrator.py:378:19: error: Need type annotation for
+  uds3\tools\mypy_output.txt:788:        satellite_objects: Dict[str, List[str]] = None  # Organisation, IT...
+  uds3\tools\mypy_output.txt:789:                                                  ^~~~
+> uds3\tools\mypy_output.txt:790:uds3\uds3_epk_process_parser.py:236:24: error: Need type annotation for
+  uds3\tools\mypy_output.txt:925:    ...validation_result = self.parser.validate_process(xml_content, format_h...
+  uds3\tools\mypy_output.txt:926:                                                        ^~~~~~~~~~~
+> uds3\tools\mypy_output.txt:927:uds3\uds3_complete_process_integration.py:437:27: error: Need type annotation
+  uds3\tools\mypy_output.txt:929:            self.task_queue = PriorityQueue()
+  uds3\tools\mypy_output.txt:930:                              ^~~~~~~~~~~~~~~
+> uds3\tools\mypy_output.txt:931:uds3\uds3_complete_process_integration.py:438:9: error: Need type annotation
+  uds3\tools\mypy_output.txt:933:            self.workers = []
+  uds3\tools\mypy_output.txt:934:            ^~~~~~~~~~~~
+> uds3\tools\mypy_output.txt:935:uds3\uds3_complete_process_integration.py:439:9: error: Need type annotation
+  uds3\tools\mypy_output.txt:937:            self.results = {}
+  uds3\tools\mypy_output.txt:938:            ^~~~~~~~~~~~
+> uds3\tools\mypy_output.txt:939:uds3\uds3_complete_process_integration.py:440:9: error: Need type annotation
+  uds3\tools\mypy_output.txt:1423:        from module_status_manager import (
+  uds3\tools\mypy_output.txt:1424:    ^
+> uds3\tools\mypy_output.txt:1425:database\database_manager.py:61:9: error: Need type annotation for
+  uds3\tools\mypy_output.txt:1427:            self.backend_errors = []        # Sammle Backend-Fehler
+  uds3\tools\mypy_output.txt:1428:            ^~~~~~~~~~~~~~~~~~~
+> uds3\tools\mypy_output.txt:1429:database\database_manager.py:67:9: error: Need type annotation for
+  uds3\tools\mypy_output.txt:1513:database\database_manager.py:890:109: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+  uds3\tools\mypy_output.txt:1514:database\database_manager.py:890:109: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+> uds3\tools\mypy_output.txt:1515:database\database_manager.py:905:9: error: Need type annotation for "results"
+  uds3\tools\mypy_output.txt:1722:                self.saga_orchestrator = None
+  uds3\tools\mypy_output.txt:1723:                                         ^~~~
+> uds3\tools\mypy_output.txt:1724:uds3\uds3_core.py:256:9: error: Need type annotation for "document_mapping"
+  uds3\tools\mypy_output.txt:1726:            self.document_mapping = {}
+  uds3\tools\mypy_output.txt:1727:            ^~~~~~~~~~~~~~~~~~~~~
+> uds3\tools\mypy_output.txt:1728:uds3\uds3_core.py:257:9: error: Need type annotation for "batch_operations"
+  uds3\tools\mypy_output.txt:1819:                operation_plan["databases"]["file_storage"] = {
+  uds3\tools\mypy_output.txt:1820:                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+> uds3\tools\mypy_output.txt:1821:uds3\uds3_core.py:2719:26: error: Need type annotation for "operation_plan" 
+  uds3\tools\mypy_output.txt:1922:            validation_result["databases"]["relational"] = relational_vali...
+  uds3\tools\mypy_output.txt:1923:            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+> uds3\tools\mypy_output.txt:1924:uds3\uds3_core.py:3882:9: error: Need type annotation for "word_freq" (hint:
+  uds3\tools\mypy_output.txt:2063:                file_conf = self._load_config(config_path)
+  uds3\tools\mypy_output.txt:2064:                                              ^~~~~~~~~~~
+> uds3\tools\mypy_output.txt:2065:uds3\uds3_core_geo.py:343:17: error: Need type annotation for "admin_areas"
+  uds3\tools\mypy_output.txt:2067:                    admin_areas = []
+  uds3\tools\mypy_output.txt:2068:                    ^~~~~~~~~~~
+> uds3\tools\mypy_output.txt:2069:uds3\uds3_core_geo.py:612:20: error: Need type annotation for "geo_info" 
+  uds3\tools\mypy_output.txt:2071:            geo_info = {
+  uds3\tools\mypy_output.txt:2072:                       ^
+> uds3\tools\mypy_output.txt:2073:uds3\uds3_core_geo.py:686:25: error: Need type annotation for "relationships" 
+  uds3\tools\mypy_output.txt:2087:                    result["missing_elements"].append(line.strip())
+  uds3\tools\mypy_output.txt:2088:                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+> uds3\tools\mypy_output.txt:2089:uds3\uds3_api_backend.py:351:9: error: Need type annotation for
+  uds3\tools\mypy_output.txt:2140:                with self.connection.cursor() as cursor:
+  uds3\tools\mypy_output.txt:2141:                     ^~~~~~~~~~~~~~~~~~~~~~
+> uds3\tools\mypy_output.txt:2142:uds3\uds3_geo_extension.py:667:9: error: Need type annotation for
+  uds3\tools\mypy_output.txt:2157:                location = self.geo_extractor.extract_from_document(
+  uds3\tools\mypy_output.txt:2158:                           ^
+> uds3\tools\mypy_output.txt:2159:uds3\uds3_geo_extension.py:863:18: error: Need type annotation for "result" 
+
+

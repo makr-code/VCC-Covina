@@ -1,0 +1,231 @@
+# Covina Automation Framework Configuration
+# ==========================================
+
+# Automation Framework Basis-Konfiguration
+automation:
+  # Framework aktiviert/deaktiviert
+  enabled: true
+  
+  # Scheduler Konfiguration
+  scheduler:
+    # Automatischer Start beim Backend-Start
+    auto_start: true
+    
+    # Check-Intervall für Scheduler Loop (Sekunden)
+    check_interval: 30
+    
+    # Maximale parallele Task-Ausführungen
+    max_concurrent_tasks: 3
+    
+    # Task Timeout (Sekunden)
+    task_timeout: 300
+    
+  # Human Review Queue Konfiguration
+  review_queue:
+    # Maximale Queue-Größe
+    max_queue_size: 100
+    
+    # Automatische Bereinigung von alten Items (Stunden)
+    cleanup_after_hours: 24
+    
+    # Eskalation für kritische Items (Minuten)
+    critical_escalation_minutes: 30
+    
+    # Eskalation für hohe Priorität (Stunden)
+    high_priority_escalation_hours: 2
+    
+    # Notification Settings
+    notifications:
+      # E-Mail Benachrichtigungen aktiviert
+      email_enabled: false
+      
+      # E-Mail Empfänger für Eskalationen
+      email_recipients:
+        - "admin@covina-system.local"
+        - "system@fritz.box"
+      
+      # Teams/Slack Webhook (optional)
+      webhook_url: null
+
+# Confidence-basierte Entscheidungslogik
+decision_thresholds:
+  # Hohe Confidence: Auto-Execute ohne Human Review
+  auto_execute_threshold: 0.85
+  
+  # Mittlere Confidence: Human Review erforderlich
+  human_review_threshold: 0.65
+  
+  # Niedrige Confidence: Immer Human-Required
+  # (alles unter human_review_threshold)
+  
+  # Adaptives Learning aktiviert
+  adaptive_learning: true
+  
+  # Learning Rate für Threshold-Anpassungen
+  learning_rate: 0.01
+
+# Task-spezifische Konfigurationen
+task_configurations:
+  
+  # Golden Dataset Management
+  golden_dataset:
+    # Automatic Expansion aktiviert
+    auto_expansion_enabled: true
+    
+    # Minimum Quality Score für Auto-Add
+    min_quality_score: 0.90
+    
+    # Maximum Entries pro Tag
+    max_daily_additions: 10
+    
+    # Review erforderlich für niedrigere Scores
+    require_review_below_score: 0.85
+  
+  # Gap Detection & Resolution
+  gap_detection:
+    # Automatische Gap Detection aktiviert
+    enabled: true
+    
+    # Scheduling: Täglich um 02:00
+    schedule: "0 2 * * *"
+    
+    # Auto-Resolution für einfache Gaps
+    auto_resolve_simple_gaps: true
+    
+    # Confidence Threshold für Auto-Resolution
+    auto_resolve_threshold: 0.80
+  
+  # Quality Monitoring
+  quality_monitoring:
+    # Kontinuierliches Monitoring aktiviert
+    enabled: true
+    
+    # Check-Intervall (Minuten)
+    check_interval_minutes: 30
+    
+    # Quality Degradation Threshold
+    degradation_threshold: 0.05
+    
+    # Auto-Adjustment für kleine Änderungen
+    auto_adjust_thresholds: true
+  
+  # Model Management
+  model_management:
+    # Automatisches Retraining aktiviert
+    auto_retraining_enabled: false
+    
+    # Retraining Schedule (wöchentlich Sonntags um 01:00)
+    retraining_schedule: "0 1 * * 0"
+    
+    # Minimum Training Data Size
+    min_training_data_size: 1000
+  
+  # Process Optimization
+  process_optimization:
+    # Automatische Optimierung aktiviert
+    enabled: true
+    
+    # Analysis Schedule (täglich um 03:00)
+    schedule: "0 3 * * *"
+    
+    # Performance Threshold für Optimierungen
+    performance_threshold: 0.75
+
+# Demo & Testing Konfiguration
+demo:
+  # Demo Tasks aktiviert (nur für Entwicklung/Testing)
+  enabled: true
+  
+  # Demo Tasks konfigurieren beim Start
+  setup_demo_tasks: true
+  
+  # Demo Review Items generieren
+  generate_demo_reviews: true
+  
+  # Simulation Settings
+  simulation:
+    # Gap Detection Erfolgsrate (für Demo)
+    gap_detection_success_rate: 0.8
+    
+    # Quality Issues Häufigkeit (für Demo)
+    quality_issue_frequency: 0.2
+    
+    # Confidence Verteilung für Demo Tasks
+    confidence_distribution:
+      high: 0.3    # 30% hohe Confidence (Auto-Execute)
+      medium: 0.5  # 50% mittlere Confidence (Human Review)
+      low: 0.2     # 20% niedrige Confidence (Human Required)
+
+# Environment-spezifische Übersteuerungen
+environments:
+  development:
+    automation:
+      enabled: true
+    demo:
+      enabled: true
+      setup_demo_tasks: true
+    decision_thresholds:
+      auto_execute_threshold: 0.80  # Niedrigere Schwelle für Development
+      human_review_threshold: 0.60
+  
+  production:
+    automation:
+      enabled: true
+    demo:
+      enabled: false  # Keine Demo Tasks in Production
+      setup_demo_tasks: false
+    decision_thresholds:
+      auto_execute_threshold: 0.90  # Höhere Schwelle für Production
+      human_review_threshold: 0.70
+    task_configurations:
+      model_management:
+        auto_retraining_enabled: true  # Nur in Production
+  
+  testing:
+    automation:
+      enabled: false  # Kein Automation in Tests
+    demo:
+      enabled: false
+
+# Logging & Monitoring
+logging:
+  # Log Level für Automation Framework
+  level: "INFO"
+  
+  # Detailliertes Task Logging
+  detailed_task_logging: true
+  
+  # Performance Metrics sammeln
+  performance_metrics: true
+  
+  # Review Decision Tracking
+  decision_tracking: true
+
+# Security & Compliance
+security:
+  # API Authentifizierung erforderlich für Admin Endpoints
+  require_api_auth: false  # TODO: Implementieren
+  
+  # Audit Logging für alle Automation Decisions
+  audit_logging: true
+  
+  # Encryption für sensitive Configuration Values
+  encrypt_sensitive_values: false  # TODO: Implementieren
+
+# Integration Settings
+integrations:
+  # PostgreSQL für Persistence (TODO)
+  postgresql:
+    enabled: false
+    store_reviews: false
+    store_task_history: false
+  
+  # Neo4j für Graph-basierte Automation (TODO)
+  neo4j:
+    enabled: false
+    store_decision_graphs: false
+  
+  # External APIs (TODO)
+  external_apis:
+    enabled: false
+    webhook_notifications: false

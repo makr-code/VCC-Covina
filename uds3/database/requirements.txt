@@ -1,0 +1,7 @@
+# Runtime dependencies for database adapters
+neo4j>=5.0.0
+CouchDB>=2.3.0
+psycopg[binary]>=3.2
+chromadb>=0.3
+# Optional: HTTP client for remote chroma adapters or other network libs
+requests>=2.0

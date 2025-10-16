@@ -1,0 +1,292 @@
+{
+  "system_name": "UDS3 Geodaten Integration",
+  "version": "1.0",
+  "description": "Unified Database Strategy v3.0 mit vollständiger Geodaten-Unterstützung",
+  
+  "databases": {
+    "vector": {
+      "backend": "chromadb",
+      "enabled": true,
+      "config": {
+        "persist_directory": "./data/chromadb",
+        "collection_name": "uds3_documents",
+        "embedding_model": "all-MiniLM-L6-v2",
+        "distance_metric": "cosine"
+      },
+      "geo_extensions": {
+        "geo_embeddings": true,
+        "coordinate_encoding": "latlon_normalized",
+        "administrative_context": true
+      }
+    },
+    
+    "graph": {
+      "backend": "neo4j",
+      "enabled": true,
+      "config": {
+        "uri": "bolt://localhost:7687",
+        "user": "neo4j",
+        "password": "neo4j",
+        "database": "uds3"
+      },
+      "spatial_extensions": {
+        "spatial_plugin": true,
+        "coordinate_system": "WGS-84",
+        "spatial_relationships": [
+          "LOCATED_IN",
+          "SPATIALLY_NEAR",
+          "ADMINISTRATIVE_BOUNDARY"
+        ]
+      }
+    },
+    
+    "relational": {
+      "backend": "sqlite", 
+      "enabled": true,
+      "config": {
+        "database_path": "./data/uds3_main.db",
+        "enable_wal": true,
+        "cache_size": 10000
+      }
+    },
+    
+    "postgis": {
+      "backend": "postgresql+postgis",
+      "enabled": true,
+      "config": {
+        "host": "localhost",
+        "port": 5432,
+        "database": "uds3_geo",
+        "user": "postgres",
+        "password": "postgres",
+        "sslmode": "prefer",
+        "application_name": "UDS3-Geo"
+      },
+      "spatial_config": {
+        "default_srid": 4326,
+        "coordinate_precision": 8,
+        "enable_spatial_index": true,
+        "administrative_data": {
+          "load_german_boundaries": true,
+          "boundary_sources": [
+            "destatis_gem",
+            "osm_admin_boundaries"
+          ]
+        }
+      }
+    }
+  },
+  
+  "geo_settings": {
+    "auto_extraction": {
+      "enabled": true,
+      "quality_threshold": 0.5,
+      "max_locations_per_document": 5,
+      "extraction_sources": [
+        "addresses",
+        "postal_codes", 
+        "place_names",
+        "coordinates",
+        "administrative_references"
+      ]
+    },
+    
+    "geocoding": {
+      "provider": "nominatim",
+      "fallback_providers": ["geopy"],
+      "cache_results": true,
+      "cache_duration_days": 30,
+      "rate_limiting": {
+        "requests_per_second": 1,
+        "max_concurrent": 2
+      }
+    },
+    
+    "spatial_search": {
+      "default_radius_km": 10.0,
+      "max_radius_km": 100.0,
+      "result_limit": 100,
+      "include_distance": true,
+      "administrative_filtering": true
+    },
+    
+    "coordinate_systems": {
+      "storage_srid": 4326,
+      "supported_systems": [
+        4326,
+        3857,
+        25832,
+        31467
+      ]
+    },
+    
+    "quality_control": {
+      "min_accuracy_meters": 10000,
+      "confidence_threshold": 0.3,
+      "validation_enabled": true,
+      "coordinate_bounds": {
+        "germany": {
+          "min_lat": 47.0,
+          "max_lat": 55.0,
+          "min_lng": 5.5,
+          "max_lng": 15.5
+        }
+      }
+    }
+  },
+  
+  "processing": {
+    "document_pipeline": {
+      "geo_extraction_stage": 2,
+      "parallel_processing": true,
+      "batch_size": 100,
+      "retry_attempts": 3
+    },
+    
+    "multi_db_synchronization": {
+      "enabled": true,
+      "sync_mode": "immediate",
+      "consistency_checks": true,
+      "error_handling": "continue"
+    }
+  },
+  
+  "german_administrative_config": {
+    "hierarchies": {
+      "federal_states": {
+        "enabled": true,
+        "ags_code_mapping": true,
+        "boundary_data": "./data/boundaries/bundeslaender.geojson"
+      },
+      "districts": {
+        "enabled": true,
+        "landkreise": true,
+        "kreisfreie_staedte": true,
+        "boundary_data": "./data/boundaries/kreise.geojson"
+      },
+      "municipalities": {
+        "enabled": true,
+        "gemeinden": true,
+        "gemeindefreie_gebiete": true,
+        "boundary_data": "./data/boundaries/gemeinden.geojson"
+      }
+    },
+    
+    "special_territories": {
+      "federal_institutions": [
+        {
+          "name": "Bundesverwaltungsgericht",
+          "location": "Leipzig",
+          "coordinates": [51.3396955, 12.3730747],
+          "jurisdiction": "bundesweit"
+        },
+        {
+          "name": "Bundesgerichtshof",
+          "location": "Karlsruhe", 
+          "coordinates": [49.0069, 8.4037],
+          "jurisdiction": "bundesweit"
+        },
+        {
+          "name": "Bundesverfassungsgericht",
+          "location": "Karlsruhe",
+          "coordinates": [49.0092, 8.4038],
+          "jurisdiction": "bundesweit"
+        }
+      ]
+    }
+  },
+  
+  "monitoring": {
+    "logging": {
+      "level": "INFO",
+      "handlers": [
+        {
+          "type": "file",
+          "filename": "logs/uds3_geo.log",
+          "rotation": "daily",
+          "retention_days": 30
+        },
+        {
+          "type": "console",
+          "level": "WARNING"
+        }
+      ],
+      "geo_specific_loggers": {
+        "spatial_operations": "DEBUG",
+        "coordinate_validation": "INFO",
+        "geocoding_requests": "WARNING"
+      }
+    },
+    
+    "metrics": {
+      "enabled": true,
+      "collection_interval_seconds": 60,
+      "export_formats": ["prometheus", "json"],
+      "geo_metrics": [
+        "documents_with_geo",
+        "geocoding_success_rate",
+        "spatial_query_performance",
+        "coordinate_quality_distribution"
+      ]
+    }
+  },
+  
+  "api_endpoints": {
+    "geo_search": {
+      "enabled": true,
+      "path": "/api/v1/geo/search",
+      "rate_limit": "100/hour",
+      "authentication_required": false
+    },
+    
+    "admin_boundaries": {
+      "enabled": true,
+      "path": "/api/v1/geo/boundaries",
+      "cache_duration": 3600
+    },
+    
+    "geo_statistics": {
+      "enabled": true,
+      "path": "/api/v1/geo/stats", 
+      "admin_only": true
+    }
+  },
+  
+  "data_sources": {
+    "rechtsprechung_scraper": {
+      "auto_geo_extraction": true,
+      "court_location_mapping": true,
+      "jurisdiction_analysis": true
+    },
+    
+    "legal_document_processors": [
+      {
+        "processor": "bverwg_decisions",
+        "geo_extraction": "addresses_and_references",
+        "administrative_context": true
+      },
+      {
+        "processor": "local_court_decisions",
+        "geo_extraction": "court_jurisdiction",
+        "locality_weighting": 0.8
+      }
+    ]
+  },
+  
+  "development": {
+    "debug_mode": false,
+    "test_data": {
+      "sample_coordinates": [
+        {"name": "Berlin Mitte", "lat": 52.5200, "lng": 13.4050},
+        {"name": "München Zentrum", "lat": 48.1351, "lng": 11.5820},
+        {"name": "Hamburg Zentrum", "lat": 53.5511, "lng": 9.9937}
+      ]
+    },
+    
+    "performance_testing": {
+      "spatial_query_benchmarks": true,
+      "concurrent_access_tests": true,
+      "data_volume_tests": [1000, 10000, 100000]
+    }
+  }
+}

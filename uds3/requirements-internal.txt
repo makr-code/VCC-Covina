@@ -1,0 +1,12 @@
+# Internal / private dependencies for UDS3
+# These packages are proprietary or provided by the enterprise environment.
+# Do not attempt to pip-install these from PyPI unless you have access to the private repository.
+
+collection_manager
+database_api_postgis
+vpb_sqlite_db
+nlp_llm_worker_interface
+veritas_relations_almanach
+
+# If you have private wheels or an internal package index, install like:
+# pip install --index-url https://internal.pypi.example/simple collection_manager

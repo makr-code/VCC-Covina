@@ -1,0 +1,11 @@
+# Minimal, pragmatic requirements suitable for Python 3.13 dev/testing
+requests>=2.31.0
+Flask>=2.0.0
+pydantic>=2.7.0
+cryptography>=40.0.0
+pytest>=7.0.0
+# Optional dev tools omitted or can be installed separately if compatible
+# ruff (omitted for Python 3.13 CI here)
+# black (omitted)
+
+# Note: Add provider-specific packages (neo4j, psycopg2, chromadb) only when running integration tests

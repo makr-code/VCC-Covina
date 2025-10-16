@@ -1,0 +1,3 @@
+{"timestamp": "2025-10-02T09:10:36.631676", "operation_id": "test-cleanup-crash", "error": "Database crashed", "status": "CRITICAL_FAILURE"}
+{"timestamp": "2025-10-02T09:14:33.365536", "operation_id": "test-cleanup-crash", "error": "Database crashed", "status": "CRITICAL_FAILURE"}
+{"timestamp": "2025-10-02T09:16:43.684016", "operation_id": "test-cleanup-crash", "error": "Database crashed", "status": "CRITICAL_FAILURE"}

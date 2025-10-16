@@ -1,0 +1,700 @@
+#!/usr/bin/env python3
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+VERITAS Protected Module
+WARNING: This file contains embedded protection keys.
+Modification will be detected and may result in license violations.
+"""
+
+"""
+UDS3 Security Framework
+Comprehensive Security Management for Unified Database Strategy v3.0
+
+Features:
+- Content Hashing für Integrität
+- UUID-basierte eindeutige Identifikation  
+- Multi-Level Security (Public, Internal, Restricted, Confidential)
+- Verschlüsselung sensibler Daten
+- Secure Deletion
+- Audit Logging
+- Cross-Database Security Validation
+"""
+
+import os
+import hashlib
+import uuid
+import base64
+import logging
+from datetime import datetime
+from typing import Dict
+from typing import Optional, Any
+from dataclasses import dataclass
+from enum import Enum
+from cryptography.fernet import Fernet
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+class SecurityLevel(Enum):
+    """Sicherheitsstufen für Dokumente und Daten"""
+
+    PUBLIC = "public"  # Öffentlich zugänglich
+    INTERNAL = "internal"  # Interne Verwendung
+    RESTRICTED = "restricted"  # Eingeschränkter Zugang
+    CONFIDENTIAL = "confidential"  # Vertraulich
+
+
+class AdministrativeClassification(Enum):
+    """Administrative Klassifikation für Dokumente"""
+
+    UNKNOWN = "unknown"  # Unbekannte Klassifikation
+    DRAFT = "draft"  # Entwurf
+    REVIEW = "review"  # In Überprüfung
+    APPROVED = "approved"  # Genehmigt
+    ARCHIVED = "archived"  # Archiviert
+    DEPRECATED = "deprecated"  # Veraltet
+
+
+@dataclass
+class SecurityConfig:
+    """Konfiguration für Datensicherheit"""
+
+    encryption_enabled: bool = True
+    hash_algorithm: str = "sha256"
+    uuid_version: int = 4
+    salt_length: int = 32
+    checksum_validation: bool = True
+    secure_deletion: bool = True
+    audit_logging: bool = True
+
+
+class DataSecurityManager:
+    """
+    Verwaltet Datensicherheit über alle Datenbank-Typen hinweg
+
+    Features:
+    - Content Hashing für Integrität
+    - UUID-basierte eindeutige Identifikation
+    - Verschlüsselung sensibler Daten
+    - Secure Deletion
+    - Audit Logging
+    """
+
+    def __init__(self, security_level: SecurityLevel = SecurityLevel.INTERNAL):
+        """
+        Initialisiert DataSecurityManager
+
+        Args:
+            security_level: Gewünschtes Sicherheitslevel
+        """
+        # Create SecurityConfig basierend auf SecurityLevel
+        encryption_needed = security_level in [
+            SecurityLevel.RESTRICTED,
+            SecurityLevel.CONFIDENTIAL,
+        ]
+
+        self.config = SecurityConfig(
+            encryption_enabled=encryption_needed,
+            hash_algorithm="sha256",
+            uuid_version=4,
+            salt_length=32,
+            checksum_validation=True,
+            secure_deletion=True,
+            audit_logging=True,
+        )
+
+        self.security_level = security_level
+        self.encryption_key = self._generate_encryption_key()
+        self.cipher_suite = Fernet(self.encryption_key)
+
+        # Security Schemas für verschiedene Datentypen
+        self.security_schemas = self._create_security_schemas()
+
+    def _generate_encryption_key(self) -> bytes:
+        """Generiert sicheren Verschlüsselungsschlüssel"""
+        return Fernet.generate_key()
+
+    def _create_security_schemas(self) -> Dict:
+        """Definiert Sicherheitsschemas für verschiedene Datentypen"""
+        return {
+            "document": {
+                "security_level": SecurityLevel.INTERNAL,
+                "fields": {
+                    "content": {"encrypt": False, "hash": True, "audit": True},
+                    "title": {"encrypt": False, "hash": False, "audit": True},
+                    "file_path": {"encrypt": False, "hash": True, "audit": True},
+                    "metadata": {"encrypt": False, "hash": False, "audit": True},
+                },
+            },
+            "personal_data": {
+                "security_level": SecurityLevel.CONFIDENTIAL,
+                "fields": {
+                    "name": {"encrypt": True, "hash": True, "audit": True},
+                    "address": {"encrypt": True, "hash": True, "audit": True},
+                    "phone": {"encrypt": True, "hash": True, "audit": True},
+                },
+            },
+            "legal_metadata": {
+                "security_level": SecurityLevel.RESTRICTED,
+                "fields": {
+                    "aktenzeichen": {"encrypt": False, "hash": True, "audit": True},
+                    "mandant": {"encrypt": True, "hash": True, "audit": True},
+                    "anwalt": {"encrypt": False, "hash": True, "audit": True},
+                },
+            },
+        }
+
+    def generate_secure_document_id(
+        self, content: str, file_path: str, security_level: SecurityLevel = None
+    ) -> Dict:
+        """
+        Generiert sichere Document-ID mit Integritätsinformationen
+
+        Args:
+            content: Dokumentinhalt für Hash-Berechnung
+            file_path: Dateipfad
+            security_level: Sicherheitslevel (optional)
+
+        Returns:
+            Dict: Sicherheitsinformationen mit Document-ID
+        """
+        security_level = security_level or self.security_level
+
+        # UUID v4 für eindeutige Identifikation
+        document_uuid = str(uuid.uuid4())
+
+        # Content Hash für Integrität
+        content_hash = self._calculate_content_hash(content, file_path)
+
+        # Salt für zusätzliche Sicherheit
+        salt = self._generate_salt()
+
+        # HMAC für Authentizität
+        hmac_key = self._derive_hmac_key(document_uuid, salt)
+        content_hmac = hashlib.sha256(f"{content}:{hmac_key}".encode()).hexdigest()
+
+        # Checksum für schnelle Validation
+        checksum = self._calculate_checksum(f"{content}:{file_path}")
+
+        # Zusammenfassung der Sicherheitsinformationen
+        security_info = {
+            "document_id": f"doc_{document_uuid.replace('-', '')}",
+            "document_uuid": document_uuid,
+            "content_hash": content_hash,
+            "content_hmac": content_hmac,
+            "checksum": checksum,
+            "salt": salt,
+            "security_level": security_level.value,
+            "created_at": datetime.now().isoformat(),
+            "hash_algorithm": self.config.hash_algorithm,
+            "uuid_version": self.config.uuid_version,
+        }
+
+        logger.info(f"Sichere Document-ID generiert: {security_info['document_id']}")
+        return security_info
+
+    def _calculate_content_hash(self, content: str, file_path: str) -> str:
+        """Berechnet Content-Hash für Integrität"""
+        hash_input = f"{content}:{file_path}:{datetime.now().date().isoformat()}"
+
+        if self.config.hash_algorithm == "sha256":
+            return hashlib.sha256(hash_input.encode("utf-8")).hexdigest()
+        elif self.config.hash_algorithm == "sha512":
+            return hashlib.sha512(hash_input.encode("utf-8")).hexdigest()
+        else:
+            return hashlib.md5(hash_input.encode("utf-8")).hexdigest()
+
+    def _generate_salt(self) -> str:
+        """Generiert zufälligen Salt"""
+        import secrets
+
+        return secrets.token_hex(self.config.salt_length // 2)
+
+    def _derive_hmac_key(self, document_uuid: str, salt: str) -> str:
+        """Ableitung eines HMAC-Schlüssels"""
+        key_input = f"{document_uuid}:{salt}:{self.encryption_key.decode('utf-8')}"
+        return hashlib.sha256(key_input.encode("utf-8")).hexdigest()[:32]
+
+    def _calculate_checksum(self, data: str) -> str:
+        """Berechnet einfache Checksum für schnelle Validation"""
+        return hashlib.md5(data.encode("utf-8")).hexdigest()[:16]
+
+    def encrypt_sensitive_data(self, data: str, data_type: str = "document") -> Dict:
+        """
+        Verschlüsselt sensible Daten basierend auf Sicherheitsschema
+
+        Args:
+            data: Zu verschlüsselnde Daten
+            data_type: Typ der Daten für Schema-Lookup
+
+        Returns:
+            Dict: Verschlüsselte Daten mit Metadaten
+        """
+        if not self.config.encryption_enabled:
+            return {"encrypted_data": data, "is_encrypted": False}
+
+        try:
+            # Daten verschlüsseln
+            encrypted_bytes = self.cipher_suite.encrypt(data.encode("utf-8"))
+            encrypted_b64 = base64.b64encode(encrypted_bytes).decode("utf-8")
+
+            return {
+                "encrypted_data": encrypted_b64,
+                "is_encrypted": True,
+                "encryption_method": "Fernet",
+                "data_type": data_type,
+                "encrypted_at": datetime.now().isoformat(),
+            }
+
+        except Exception as e:
+            logger.error(f"Encryption failed: {e}")
+            return {"encrypted_data": data, "is_encrypted": False, "error": str(e)}
+
+    def decrypt_sensitive_data(self, encrypted_data: Dict) -> str:
+        """Entschlüsselt Daten"""
+        if not encrypted_data.get("is_encrypted", False):
+            return encrypted_data["encrypted_data"]
+
+        try:
+            encrypted_bytes = base64.b64decode(encrypted_data["encrypted_data"])
+            decrypted_bytes = self.cipher_suite.decrypt(encrypted_bytes)
+            return decrypted_bytes.decode("utf-8")
+        except Exception as e:
+            logger.error(f"Decryption failed: {e}")
+            return None
+
+    def verify_document_integrity(
+        self, document_id: str, content: str, file_path: str, security_info: Dict
+    ) -> Dict:
+        """
+        Verifiziert Dokumentenintegrität anhand der Sicherheitsinformationen
+
+        Args:
+            document_id: Dokument-ID
+            content: Aktueller Inhalt
+            file_path: Aktueller Dateipfad
+            security_info: Ursprüngliche Sicherheitsinformationen
+
+        Returns:
+            Dict: Verifikationsergebnis
+        """
+        verification_result = {
+            "document_id": document_id,
+            "integrity_verified": False,
+            "verification_time": datetime.now().isoformat(),
+            "checks": {},
+        }
+
+        try:
+            # Content Hash Verification
+            expected_hash = security_info.get("content_hash")
+            if expected_hash:
+                current_hash = self._calculate_content_hash(content, file_path)
+                hash_valid = current_hash == expected_hash
+                verification_result["checks"]["content_hash"] = {
+                    "expected": expected_hash,
+                    "current": current_hash,
+                    "valid": hash_valid,
+                }
+
+            # Checksum Verification
+            expected_checksum = security_info.get("checksum")
+            if expected_checksum:
+                current_checksum = self._calculate_checksum(f"{content}:{file_path}")
+                checksum_valid = current_checksum == expected_checksum
+                verification_result["checks"]["checksum"] = {
+                    "expected": expected_checksum,
+                    "current": current_checksum,
+                    "valid": checksum_valid,
+                }
+
+            # HMAC Verification
+            expected_hmac = security_info.get("content_hmac")
+            if expected_hmac:
+                document_uuid = security_info.get("document_uuid")
+                salt = security_info.get("salt")
+                if document_uuid and salt:
+                    hmac_key = self._derive_hmac_key(document_uuid, salt)
+                    current_hmac = hashlib.sha256(
+                        f"{content}:{hmac_key}".encode()
+                    ).hexdigest()
+                    hmac_valid = current_hmac == expected_hmac
+                    verification_result["checks"]["hmac"] = {
+                        "expected": expected_hmac,
+                        "current": current_hmac,
+                        "valid": hmac_valid,
+                    }
+
+            # Overall integrity check
+            all_checks_valid = all(
+                check.get("valid", True)
+                for check in verification_result["checks"].values()
+            )
+            verification_result["integrity_verified"] = all_checks_valid
+
+            if self.config.audit_logging:
+                self.create_audit_log_entry(
+                    operation="verify_integrity",
+                    document_id=document_id,
+                    result=verification_result["integrity_verified"],
+                    details=verification_result["checks"],
+                )
+
+            return verification_result
+
+        except Exception as e:
+            logger.error(f"Integrity verification failed: {e}")
+            verification_result["error"] = str(e)
+            return verification_result
+
+    def create_audit_log_entry(
+        self,
+        operation: str,
+        document_id: str,
+        result: bool = True,
+        details: Optional[Dict[Any, Any]] = None,
+        user_id: Optional[str] = None,
+    ) -> Dict:
+        """
+        Erstellt Audit-Log Eintrag für Sicherheitsoperationen
+
+        Args:
+            operation: Art der Operation (create, read, update, delete, verify, etc.)
+            document_id: Betroffene Document-ID
+            result: Erfolg/Fehler der Operation
+            details: Zusätzliche Details
+            user_id: Benutzer-ID (optional)
+
+        Returns:
+            Dict: Audit-Log Eintrag
+        """
+        if not self.config.audit_logging:
+            return {"audit_enabled": False}
+
+        audit_entry = {
+            "audit_id": str(uuid.uuid4()),
+            "timestamp": datetime.now().isoformat(),
+            "operation": operation,
+            "document_id": document_id,
+            "security_level": self.security_level.value,
+            "result": "SUCCESS" if result else "FAILED",
+            "user_id": user_id or "system",
+            "details": details or {},
+            "session_id": self._get_session_id(),
+        }
+
+        # In einer echten Implementierung würde dieser Eintrag
+        # in eine sichere Audit-Datenbank geschrieben
+        logger.info(
+            f"Audit Log: {operation} for {document_id} - {audit_entry['result']}"
+        )
+
+        return audit_entry
+
+    def _get_session_id(self) -> str:
+        """Generiert/Abruft aktuelle Session-ID"""
+        # Vereinfachte Session-ID Generation
+        return hashlib.md5(
+            f"{datetime.now().date()}:{os.getpid()}".encode()
+        ).hexdigest()[:16]
+
+    def secure_delete_document(self, document_id: str, security_info: Dict) -> Dict:
+        """
+        Führt sicheres Löschen eines Dokuments durch
+
+        Args:
+            document_id: Zu löschende Document-ID
+            security_info: Sicherheitsinformationen des Dokuments
+
+        Returns:
+            Dict: Löschergebnis
+        """
+        if not self.config.secure_deletion:
+            return {
+                "document_id": document_id,
+                "secure_deletion": False,
+                "message": "Secure deletion disabled",
+            }
+
+        deletion_result = {
+            "document_id": document_id,
+            "deletion_time": datetime.now().isoformat(),
+            "secure_deletion": True,
+            "steps_completed": [],
+        }
+
+        try:
+            # Schritt 1: Audit Log für Löschung
+            audit_entry = self.create_audit_log_entry(
+                operation="secure_delete",
+                document_id=document_id,
+                details={"security_level": security_info.get("security_level")},
+            )
+            deletion_result["steps_completed"].append("audit_log_created")
+
+            # Schritt 2: Sicherheitsinformationen markieren
+            deletion_result["original_security_info"] = {
+                "content_hash": security_info.get("content_hash"),
+                "security_level": security_info.get("security_level"),
+                "created_at": security_info.get("created_at"),
+            }
+            deletion_result["steps_completed"].append("security_info_preserved")
+
+            # Schritt 3: Löschbestätigung
+            deletion_confirmation = {
+                "deletion_id": str(uuid.uuid4()),
+                "document_id": document_id,
+                "deleted_at": deletion_result["deletion_time"],
+                "deletion_method": "secure_overwrite",
+            }
+
+            deletion_result["deletion_confirmation"] = deletion_confirmation
+            deletion_result["steps_completed"].append("deletion_confirmed")
+            deletion_result["success"] = True
+
+            logger.info(f"Secure deletion completed for document: {document_id}")
+
+        except Exception as e:
+            logger.error(f"Secure deletion failed: {e}")
+            deletion_result["error"] = str(e)
+            deletion_result["success"] = False
+
+        return deletion_result
+
+    def validate_security_compliance(
+        self, document_data: Dict, security_requirements: Optional[Dict[Any, Any]] = None
+    ) -> Dict:
+        """
+        Validiert Sicherheits-Compliance eines Dokuments
+
+        Args:
+            document_data: Dokumentdaten zur Prüfung
+            security_requirements: Spezifische Sicherheitsanforderungen
+
+        Returns:
+            Dict: Compliance-Ergebnis
+        """
+        compliance_result = {
+            "document_id": document_data.get("id", "unknown"),
+            "compliance_check_time": datetime.now().isoformat(),
+            "overall_compliant": True,
+            "checks": {},
+            "violations": [],
+            "recommendations": [],
+        }
+
+        # Standard Security Requirements
+        default_requirements = {
+            "require_document_id": True,
+            "require_content_hash": True,
+            "require_security_level": True,
+            "require_audit_trail": True,
+            "max_content_age_days": 365 * 5,  # 5 Jahre
+        }
+
+        requirements = security_requirements or default_requirements
+
+        try:
+            # Check 1: Document ID Format
+            if requirements.get("require_document_id", True):
+                doc_id = document_data.get("id", "")
+                id_valid = doc_id.startswith("doc_") and len(doc_id) >= 36
+                compliance_result["checks"]["document_id_format"] = id_valid
+                if not id_valid:
+                    compliance_result["violations"].append("Invalid document ID format")
+
+            # Check 2: Content Hash Present
+            if requirements.get("require_content_hash", True):
+                content_hash = document_data.get("content_hash")
+                hash_valid = content_hash and len(content_hash) >= 32
+                compliance_result["checks"]["content_hash_present"] = hash_valid
+                if not hash_valid:
+                    compliance_result["violations"].append(
+                        "Missing or invalid content hash"
+                    )
+
+            # Check 3: Security Level
+            if requirements.get("require_security_level", True):
+                security_level = document_data.get("security_level")
+                valid_levels = [level.value for level in SecurityLevel]
+                level_valid = security_level in valid_levels
+                compliance_result["checks"]["security_level_valid"] = level_valid
+                if not level_valid:
+                    compliance_result["violations"].append(
+                        f"Invalid security level: {security_level}"
+                    )
+
+            # Check 4: Content Age
+            max_age_days = requirements.get("max_content_age_days", 365 * 5)
+            created_at = document_data.get("created_at")
+            if created_at:
+                try:
+                    creation_date = datetime.fromisoformat(
+                        created_at.replace("Z", "+00:00")
+                    )
+                    age_days = (datetime.now() - creation_date).days
+                    age_valid = age_days <= max_age_days
+                    compliance_result["checks"]["content_age"] = age_valid
+                    compliance_result["checks"]["age_days"] = age_days
+                    if not age_valid:
+                        compliance_result["violations"].append(
+                            f"Content too old: {age_days} days"
+                        )
+                except ValueError:
+                    compliance_result["checks"]["content_age"] = False
+                    compliance_result["violations"].append(
+                        "Invalid creation date format"
+                    )
+
+            # Overall Compliance
+            compliance_result["overall_compliant"] = (
+                len(compliance_result["violations"]) == 0
+            )
+
+            # Recommendations
+            if not compliance_result["overall_compliant"]:
+                if "Invalid document ID format" in compliance_result["violations"]:
+                    compliance_result["recommendations"].append(
+                        "Regenerate document with secure ID"
+                    )
+                if "Missing or invalid content hash" in compliance_result["violations"]:
+                    compliance_result["recommendations"].append(
+                        "Calculate and store content hash"
+                    )
+                if any("security level" in v for v in compliance_result["violations"]):
+                    compliance_result["recommendations"].append(
+                        "Set appropriate security level"
+                    )
+
+            # Audit Log
+            if self.config.audit_logging:
+                self.create_audit_log_entry(
+                    operation="compliance_check",
+                    document_id=compliance_result["document_id"],
+                    result=compliance_result["overall_compliant"],
+                    details={
+                        "violations_count": len(compliance_result["violations"]),
+                        "checks_passed": sum(
+                            1 for c in compliance_result["checks"].values() if c
+                        ),
+                    },
+                )
+
+        except Exception as e:
+            logger.error(f"Security compliance validation failed: {e}")
+            compliance_result["error"] = str(e)
+            compliance_result["overall_compliant"] = False
+
+        return compliance_result
+
+
+def create_security_manager(
+    security_level: SecurityLevel = SecurityLevel.INTERNAL,
+) -> DataSecurityManager:
+    """
+    Factory Function für DataSecurityManager
+
+    Args:
+        security_level: Gewünschtes Sicherheitslevel
+
+    Returns:
+        DataSecurityManager: Konfigurierter Security Manager
+    """
+    return DataSecurityManager(security_level)
+
+
+def validate_document_security(
+    document_data: Dict,
+    security_level: SecurityLevel = SecurityLevel.INTERNAL,
+    requirements: Optional[Dict[Any, Any]] = None,
+) -> Dict:
+    """
+    Standalone Funktion zur Sicherheitsvalidierung
+
+    Args:
+        document_data: Dokumentdaten
+        security_level: Sicherheitslevel für Validation
+        requirements: Spezifische Anforderungen
+
+    Returns:
+        Dict: Validierungsergebnis
+    """
+    security_mgr = create_security_manager(security_level)
+    return security_mgr.validate_security_compliance(document_data, requirements)
+
+
+# Export Functions
+__all__ = [
+    "SecurityLevel",
+    "SecurityConfig",
+    "DataSecurityManager",
+    "create_security_manager",
+    "validate_document_security",
+]
+
+if __name__ == "__main__":
+    # Demo der Security-Funktionen
+    print("🔐 UDS3 Security Framework Demo")
+    print("=" * 40)
+
+    # Security Manager erstellen
+    security_mgr = create_security_manager(SecurityLevel.CONFIDENTIAL)
+
+    # Test Document
+    test_content = "Vertrauliches Rechtsdokument mit sensiblen Mandantendaten."
+    test_file_path = "mandant_xyz_vertrag.pdf"
+
+    # Sichere Document-ID generieren
+    security_info = security_mgr.generate_secure_document_id(
+        content=test_content, file_path=test_file_path
+    )
+
+    print(f"✅ Document ID: {security_info['document_id']}")
+    print(f"✅ Content Hash: {security_info['content_hash'][:32]}...")
+    print(f"✅ Security Level: {security_info['security_level']}")
+
+    # Integrität prüfen
+    verification = security_mgr.verify_document_integrity(
+        document_id=security_info["document_id"],
+        content=test_content,
+        file_path=test_file_path,
+        security_info=security_info,
+    )
+
+    print(
+        f"✅ Integrity Check: {'PASSED' if verification['integrity_verified'] else 'FAILED'}"
+    )
+
+    # Security Compliance prüfen
+    document_data = {
+        "id": security_info["document_id"],
+        "content_hash": security_info["content_hash"],
+        "security_level": security_info["security_level"],
+        "created_at": security_info["created_at"],
+    }
+
+    compliance = security_mgr.validate_security_compliance(document_data)
+    print(f"✅ Compliance: {'PASSED' if compliance['overall_compliant'] else 'FAILED'}")
+
+    print("\n🎉 Security Demo completed!")
+
+"""
+VERITAS Protected Module
+WARNING: This file contains embedded protection keys. 
+Modification will be detected and may result in license violations.
+"""
+
+# === VERITAS PROTECTION KEYS (DO NOT MODIFY) ===
+module_name = "uds3_security"
+module_licenced_organization = "VERITAS_TECH_GMBH"
+module_licence_key = "eyJjbGllbnRfaWQi...NzRkYzhl"  # Gekuerzt fuer Sicherheit
+module_organization_key = (
+    "6f5304c29594443086e1ace0011c094614b612c22aa16af9f1a63f02a0c9bf5c"
+)
+module_file_key = "94bb65659225bf89f8e78aa0508b429925a3c6ee52a9b10d13173bda60e9c32b"
+module_version = "1.0"
+module_protection_level = 3
+# === END PROTECTION KEYS ===

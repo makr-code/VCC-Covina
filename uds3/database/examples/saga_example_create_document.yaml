@@ -1,0 +1,30 @@
+saga_name: create_document_v1
+trace_id: trace-12345
+steps:
+  - step_id: vector_add
+    backend: vector
+    operation: add_documents
+    payload:
+      collection: document_chunks
+      documents: '{{chunks}}'
+      metadatas: '{{metadatas}}'
+    compensation: vector_delete_chunks
+    idempotency_key: '{{document_id}}::vector'
+  - step_id: relational_store
+    backend: relational
+    operation: upsert_documents_metadata
+    payload:
+      table: documents_metadata
+      data: '{{metadata}}'
+    compensation: relational_delete_by_document_id
+    idempotency_key: '{{document_id}}::meta'
+  - step_id: graph_index
+    backend: graph
+    operation: create_node
+    payload:
+      label: Document
+      properties:
+        id: '{{document_id}}'
+        title: '{{title}}'
+    compensation: graph_delete_node
+    idempotency_key: '{{document_id}}::graph'

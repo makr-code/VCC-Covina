@@ -1,0 +1,2241 @@
+database\config.py:133:9: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+database\config.py:142:54: error: Incompatible default for argument "purpose"
+(default has type "None", argument has type "str")  [assignment]
+            def make_name(component: str, purpose: str = None) -> str:
+                                                         ^~~~
+database\config.py:142:54: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\config.py:142:54: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\config.py:442:12: error: "DatabaseManager" has no attribute
+"get_legacy_config"  [attr-defined]
+        return database_manager.get_legacy_config()
+               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+database\config.py:446:12: error: "DatabaseManager" has no attribute
+"get_primary_database"  [attr-defined]
+        return database_manager.get_primary_database(DatabaseType.VECTOR)
+               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+database\config.py:450:12: error: "DatabaseManager" has no attribute
+"get_primary_database"  [attr-defined]
+        return database_manager.get_primary_database(DatabaseType.GRAPH)
+               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+database\config.py:454:12: error: "DatabaseManager" has no attribute
+"get_primary_database"  [attr-defined]
+        return database_manager.get_primary_database(DatabaseType.RELATION...
+               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+database\config.py:458:12: error: "DatabaseManager" has no attribute
+"get_primary_database"  [attr-defined]
+        return database_manager.get_primary_database(DatabaseType.KEY_VALU...
+               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+database\config.py:462:12: error: "DatabaseManager" has no attribute
+"get_primary_database"  [attr-defined]
+        return database_manager.get_primary_database(DatabaseType.FILE)
+               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+database\config.py:467:11: error: "DatabaseManager" has no attribute
+"list_databases"; maybe "databases"?  [attr-defined]
+        print(database_manager.list_databases())
+              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_process_mining.py:33:1: error: Cannot find implementation or library
+stub for module named "uds3_admin_types"  [import-not-found]
+    from uds3_admin_types import AdminDocumentType
+    ^
+uds3\uds3_enhanced_schema.py:73:33: error: Incompatible types in assignment
+(expression has type "None", variable has type "list[str]")  [assignment]
+        legal_concepts: List[str] = None  # Extrahierte Rechtsbegriffe
+                                    ^~~~
+uds3\uds3_enhanced_schema.py:74:34: error: Incompatible types in assignment
+(expression has type "None", variable has type "list[str]")  [assignment]
+        referenced_laws: List[str] = None  # Referenzierte Gesetze
+                                     ^~~~
+uds3\uds3_enhanced_schema.py:75:36: error: Incompatible types in assignment
+(expression has type "None", variable has type "list[str]")  [assignment]
+        semantic_keywords: List[str] = None  # Semantic Keywords
+                                       ^~~~
+uds3\uds3_enhanced_schema.py:135:43: error: Incompatible types in assignment
+(expression has type "None", variable has type "list[dict[str, Any]]") 
+[assignment]
+        relationships: List[Dict[str, Any]] = None  # Liste von Beziehunge...
+                                              ^~~~
+uds3\uds3_collection_templates.py:27:1: error: Cannot find implementation or
+library stub for module named "uds3_admin_types"  [import-not-found]
+    from uds3_admin_types import AdminDocumentType, AdminLevel, AdminDomai...
+    ^
+uds3\third_party_stubs\veritas_relations_almanach.py:11:45: error: Incompatible
+default for argument "attrs" (default has type "None", argument has type
+"dict[Any, Any]")  [assignment]
+        def __init__(self, name:str, attrs:dict=None):
+                                                ^~~~
+uds3\third_party_stubs\veritas_relations_almanach.py:11:45: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+uds3\third_party_stubs\veritas_relations_almanach.py:11:45: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+uds3\uds3_strategic_insights_analysis.py:59:9: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+uds3\uds3_strategic_insights_analysis.py:60:9: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+uds3\uds3_strategic_insights_analysis.py:61:9: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+uds3\uds3_schemas.py:877:17: error: Unsupported target for indexed assignment
+("Collection[str]")  [index]
+                    schema["metadata_fields"][field.name] = "string"
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_schemas.py:879:17: error: Unsupported target for indexed assignment
+("Collection[str]")  [index]
+                    schema["metadata_fields"][field.name] = "int"
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_schemas.py:881:17: error: Unsupported target for indexed assignment
+("Collection[str]")  [index]
+                    schema["metadata_fields"][field.name] = "float"
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_schemas.py:883:17: error: Unsupported target for indexed assignment
+("Collection[str]")  [index]
+                    schema["metadata_fields"][field.name] = "bool"
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_schemas.py:885:17: error: Unsupported target for indexed assignment
+("Collection[str]")  [index]
+                    schema["metadata_fields"][field.name] = "string"  # IS...
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_schemas.py:888:17: error: "Collection[str]" has no attribute "append"
+ [attr-defined]
+                    schema["required_fields"].append(field.name)
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_schemas.py:890:17: error: "Collection[str]" has no attribute "append"
+ [attr-defined]
+                    schema["security_fields"].append(field.name)
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_schemas.py:892:17: error: "Collection[str]" has no attribute "append"
+ [attr-defined]
+                    schema["quality_fields"].append(field.name)
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_schemas.py:1007:17: error: "object" has no attribute "append" 
+[attr-defined]
+                    validation_result["missing_required"].append(field.nam...
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_schemas.py:1015:21: error: "object" has no attribute "append" 
+[attr-defined]
+                        validation_result["invalid_types"].append(field_na...
+                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+database\database_api_base.py:24:1: error: Cannot find implementation or
+library stub for module named "uds3_core"  [import-not-found]
+        from uds3_core import UnifiedDatabaseStrategy, DatabaseRole, Opera...
+    ^
+database\database_api_base.py:34:39: error: Incompatible default for argument
+"config" (default has type "None", argument has type "dict[Any, Any]") 
+[assignment]
+        def __init__(self, config: Dict = None):
+                                          ^~~~
+database\database_api_base.py:34:39: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_base.py:34:39: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_base.py:37:9: error: Need type annotation for
+"_adaptive_processors" (hint:
+"_adaptive_processors: dict[<type>, <type>] = ...")  [var-annotated]
+            self._adaptive_processors = {}  # Dictionary f³r verschiedene ...
+            ^~~~~~~~~~~~~~~~~~~~~~~~~
+database\database_api_base.py:117:67: error: Incompatible default for argument
+"collection_name" (default has type "None", argument has type "str") 
+[assignment]
+    ..._duplicate(self, file_hash: str, collection_name: str = None) -> bool:
+                                                               ^~~~
+database\database_api_base.py:117:67: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_base.py:117:67: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_base.py:125:68: error: Incompatible default for argument
+"collection_name" (default has type "None", argument has type "str") 
+[assignment]
+    ... def log_duplicate(self, file_hash: str, collection_name: str = None):
+                                                                       ^~~~
+database\database_api_base.py:125:68: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_base.py:125:68: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_base.py:258:39: error: Incompatible default for argument
+"config" (default has type "None", argument has type "dict[Any, Any]") 
+[assignment]
+        def __init__(self, config: Dict = None):
+                                          ^~~~
+database\database_api_base.py:258:39: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_base.py:258:39: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_base.py:311:42: error: Incompatible default for argument
+"metadata" (default has type "None", argument has type "dict[Any, Any]") 
+[assignment]
+                            metadata: Dict = None, collection_name: str = ...
+                                             ^~~~
+database\database_api_base.py:311:42: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_base.py:311:42: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_base.py:311:71: error: Incompatible default for argument
+"collection_name" (default has type "None", argument has type "str") 
+[assignment]
+    ...          metadata: Dict = None, collection_name: str = None) -> bool:
+                                                               ^~~~
+database\database_api_base.py:323:61: error: Incompatible default for argument
+"metadata" (default has type "None", argument has type "dict[Any, Any]") 
+[assignment]
+    ...def create_collection(self, name: str, metadata: Dict = None) -> bool:
+                                                               ^~~~
+database\database_api_base.py:323:61: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_base.py:323:61: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_base.py:344:80: error: Incompatible default for argument
+"metadata" (default has type "None", argument has type "dict[Any, Any]") 
+[assignment]
+    ..., vector_id: str, vector: List[float], metadata: Dict = None) -> bool:
+                                                               ^~~~
+database\database_api_base.py:344:80: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_base.py:344:80: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_base.py:356:46: error: Incompatible default for argument
+"collection_name" (default has type "None", argument has type "str") 
+[assignment]
+                          collection_name: str = None) -> List[Dict]:
+                                                 ^~~~
+database\database_api_base.py:356:46: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_base.py:356:46: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_base.py:363:39: error: Incompatible default for argument
+"config" (default has type "None", argument has type "dict[Any, Any]") 
+[assignment]
+        def __init__(self, config: Dict = None):
+                                          ^~~~
+database\database_api_base.py:363:39: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_base.py:363:39: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_base.py:413:45: error: Incompatible default for argument
+"properties" (default has type "None", argument has type "dict[Any, Any]") 
+[assignment]
+                             properties: Dict = None) -> bool:
+                                                ^~~~
+database\database_api_base.py:413:45: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_base.py:413:45: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_base.py:431:39: error: Incompatible default for argument
+"properties" (default has type "None", argument has type "dict[Any, Any]") 
+[assignment]
+                       properties: Dict = None) -> str:
+                                          ^~~~
+database\database_api_base.py:431:39: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_base.py:431:39: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_base.py:441:58: error: Incompatible default for argument
+"filters" (default has type "None", argument has type "dict[Any, Any]") 
+[assignment]
+    ... find_nodes(self, node_type: str, filters: Dict = None) -> List[Dict]:
+                                                         ^~~~
+database\database_api_base.py:441:58: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_base.py:441:58: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_base.py:511:39: error: Incompatible default for argument
+"config" (default has type "None", argument has type "dict[Any, Any]") 
+[assignment]
+        def __init__(self, config: Dict = None):
+                                          ^~~~
+database\database_api_base.py:511:39: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_base.py:511:39: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_base.py:571:57: error: Incompatible default for argument
+"params" (default has type "None", argument has type "tuple[Any, ...]") 
+[assignment]
+    ...f execute_query(self, query: str, params: Tuple = None) -> List[Dict]:
+                                                         ^~~~
+database\database_api_base.py:571:57: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_base.py:571:57: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_base.py:593:39: error: Incompatible default for argument
+"config" (default has type "None", argument has type "dict[Any, Any]") 
+[assignment]
+        def __init__(self, config: Dict = None):
+                                          ^~~~
+database\database_api_base.py:593:39: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_base.py:593:39: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+uds3\uds3_validation_worker.py:163:21: error: Name "metadata" already defined
+on line 147  [no-redef]
+                        metadata: dict[Any, Any] = {}
+                        ^~~~~~~~
+uds3\uds3_validation_worker.py:169:17: error: Name "metadata" already defined
+on line 147  [no-redef]
+                    metadata: dict[Any, Any] = {}
+                    ^~~~~~~~
+uds3\uds3_relations_data_framework.py:112:9: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+uds3\uds3_relations_data_framework.py:366:13: error: Unsupported target for
+indexed assignment ("object")  [index]
+                schema["relations"][relation_name] = relation_def
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_relations_data_framework.py:369:16: error: Value of type
+"dict[Any, Any] | None" is not indexable  [index]
+                if relation_def["uds3_metadata"]["constraint_required"]:
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_relations_data_framework.py:370:17: error: "object" has no attribute
+"append"  [attr-defined]
+                    schema["constraints"].append(f"{relation_name}_constra...
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_relations_data_framework.py:372:16: error: Value of type
+"dict[Any, Any] | None" is not indexable  [index]
+                if relation_def["uds3_metadata"]["indexing_required"]:
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_relations_data_framework.py:373:17: error: "object" has no attribute
+"append"  [attr-defined]
+                    schema["indexes"].append(f"{relation_name}_index")
+                    ^~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_relations_data_framework.py:386:38: error: Incompatible default for
+argument "properties" (default has type "None", argument has type
+"dict[str, Any]")  [assignment]
+            properties: Dict[str, Any] = None,
+                                         ^~~~
+uds3\uds3_relations_data_framework.py:386:38: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+uds3\uds3_relations_data_framework.py:386:38: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+uds3\uds3_relations_data_framework.py:415:17: error: "object" has no attribute
+"append"  [attr-defined]
+                    result["validation_errors"].append(
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_relations_data_framework.py:425:17: error: "object" has no attribute
+"extend"  [attr-defined]
+                    result["validation_errors"].extend(validation_errors)
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_relations_data_framework.py:443:37: error: Invalid index type
+"str | None" for "dict[str, UDS3RelationInstance]"; expected type "str"  [index]
+                self.relation_instances[relation_instance.instance_id] = r...
+                                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_relations_data_framework.py:462:13: error: "object" has no attribute
+"append"  [attr-defined]
+                result["validation_errors"].append(f"Unerwarteter Fehler: ...
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_relations_data_framework.py:638:13: error: Unsupported target for
+indexed assignment ("object")  [index]
+                schema_data["relations_metadata"][relation_name] = (
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_relations_data_framework.py:740:55: error: Argument 1 to
+"create_relation_instance" of "UDS3RelationsDataFramework" has incompatible type
+"**dict[str, Collection[str]]"; expected "str"  [arg-type]
+            result = framework.create_relation_instance(**instance_data)
+                                                          ^~~~~~~~~~~~~
+uds3\uds3_relations_data_framework.py:740:55: error: Argument 1 to
+"create_relation_instance" of "UDS3RelationsDataFramework" has incompatible type
+"**dict[str, Collection[str]]"; expected "dict[str, Any]"  [arg-type]
+            result = framework.create_relation_instance(**instance_data)
+                                                          ^~~~~~~~~~~~~
+uds3\uds3_relations_data_framework.py:740:55: note: "dict" is invariant -- see https://mypy.readthedocs.io/en/stable/common_issues.html#variance
+uds3\uds3_relations_data_framework.py:740:55: note: Consider using "Mapping" instead, which is covariant in the value type
+uds3\uds3_relations_core.py:14:1: error: Cannot find implementation or library
+stub for module named "neo4j"  [import-not-found]
+    from neo4j import GraphDatabase
+    ^
+uds3\uds3_relations_core.py:250:13: error: "object" has no attribute "append" 
+[attr-defined]
+                schema_result["errors"].append(str(e))
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_relations_core.py:450:17: error: "object" has no attribute "append" 
+[attr-defined]
+                    operation_result["validation_errors"].append(
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_relations_core.py:462:17: error: "object" has no attribute "append" 
+[attr-defined]
+                    operation_result["validation_errors"].append(
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_relations_core.py:470:17: error: "object" has no attribute "append" 
+[attr-defined]
+                    operation_result["validation_errors"].append(
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_relations_core.py:531:13: error: "object" has no attribute "append" 
+[attr-defined]
+                operation_result["validation_errors"].append(f"Neo4j Fehle...
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_relations_core.py:672:21: error: "object" has no attribute "extend" 
+[attr-defined]
+                        validation_result["inconsistencies"].extend(unknow...
+                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_relations_core.py:677:17: error: "object" has no attribute "extend" 
+[attr-defined]
+                    validation_result["validation_checks"].extend(uds3_che...
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_relations_core.py:682:21: error: "object" has no attribute "extend" 
+[attr-defined]
+                        validation_result["recommendations"].extend(perfor...
+                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_relations_core.py:691:13: error: "object" has no attribute "append" 
+[attr-defined]
+                validation_result["inconsistencies"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_quality.py:89:48: error: Incompatible default for argument "config"
+(default has type "None", argument has type "QualityConfig")  [assignment]
+        def __init__(self, config: QualityConfig = None):
+                                                   ^~~~
+uds3\uds3_quality.py:89:48: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+uds3\uds3_quality.py:89:48: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+uds3\uds3_quality.py:183:28: error: Argument 2 to
+"_calculate_completeness_score" of "DataQualityManager" has incompatible type
+"dict[Any, Any] | None"; expected "dict[Any, Any]"  [arg-type]
+                document_data, vector_data, graph_data, relational_data
+                               ^~~~~~~~~~~
+uds3\uds3_quality.py:183:41: error: Argument 3 to
+"_calculate_completeness_score" of "DataQualityManager" has incompatible type
+"dict[Any, Any] | None"; expected "dict[Any, Any]"  [arg-type]
+                document_data, vector_data, graph_data, relational_data
+                                            ^~~~~~~~~~
+uds3\uds3_quality.py:183:53: error: Argument 4 to
+"_calculate_completeness_score" of "DataQualityManager" has incompatible type
+"dict[Any, Any] | None"; expected "dict[Any, Any]"  [arg-type]
+                document_data, vector_data, graph_data, relational_data
+                                                        ^~~~~~~~~~~~~~~
+uds3\uds3_quality.py:189:28: error: Argument 2 to
+"_calculate_consistency_score" of "DataQualityManager" has incompatible type
+"dict[Any, Any] | None"; expected "dict[Any, Any]"  [arg-type]
+                document_data, vector_data, graph_data, relational_data
+                               ^~~~~~~~~~~
+uds3\uds3_quality.py:189:41: error: Argument 3 to
+"_calculate_consistency_score" of "DataQualityManager" has incompatible type
+"dict[Any, Any] | None"; expected "dict[Any, Any]"  [arg-type]
+                document_data, vector_data, graph_data, relational_data
+                                            ^~~~~~~~~~
+uds3\uds3_quality.py:189:53: error: Argument 4 to
+"_calculate_consistency_score" of "DataQualityManager" has incompatible type
+"dict[Any, Any] | None"; expected "dict[Any, Any]"  [arg-type]
+                document_data, vector_data, graph_data, relational_data
+                                                        ^~~~~~~~~~~~~~~
+uds3\uds3_quality.py:211:28: error: Argument 2 to
+"_calculate_semantic_coherence_score" of "DataQualityManager" has incompatible
+type "dict[Any, Any] | None"; expected "dict[Any, Any]"  [arg-type]
+                document_data, vector_data
+                               ^~~~~~~~~~~
+uds3\uds3_quality.py:527:13: error: Unsupported target for indexed assignment
+("object")  [index]
+                cross_db_result["data_alignment"]["id_consistency"] = id_c...
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_quality.py:530:17: error: "object" has no attribute "append" 
+[attr-defined]
+                    cross_db_result["discrepancies"].append(
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_quality.py:547:13: error: Unsupported target for indexed assignment
+("object")  [index]
+                cross_db_result["data_alignment"]["title_consistency"] = t...
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_quality.py:550:17: error: "object" has no attribute "append" 
+[attr-defined]
+                    cross_db_result["discrepancies"].append(
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_quality.py:564:13: error: Unsupported target for indexed assignment
+("object")  [index]
+                cross_db_result["data_alignment"]["hash_consistency"] = ha...
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_quality.py:567:17: error: "object" has no attribute "append" 
+[attr-defined]
+                    cross_db_result["discrepancies"].append(
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_quality.py:581:16: error: Unsupported operand types for > ("float"
+and "object")  [operator]
+                if cross_db_result["consistency_score"] < 0.9:
+                   ^
+uds3\uds3_quality.py:582:17: error: "object" has no attribute "append" 
+[attr-defined]
+                    cross_db_result["recommendations"].append(
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_quality.py:586:20: error: Argument 1 to "len" has incompatible type
+"object"; expected "Sized"  [arg-type]
+                if len(cross_db_result["discrepancies"]) > 0:
+                       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_quality.py:587:17: error: "object" has no attribute "append" 
+[attr-defined]
+                    cross_db_result["recommendations"].append(
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_quality.py:592:17: error: "object" has no attribute "append" 
+[attr-defined]
+                    cross_db_result["recommendations"].append(
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_quality.py:661:17: error: Unsupported target for indexed assignment
+("object")  [index]
+                    report["quality_distribution"][range_name] = {
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_quality.py:695:16: error: Value of type "object" is not indexable 
+[index]
+                if report["summary_statistics"]["documents_below_threshold...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_quality.py:696:17: error: "object" has no attribute "append" 
+[attr-defined]
+                    report["action_items"].append(
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_quality.py:699:56: error: Value of type "object" is not indexable 
+[index]
+    ...                  "action": f"Review and improve {report['summary_stat...
+                                                        ^~~~~~~~~~~~~~~~~~~~~...
+uds3\uds3_quality.py:700:47: error: Value of type "object" is not indexable 
+[index]
+                            "documents_affected": report["summary_statisti...
+                                                  ^
+uds3\uds3_quality.py:709:21: error: "object" has no attribute "items" 
+[attr-defined]
+                        report["common_issues"].items(), key=lambda x: x[1...
+                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_quality.py:711:17: error: "object" has no attribute "append" 
+[attr-defined]
+                    report["action_items"].append(
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_quality.py:723:21: error: "object" has no attribute "append" 
+[attr-defined]
+                        report["action_items"].append(
+                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_quality.py:781:21: error: Unsupported target for indexed assignment
+("object")  [index]
+                        trend_analysis["trends"]["overall_quality"] = {
+                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_quality.py:808:17: error: Unsupported target for indexed assignment
+("object")  [index]
+                    trend_analysis["trends"]["recent_performance"] = {
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_quality.py:819:21: error: "object" has no attribute "append" 
+[attr-defined]
+                        trend_analysis["alerts"].append(
+                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_quality.py:827:21: error: "object" has no attribute "append" 
+[attr-defined]
+                        trend_analysis["alerts"].append(
+                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_quality.py:852:25: error: Unsupported target for indexed assignment
+("object")  [index]
+                            trend_analysis["trends"][f"{metric.value}_tren...
+                            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_quality.py:866:52: error: Incompatible default for argument "config"
+(default has type "None", argument has type "QualityConfig")  [assignment]
+    ...f create_quality_manager(config: QualityConfig = None) -> DataQualityM...
+                                                        ^~~~
+uds3\uds3_quality.py:866:52: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+uds3\uds3_quality.py:866:52: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+uds3\uds3_quality.py:884:29: error: Incompatible default for argument "config"
+(default has type "None", argument has type "QualityConfig")  [assignment]
+        config: QualityConfig = None,
+                                ^~~~
+uds3\uds3_quality.py:884:29: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+uds3\uds3_quality.py:884:29: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+uds3\uds3_process_export_engine.py:38:25: error: Incompatible types in
+assignment (expression has type "None", variable has type "list[str]") 
+[assignment]
+        errors: List[str] = None
+                            ^~~~
+uds3\uds3_process_export_engine.py:465:13: error: Unsupported target for
+indexed assignment ("object")  [index]
+                validation_result["compliance_scores"]["verwaltung"] = ver...
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_process_export_engine.py:469:13: error: "object" has no attribute
+"append"  [attr-defined]
+                validation_result["violations"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_process_export_engine.py:484:65: error: "Element[str]" has no
+attribute "nsmap"  [attr-defined]
+    ...tp://www.omg.org/spec/BPMN/20100524/MODEL" not in root.nsmap.values():
+                                                         ^~~~~~~~~~
+uds3\uds3_process_export_engine.py:485:13: error: "Collection[str]" has no
+attribute "append"  [attr-defined]
+                result["violations"].append("BPMN 2.0 Namespace fehlt")
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_process_export_engine.py:486:13: error: Unsupported target for
+indexed assignment ("Collection[str]")  [index]
+                result["compliance_scores"]["bpmn20"] = 0.5
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_process_export_engine.py:493:13: error: "Collection[str]" has no
+attribute "append"  [attr-defined]
+                result["violations"].append("Kein BPMN-Prozess gefunden")
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_process_export_engine.py:494:13: error: Unsupported target for
+indexed assignment ("Collection[str]")  [index]
+                result["compliance_scores"]["bpmn20"] = 0.0
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_process_export_engine.py:507:13: error: "Collection[str]" has no
+attribute "append"  [attr-defined]
+                result["warnings"].append("Keine Ereignisse gefunden")
+                ^~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_process_export_engine.py:508:13: error: Value of type
+"Collection[str]" is not indexable  [index]
+                result["compliance_scores"]["epk"] -= 0.2
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_process_export_engine.py:508:13: error: Unsupported target for
+indexed assignment ("Collection[str]")  [index]
+                result["compliance_scores"]["epk"] -= 0.2
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_process_export_engine.py:511:13: error: "Collection[str]" has no
+attribute "append"  [attr-defined]
+                result["violations"].append("Keine Funktionen gefunden")
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_process_export_engine.py:512:13: error: Unsupported target for
+indexed assignment ("Collection[str]")  [index]
+                result["compliance_scores"]["epk"] = 0.0
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:19:1: error: Cannot find implementation or
+library stub for module named "uds3_core"  [import-not-found]
+        from uds3_core import get_optimized_unified_strategy
+    ^
+uds3\uds3_follow_up_orchestrator.py:89:23: error: Argument "task_type" to
+"UDS3TaskResult" has incompatible type "Any | None"; expected "str"  [arg-type]
+                task_type=task_type,
+                          ^~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:138:19: error: Need type annotation for
+"results"  [var-annotated]
+            results = {
+                      ^
+uds3\uds3_follow_up_orchestrator.py:156:9: error: Item "str" of
+"list[Any] | str | Any | None" has no attribute "append"  [union-attr]
+            results["operations"].append(
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:156:9: error: Item "None" of
+"list[Any] | str | Any | None" has no attribute "append"  [union-attr]
+            results["operations"].append(
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:166:13: error: Item "str" of
+"list[Any] | str | Any | None" has no attribute "append"  [union-attr]
+                results["operations"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:166:13: error: Item "None" of
+"list[Any] | str | Any | None" has no attribute "append"  [union-attr]
+                results["operations"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:175:13: error: Item "str" of
+"list[Any] | str | Any | None" has no attribute "append"  [union-attr]
+                results["operations"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:175:13: error: Item "None" of
+"list[Any] | str | Any | None" has no attribute "append"  [union-attr]
+                results["operations"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:185:65: error: Argument 1 to "len" has
+incompatible type "list[Any] | str | Any | None"; expected "Sized"  [arg-type]
+    ... UDS3-Datenbankintegration abgeschlossen: {len(results['operations'])}...
+                                                        ^~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:204:19: error: Need type annotation for
+"results"  [var-annotated]
+            results = {
+                      ^
+uds3\uds3_follow_up_orchestrator.py:227:13: error: Item "dict[Any, Any]" of
+"dict[Any, Any] | list[Any] | str | Any | None" has no attribute "append" 
+[union-attr]
+                results["relationships"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:227:13: error: Item "str" of
+"dict[Any, Any] | list[Any] | str | Any | None" has no attribute "append" 
+[union-attr]
+                results["relationships"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:227:13: error: Item "None" of
+"dict[Any, Any] | list[Any] | str | Any | None" has no attribute "append" 
+[union-attr]
+                results["relationships"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:236:13: error: Item "dict[Any, Any]" of
+"dict[Any, Any] | list[Any] | str | Any | None" has no attribute "append" 
+[union-attr]
+                results["relationships"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:236:13: error: Item "str" of
+"dict[Any, Any] | list[Any] | str | Any | None" has no attribute "append" 
+[union-attr]
+                results["relationships"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:236:13: error: Item "None" of
+"dict[Any, Any] | list[Any] | str | Any | None" has no attribute "append" 
+[union-attr]
+                results["relationships"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:246:13: error: Item "dict[Any, Any]" of
+"dict[Any, Any] | list[Any] | str | Any | None" has no attribute "append" 
+[union-attr]
+                results["relationships"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:246:13: error: Item "str" of
+"dict[Any, Any] | list[Any] | str | Any | None" has no attribute "append" 
+[union-attr]
+                results["relationships"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:246:13: error: Item "None" of
+"dict[Any, Any] | list[Any] | str | Any | None" has no attribute "append" 
+[union-attr]
+                results["relationships"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:256:35: error: Argument 1 to "len" has
+incompatible type "dict[Any, Any] | list[Any] | str | Any | None"; expected
+"Sized"  [arg-type]
+            total_relationships = len(results["relationships"])
+                                      ^~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:259:21: error: Generator has incompatible
+item type "Any | str"; expected "bool"  [misc]
+                    sum(rel["confidence"] for rel in results["relationship...
+                        ^~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:259:25: error: Invalid index type "str" for
+"str"; expected type "SupportsIndex | slice[Any, Any, Any]"  [index]
+                    sum(rel["confidence"] for rel in results["relationship...
+                            ^~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:259:50: error: Item "None" of
+"dict[Any, Any] | list[Any] | str | Any | None" has no attribute "__iter__" (not
+iterable)  [union-attr]
+                    sum(rel["confidence"] for rel in results["relationship...
+                                                     ^~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:262:13: error: Unsupported target for
+indexed assignment ("dict[Any, Any] | list[Any] | str | Any | None")  [index]
+                results["confidence_scores"]["average"] = avg_confidence
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:262:13: error: No overload variant of
+"__setitem__" of "list" matches argument types "str", "float"  [call-overload]
+                results["confidence_scores"]["average"] = avg_confidence
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:262:13: note: Possible overload variants:
+uds3\uds3_follow_up_orchestrator.py:262:13: note:     def __setitem__(self, SupportsIndex, Any, /) -> None
+uds3\uds3_follow_up_orchestrator.py:262:13: note:     def __setitem__(self, slice[Any, Any, Any], Iterable[Any], /) -> None
+uds3\uds3_follow_up_orchestrator.py:263:13: error: Unsupported target for
+indexed assignment ("dict[Any, Any] | list[Any] | str | Any | None")  [index]
+                results["confidence_scores"]["total_relationships"] = tota...
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:263:13: error: No overload variant of
+"__setitem__" of "list" matches argument types "str", "int"  [call-overload]
+                results["confidence_scores"]["total_relationships"] = tota...
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:263:13: note: Possible overload variants:
+uds3\uds3_follow_up_orchestrator.py:263:13: note:     def __setitem__(self, SupportsIndex, Any, /) -> None
+uds3\uds3_follow_up_orchestrator.py:263:13: note:     def __setitem__(self, slice[Any, Any, Any], Iterable[Any], /) -> None
+uds3\uds3_follow_up_orchestrator.py:285:19: error: Need type annotation for
+"results"  [var-annotated]
+            results = {
+                      ^
+uds3\uds3_follow_up_orchestrator.py:319:17: error: Item "str" of
+"list[Any] | str | Any | None" has no attribute "append"  [union-attr]
+                    results["stage_history"].append(
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:319:17: error: Item "None" of
+"list[Any] | str | Any | None" has no attribute "append"  [union-attr]
+                    results["stage_history"].append(
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:326:17: error: Item "str" of
+"list[Any] | str | Any | None" has no attribute "append"  [union-attr]
+                    results["stage_history"].append(
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:326:17: error: Item "None" of
+"list[Any] | str | Any | None" has no attribute "append"  [union-attr]
+                    results["stage_history"].append(
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:353:17: error: Argument 1 to
+"_estimate_procedure_duration" of "UDS3TaskOrchestrator" has incompatible type
+"Any | None"; expected "str"  [arg-type]
+                    doc_type, current_stage
+                    ^~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:353:27: error: Argument 2 to
+"_estimate_procedure_duration" of "UDS3TaskOrchestrator" has incompatible type
+"Any | None"; expected "str"  [arg-type]
+                    doc_type, current_stage
+                              ^~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:355:61: error: Argument 1 to
+"_estimate_time_remaining" of "UDS3TaskOrchestrator" has incompatible type
+"Any | None"; expected "str"  [arg-type]
+    ... "time_remaining": self._estimate_time_remaining(doc_type, current_sta...
+                                                        ^~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:355:71: error: Argument 2 to
+"_estimate_time_remaining" of "UDS3TaskOrchestrator" has incompatible type
+"Any | None"; expected "str"  [arg-type]
+    ...me_remaining": self._estimate_time_remaining(doc_type, current_stage),
+                                                              ^~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:378:19: error: Need type annotation for
+"results"  [var-annotated]
+            results = {
+                      ^
+uds3\uds3_follow_up_orchestrator.py:403:13: error: Item "str" of
+"list[Any] | str | Any | None" has no attribute "append"  [union-attr]
+                results["compliance_checks"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:403:13: error: Item "None" of
+"list[Any] | str | Any | None" has no attribute "append"  [union-attr]
+                results["compliance_checks"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:413:13: error: Item "str" of
+"list[Any] | str | Any | None" has no attribute "append"  [union-attr]
+                results["compliance_checks"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:413:13: error: Item "None" of
+"list[Any] | str | Any | None" has no attribute "append"  [union-attr]
+                results["compliance_checks"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:423:13: error: Item "str" of
+"list[Any] | str | Any | None" has no attribute "append"  [union-attr]
+                results["compliance_checks"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:423:13: error: Item "None" of
+"list[Any] | str | Any | None" has no attribute "append"  [union-attr]
+                results["compliance_checks"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:434:13: error: Generator has incompatible
+item type "int"; expected "bool"  [misc]
+                1 for check in results["compliance_checks"] if check["stat...
+                ^
+uds3\uds3_follow_up_orchestrator.py:434:28: error: Item "None" of
+"list[Any] | str | Any | None" has no attribute "__iter__" (not iterable) 
+[union-attr]
+                1 for check in results["compliance_checks"] if check["stat...
+                               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:434:66: error: Invalid index type "str" for
+"str"; expected type "SupportsIndex | slice[Any, Any, Any]"  [index]
+    ...r check in results["compliance_checks"] if check["status"] == "passed"
+                                                        ^~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:436:28: error: Argument 1 to "len" has
+incompatible type "list[Any] | str | Any | None"; expected "Sized"  [arg-type]
+            total_checks = len(results["compliance_checks"])
+                               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:450:26: error: Item "None" of
+"list[Any] | str | Any | None" has no attribute "__iter__" (not iterable) 
+[union-attr]
+                for check in results["compliance_checks"]
+                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:451:22: error: Invalid index type "str" for
+"str"; expected type "SupportsIndex | slice[Any, Any, Any]"  [index]
+                if check["status"] == "failed"
+                         ^~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:454:13: error: Item "str" of
+"list[Any] | str | Any | None" has no attribute "append"  [union-attr]
+                results["risk_indicators"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:454:13: error: Item "None" of
+"list[Any] | str | Any | None" has no attribute "append"  [union-attr]
+                results["risk_indicators"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:457:78: error: Invalid index type "str" for
+"str"; expected type "SupportsIndex | slice[Any, Any, Any]"  [index]
+    ...escription": f"Fehlgeschlagene Pr³fung: {failed_check['check_type']}",
+                                                              ^~~~~~~~~~~~
+uds3\uds3_follow_up_orchestrator.py:459:51: error: Invalid index type "str" for
+"str"; expected type "SupportsIndex | slice[Any, Any, Any]"  [index]
+                        if "required" in failed_check["requirement"]
+                                                      ^~~~~~~~~~~~~
+uds3\uds3_epk_process_parser.py:51:47: error: Incompatible types in assignment
+(expression has type "None", variable has type "dict[str, list[str]]") 
+[assignment]
+        satellite_objects: Dict[str, List[str]] = None  # Organisation, IT...
+                                                  ^~~~
+uds3\uds3_epk_process_parser.py:236:24: error: Need type annotation for
+"fzd_mappings"  [var-annotated]
+            fzd_mappings = {
+                           ^
+uds3\uds3_epk_process_parser.py:358:13: error: Unsupported target for indexed
+assignment ("object")  [index]
+                flow_analysis["element_distribution"][element_type] = (
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_epk_process_parser.py:359:17: error: "object" has no attribute "get" 
+[attr-defined]
+                    flow_analysis["element_distribution"].get(element_type...
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_epk_process_parser.py:372:25: error: "object" has no attribute
+"append"  [attr-defined]
+                            flow_analysis["start_events"].append(element.e...
+                            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_epk_process_parser.py:377:25: error: "object" has no attribute
+"append"  [attr-defined]
+                            flow_analysis["end_events"].append(element.ele...
+                            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_epk_process_parser.py:381:17: error: Unsupported operand types for +
+("object" and "int")  [operator]
+                    flow_analysis["control_flow_complexity"] += 1
+                    ^
+uds3\uds3_epk_process_parser.py:386:13: error: Unsupported target for indexed
+assignment ("object")  [index]
+                flow_analysis["satellite_distribution"][sat_type] = (
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_epk_process_parser.py:387:17: error: "object" has no attribute "get" 
+[attr-defined]
+                    flow_analysis["satellite_distribution"].get(sat_type, ...
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_epk_process_parser.py:391:54: error: "object" has no attribute "get" 
+[attr-defined]
+            flow_analysis["organizational_complexity"] = flow_analysis[
+                                                         ^
+uds3\uds3_epk_process_parser.py:394:44: error: "object" has no attribute "get" 
+[attr-defined]
+            flow_analysis["data_complexity"] = flow_analysis["satellite_di...
+                                               ^~~~~~~~~~~~~~~~~~~~~~~~~~~...
+uds3\uds3_epk_process_parser.py:396:13: error: "object" has no attribute "get" 
+[attr-defined]
+            ) + flow_analysis["satellite_distribution"].get("datenentitaet...
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_epk_process_parser.py:762:16: error: Incompatible return value type
+(got "dict[Any, Any] | None", expected "dict[str, list[str]]")  [return-value]
+            return satellites if satellites else None
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_epk_process_parser.py:850:13: error: "object" has no attribute
+"append"  [attr-defined]
+                result["errors"].append("Keine Ereignisse gefunden")
+                ^~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_epk_process_parser.py:854:13: error: "object" has no attribute
+"append"  [attr-defined]
+                result["errors"].append("Keine Funktionen gefunden")
+                ^~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_epk_process_parser.py:860:17: error: "object" has no attribute
+"append"  [attr-defined]
+                    result["warnings"].append("Event-Function-Verhõltnis u...
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_epk_process_parser.py:880:13: error: "object" has no attribute
+"append"  [attr-defined]
+                result["warnings"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_document_classifier.py:31:1: error: Cannot find implementation or
+library stub for module named "uds3_admin_types"  [import-not-found]
+    from uds3_admin_types import AdminDocumentType, AdminLevel, AdminDomai...
+    ^
+uds3\uds3_document_classifier.py:437:41: error: Argument "key" to "max" has
+incompatible type overloaded function; expected
+"Callable[[Any], SupportsDunderLT[Any] | SupportsDunderGT[Any]]"  [arg-type]
+                best_type = max(scores, key=scores.get)
+                                            ^~~~~~~~~~
+uds3\uds3_document_classifier.py:463:36: error: Argument "key" to "max" has
+incompatible type overloaded function; expected
+"Callable[[Any], SupportsDunderLT[Any] | SupportsDunderGT[Any]]"  [arg-type]
+                return max(scores, key=scores.get)
+                                       ^~~~~~~~~~
+uds3\uds3_document_classifier.py:485:36: error: Argument "key" to "max" has
+incompatible type overloaded function; expected
+"Callable[[Any], SupportsDunderLT[Any] | SupportsDunderGT[Any]]"  [arg-type]
+                return max(scores, key=scores.get)
+                                       ^~~~~~~~~~
+uds3\uds3_document_classifier.py:504:36: error: Argument "key" to "max" has
+incompatible type overloaded function; expected
+"Callable[[Any], SupportsDunderLT[Any] | SupportsDunderGT[Any]]"  [arg-type]
+                return max(scores, key=scores.get)
+                                       ^~~~~~~~~~
+uds3\uds3_document_classifier.py:620:1: error: Cannot find implementation or
+library stub for module named "uds3_collection_templates"  [import-not-found]
+            from uds3_collection_templates import UDS3CollectionTemplates
+    ^
+uds3\uds3_complete_process_integration.py:78:9: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+uds3\uds3_complete_process_integration.py:79:9: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+uds3\uds3_complete_process_integration.py:90:1: error: Cannot find
+implementation or library stub for module named "uds3_bpmn_process_parser" 
+[import-not-found]
+                from uds3_bpmn_process_parser import BPMNProcessParser, BP...
+    ^
+uds3\uds3_complete_process_integration.py:102:1: error: Cannot find
+implementation or library stub for module named "uds3_epk_process_parser" 
+[import-not-found]
+                from uds3_epk_process_parser import EPKProcessParser, EPKV...
+    ^
+uds3\uds3_complete_process_integration.py:206:1: error: Cannot find
+implementation or library stub for module named "uds3_process_export_engine" 
+[import-not-found]
+                from uds3_process_export_engine import ProcessExportEngine
+    ^
+uds3\uds3_complete_process_integration.py:356:13: error: Argument 1 to
+"parse_process_xml" of "UDS3UnifiedProcessParser" has incompatible type
+"str | dict[str, Any]"; expected "str"  [arg-type]
+                xml_content, format_hint, filename
+                ^~~~~~~~~~~
+uds3\uds3_complete_process_integration.py:364:21: error: Argument 1 to
+"validate_process" of "UDS3UnifiedProcessParser" has incompatible type
+"str | dict[str, Any]"; expected "str"  [arg-type]
+                        xml_content, format_hint
+                        ^~~~~~~~~~~
+uds3\uds3_complete_process_integration.py:376:38: error: Item "dict[str, Any]"
+of "str | dict[str, Any]" has no attribute "encode"  [union-attr]
+                    "original_size": len(xml_content.encode("utf-8")),
+                                         ^~~~~~~~~~~~~~~~~~
+uds3\uds3_complete_process_integration.py:393:13: error: Argument 1 to
+"export_to_xml" of "UDS3UnifiedProcessExporter" has incompatible type
+"str | dict[str, Any]"; expected "dict[str, Any]"  [arg-type]
+                uds3_document,
+                ^~~~~~~~~~~~~
+uds3\uds3_complete_process_integration.py:418:58: error: Argument 1 to
+"validate_process" of "UDS3UnifiedProcessParser" has incompatible type
+"str | dict[str, Any]"; expected "str"  [arg-type]
+    ...validation_result = self.parser.validate_process(xml_content, format_h...
+                                                        ^~~~~~~~~~~
+uds3\uds3_complete_process_integration.py:494:30: error: Incompatible default
+for argument "callback" (default has type "None", argument has type
+"Callable[..., Any]")  [assignment]
+            callback: Callable = None,
+                                 ^~~~
+uds3\uds3_complete_process_integration.py:494:30: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+uds3\uds3_complete_process_integration.py:494:30: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+uds3\uds3_complete_process_integration.py:522:30: error: Incompatible default
+for argument "callback" (default has type "None", argument has type
+"Callable[..., Any]")  [assignment]
+            callback: Callable = None,
+                                 ^~~~
+uds3\uds3_complete_process_integration.py:522:30: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+uds3\uds3_complete_process_integration.py:522:30: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+uds3\uds3_complete_process_integration.py:554:30: error: Incompatible default
+for argument "callback" (default has type "None", argument has type
+"Callable[..., Any]")  [assignment]
+            callback: Callable = None,
+                                 ^~~~
+uds3\uds3_complete_process_integration.py:554:30: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+uds3\uds3_complete_process_integration.py:554:30: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+uds3\uds3_bpmn_process_parser.py:50:45: error: Incompatible types in assignment
+(expression has type "None", variable has type "dict[str, Any]")  [assignment]
+        verwaltung_attributes: Dict[str, Any] = None
+                                                ^~~~
+uds3\uds3_bpmn_process_parser.py:207:38: error: Incompatible types in
+assignment (expression has type "int", variable has type "str | None") 
+[assignment]
+                            attr_value = int(attr_value)
+                                         ^~~~~~~~~~~~~~~
+uds3\uds3_bpmn_process_parser.py:207:42: error: Argument 1 to "int" has
+incompatible type "str | None"; expected
+"str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc"  [arg-type]
+                            attr_value = int(attr_value)
+                                             ^~~~~~~~~~
+uds3\uds3_bpmn_process_parser.py:209:38: error: Incompatible types in
+assignment (expression has type "float", variable has type "str | None") 
+[assignment]
+                            attr_value = float(attr_value)
+                                         ^~~~~~~~~~~~~~~~~
+uds3\uds3_bpmn_process_parser.py:209:44: error: Argument 1 to "float" has
+incompatible type "str | None"; expected
+"str | Buffer | SupportsFloat | SupportsIndex"  [arg-type]
+                            attr_value = float(attr_value)
+                                               ^~~~~~~~~~
+uds3\uds3_bpmn_process_parser.py:211:38: error: Item "None" of "str | None" has
+no attribute "lower"  [union-attr]
+                            attr_value = attr_value.lower() in ("true", "1...
+                                         ^~~~~~~~~~~~~~~~
+uds3\uds3_bpmn_process_parser.py:211:38: error: Incompatible types in
+assignment (expression has type "bool", variable has type "str | None") 
+[assignment]
+                            attr_value = attr_value.lower() in ("true", "1...
+                                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~...
+uds3\uds3_bpmn_process_parser.py:213:38: error: Incompatible types in
+assignment (expression has type "list[str | Any]", variable has type
+"str | None")  [assignment]
+                            attr_value = [item.strip() for item in attr_va...
+                                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~...
+uds3\uds3_bpmn_process_parser.py:213:64: error: Item "None" of "str | None" has
+no attribute "split"  [union-attr]
+    ...          attr_value = [item.strip() for item in attr_value.split(",")...
+                                                        ^~~~~~~~~~~~~~~~
+uds3\uds3_bpmn_process_parser.py:271:13: error: Unsupported target for indexed
+assignment ("object")  [index]
+                flow_analysis["element_types"][element_type] = (
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_bpmn_process_parser.py:272:17: error: "object" has no attribute "get"
+ [attr-defined]
+                    flow_analysis["element_types"].get(element_type, 0) + ...
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_bpmn_process_parser.py:276:17: error: "object" has no attribute
+"append"  [attr-defined]
+                    flow_analysis["start_events"].append(element.element_i...
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_bpmn_process_parser.py:278:17: error: "object" has no attribute
+"append"  [attr-defined]
+                    flow_analysis["end_events"].append(element.element_id)
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_bpmn_process_parser.py:280:17: error: Unsupported operand types for +
+("object" and "int")  [operator]
+                    flow_analysis["decision_points"] += 1
+                    ^
+uds3\uds3_bpmn_process_parser.py:282:21: error: Unsupported operand types for +
+("object" and "int")  [operator]
+                        flow_analysis["parallel_paths"] += 1
+                        ^
+uds3\uds3_bpmn_process_parser.py:288:33: error: Unsupported operand types for /
+("object" and "int")  [operator]
+                "branching_factor": flow_analysis["decision_points"]
+                                    ^
+uds3\uds3_bpmn_process_parser.py:527:54: error: Item "None" of "str | None" has
+no attribute "split"  [union-attr]
+    ...        verwaltung_attrs["kandidaten_gruppen"] = elem.get("candidateGr...
+                                                        ^~~~~~~~~~~~~~~~~~~~~...
+uds3\uds3_bpmn_process_parser.py:732:13: error: "object" has no attribute
+"append"  [attr-defined]
+                result["errors"].append("BPMN 2.0 Namespace fehlt")
+                ^~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_bpmn_process_parser.py:746:13: error: "object" has no attribute
+"append"  [attr-defined]
+                result["errors"].append("Kein Start-Event gefunden")
+                ^~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_bpmn_process_parser.py:752:13: error: "object" has no attribute
+"append"  [attr-defined]
+                result["errors"].append("Kein End-Event gefunden")
+                ^~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_bpmn_process_parser.py:764:13: error: "object" has no attribute
+"append"  [attr-defined]
+                result["issues"].append("Keine Verwaltungsattribute gefund...
+                ^~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_bpmn_process_parser.py:765:13: error: Unsupported operand types for -
+("object" and "float")  [operator]
+                result["score"] -= 30.0
+                ^
+uds3\uds3_bpmn_process_parser.py:767:31: error: Unsupported operand types for
+<= ("float" and "object")  [operator]
+            result["compliant"] = result["score"] >= 70.0
+                                  ^
+uds3\uds3_bpmn_process_parser.py:777:31: error: Unsupported operand types for
+<= ("float" and "object")  [operator]
+            result["compliant"] = result["score"] >= 80.0
+                                  ^
+database\database_api_keyvalue_postgresql.py:15:1: error: Cannot find
+implementation or library stub for module named "psycopg"  [import-not-found]
+    import psycopg
+    ^
+database\database_api_keyvalue_postgresql.py:17:1: error: Cannot find
+implementation or library stub for module named "psycopg.rows" 
+[import-not-found]
+    from psycopg.rows import dict_row
+    ^
+database\database_api_keyvalue_postgresql.py:23:22: error: Incompatible types
+in assignment (expression has type "tuple[Never, ...]", variable has type
+"tuple[Any, Any]")  [assignment]
+        _JSON_WRAPPERS = tuple()
+                         ^~~~~~~
+database\database_api_keyvalue_postgresql.py:34:26: error: Argument 1 to
+"__init__" of "DatabaseBackend" has incompatible type "dict[str, Any] | None";
+expected "dict[Any, Any]"  [arg-type]
+            super().__init__(config)
+                             ^~~~~~
+database\database_api_file_storage.py:119:30: error: Argument 1 to "copy2" has
+incompatible type "str | None"; expected "str | PathLike[str]"  [arg-type]
+                    shutil.copy2(source_path, abs_path)
+                                 ^~~~~~~~~~~
+database\database_api_file_storage.py:171:30: error: Argument 1 to "copy2" has
+incompatible type "str | None"; expected "str | PathLike[str]"  [arg-type]
+                    shutil.copy2(source_path, abs_path)
+                                 ^~~~~~~~~~~
+database\database_api_couchdb.py:16:1: error: Cannot find implementation or
+library stub for module named "couchdb"  [import-not-found]
+    import couchdb  # pip install CouchDB
+    ^
+database\database_api_couchdb.py:25:26: error: Argument 1 to "__init__" of
+"DatabaseBackend" has incompatible type "dict[Any, Any] | None"; expected
+"dict[Any, Any]"  [arg-type]
+            super().__init__(config)
+                             ^~~~~~
+database\database_api_couchdb.py:104:36: error: Incompatible default for
+argument "map_fun" (default has type "None", argument has type "str") 
+[assignment]
+        def query(self, map_fun: str = None, reduce_fun: str = None, **opt...
+                                       ^~~~
+database\database_api_couchdb.py:104:36: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_couchdb.py:104:36: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_couchdb.py:104:60: error: Incompatible default for
+argument "reduce_fun" (default has type "None", argument has type "str") 
+[assignment]
+    ...ery(self, map_fun: str = None, reduce_fun: str = None, **opts) -> List...
+                                                        ^~~~
+database\database_api_postgresql.py:13:1: error: Cannot find implementation or
+library stub for module named "psycopg"  [import-not-found]
+    import psycopg
+    ^
+database\database_api_postgresql.py:14:1: error: Cannot find implementation or
+library stub for module named "psycopg.rows"  [import-not-found]
+    from psycopg.rows import dict_row
+    ^
+database\database_api_postgresql.py:23:26: error: Argument 1 to "__init__" of
+"RelationalDatabaseBackend" has incompatible type "dict[Any, Any] | None";
+expected "dict[Any, Any]"  [arg-type]
+            super().__init__(config)
+                             ^~~~~~
+database\database_api_postgresql.py:66:57: error: Incompatible default for
+argument "params" (default has type "None", argument has type "tuple[Any, ...]")
+ [assignment]
+    ... execute_query(self, query: str, params: Tuple = None) -> List[Dict[st...
+                                                        ^~~~
+database\database_api_postgresql.py:66:57: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_postgresql.py:66:57: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_neo4j.py:43:1: error: Cannot find implementation or
+library stub for module named "neo4j"  [import-not-found]
+        from neo4j import GraphDatabase, basic_auth
+    ^
+database\database_api_neo4j.py:62:26: error: Argument 1 to "__init__" of
+"GraphDatabaseBackend" has incompatible type "dict[Any, Any] | None"; expected
+"dict[Any, Any]"  [arg-type]
+            super().__init__(config)
+                             ^~~~~~
+database\database_api_neo4j.py:133:56: error: Incompatible default for argument
+"params" (default has type "None", argument has type "dict[Any, Any]") 
+[assignment]
+    ...f execute_query(self, query: str, params: Dict = None) -> List[Dict[st...
+                                                        ^~~~
+database\database_api_neo4j.py:133:56: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_neo4j.py:133:56: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_neo4j.py:162:5: error: Return type "str | None" of
+"create_node" incompatible with return type "str" in supertype
+"database.database_api_base.GraphDatabaseBackend"  [override]
+        def create_node(self, label: str, properties: Dict[str, Any]) -> O...
+        ^
+database\database_api_neo4j.py:179:29: error: Item "None" of "Any | None" has
+no attribute "items"  [union-attr]
+                    return dict(node.items())
+                                ^~~~~~~~~~
+database\database_api_neo4j.py:181:63: error: Item "None" of "Any | None" has
+no attribute "items"  [union-attr]
+    ...           return {k: getattr(v, 'value', v) for k, v in node.items()}
+                                                                ^~~~~~~~~~
+database\database_api_neo4j.py:185:95: error: Incompatible default for argument
+"set_props" (default has type "None", argument has type "dict[str, Any]") 
+[assignment]
+    ...ops: Dict[str, Any], set_props: Dict[str, Any] = None) -> Optional[str...
+                                                        ^~~~
+database\database_api_neo4j.py:185:95: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_neo4j.py:185:95: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_neo4j.py:226:33: error: Item "None" of "Any | None" has
+no attribute "items"  [union-attr]
+                        data = dict(node.items())
+                                    ^~~~~~~~~~
+database\database_api_neo4j.py:228:67: error: Item "None" of "Any | None" has
+no attribute "items"  [union-attr]
+    ...           data = {k: getattr(v, 'value', v) for k, v in node.items()}
+                                                                ^~~~~~~~~~
+database\database_api_neo4j.py:230:24: error: Incompatible types in assignment
+(expression has type "Any | None", variable has type "dict[Any, Any]") 
+[assignment]
+                    data = node
+                           ^~~~
+database\database_api_neo4j.py:256:105: error: Incompatible default for
+argument "properties" (default has type "None", argument has type
+"dict[str, Any]")  [assignment]
+    ...Any, rel_type: str, properties: Dict[str, Any] = None) -> Optional[str...
+                                                        ^~~~
+database\database_api_neo4j.py:256:105: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_neo4j.py:256:105: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_neo4j.py:282:88: error: Incompatible default for argument
+"properties" (default has type "None", argument has type "dict[Any, Any]") 
+[assignment]
+    ..._id: str, to_id: str, edge_type: str, properties: Dict = None) -> str:
+                                                                ^~~~
+database\database_api_neo4j.py:282:88: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_neo4j.py:282:88: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_neo4j.py:287:16: error: Incompatible return value type
+(got "str | None", expected "str")  [return-value]
+            return rel_id
+                   ^~~~~~
+database\database_api_neo4j.py:289:58: error: Incompatible default for argument
+"filters" (default has type "None", argument has type "dict[Any, Any]") 
+[assignment]
+    ... find_nodes(self, node_type: str, filters: Dict = None) -> List[Dict]:
+                                                         ^~~~
+database\database_api_neo4j.py:289:58: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_neo4j.py:289:58: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_neo4j.py:314:34: error: Item "None" of "Any | None" has
+no attribute "items"  [union-attr]
+                        props = dict(rel.items())
+                                     ^~~~~~~~~
+database\database_api_neo4j.py:316:68: error: Item "None" of "Any | None" has
+no attribute "items"  [union-attr]
+    ...           props = {k: getattr(v, 'value', v) for k, v in rel.items()}
+                                                                 ^~~~~~~~~
+database\database_api_chromadb.py:16:1: error: Cannot find implementation or
+library stub for module named "chromadb"  [import-not-found]
+    import chromadb
+    ^
+database\database_api_chromadb.py:17:1: error: Cannot find implementation or
+library stub for module named "chromadb.config"  [import-not-found]
+    from chromadb.config import Settings
+    ^
+database\database_api_chromadb.py:26:26: error: Argument 1 to "__init__" of
+"VectorDatabaseBackend" has incompatible type "dict[Any, Any] | None"; expected
+"dict[Any, Any]"  [arg-type]
+            super().__init__(config)
+                             ^~~~~~
+database\database_api_chromadb.py:80:86: error: Incompatible default for
+argument "metadata" (default has type "None", argument has type
+"dict[Any, Any]")  [assignment]
+    ...r_id: str, vector: List[float], metadata: Dict = None, collection_name...
+                                                        ^~~~
+database\database_api_chromadb.py:80:86: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_chromadb.py:80:86: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_chromadb.py:80:115: error: Incompatible default for
+argument "collection_name" (default has type "None", argument has type "str") 
+[assignment]
+    ...t[float], metadata: Dict = None, collection_name: str = None) -> bool:
+                                                               ^~~~
+database\database_api_chromadb.py:89:90: error: Incompatible default for
+argument "collection_name" (default has type "None", argument has type "str") 
+[assignment]
+    ...[float], top_k: int = 10, collection_name: str = None) -> List[Dict[st...
+                                                        ^~~~
+database\database_api_chromadb.py:89:90: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_chromadb.py:89:90: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_chromadb.py:111:69: error: Incompatible default for
+argument "collection_name" (default has type "None", argument has type "str") 
+[assignment]
+    ...te_vectors(self, ids: List[str], collection_name: str = None) -> bool:
+                                                               ^~~~
+database\database_api_chromadb.py:111:69: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_chromadb.py:111:69: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_chromadb.py:127:61: error: Incompatible default for
+argument "metadata" (default has type "None", argument has type
+"dict[Any, Any]")  [assignment]
+    ...def create_collection(self, name: str, metadata: Dict = None) -> bool:
+                                                               ^~~~
+database\database_api_chromadb.py:127:61: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_chromadb.py:127:61: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_chromadb.py:150:80: error: Incompatible default for
+argument "metadata" (default has type "None", argument has type
+"dict[Any, Any]")  [assignment]
+    ...r_id: str, vector: List[float], metadata: Dict = None, collection_name...
+                                                        ^~~~
+database\database_api_chromadb.py:150:80: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_chromadb.py:150:80: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_chromadb.py:150:109: error: Incompatible default for
+argument "collection_name" (default has type "None", argument has type "str") 
+[assignment]
+    ...t[float], metadata: Dict = None, collection_name: str = None) -> bool:
+                                                               ^~~~
+database\database_api_chromadb.py:181:97: error: Incompatible default for
+argument "collection_name" (default has type "None", argument has type "str") 
+[assignment]
+    ...t[float], top_k: int = 10, collection_name: str = None) -> List[Dict]:
+                                                         ^~~~
+database\database_api_chromadb.py:181:97: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_chromadb.py:181:97: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+uds3\uds3_security_quality.py:260:20: error: Incompatible return value type
+(got "None", expected "str")  [return-value]
+                return None
+                       ^~~~
+uds3\uds3_security_quality.py:288:9: error: Unsupported target for indexed
+assignment ("object")  [index]
+            verification_result["checks"]["content_hash"] = hash_match
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_security_quality.py:292:13: error: "object" has no attribute "append"
+ [attr-defined]
+                verification_result["issues"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_security_quality.py:301:9: error: Unsupported target for indexed
+assignment ("object")  [index]
+            verification_result["checks"]["checksum"] = checksum_match
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_security_quality.py:305:13: error: "object" has no attribute "append"
+ [attr-defined]
+                verification_result["issues"].append(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_security_quality.py:319:13: error: Unsupported target for indexed
+assignment ("object")  [index]
+                verification_result["checks"]["hmac"] = hmac_match
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_security_quality.py:323:17: error: "object" has no attribute "append"
+ [attr-defined]
+                    verification_result["issues"].append(
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_security_quality.py:366:48: error: Incompatible default for argument
+"config" (default has type "None", argument has type "QualityConfig") 
+[assignment]
+        def __init__(self, config: QualityConfig = None):
+                                                   ^~~~
+uds3\uds3_security_quality.py:366:48: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+uds3\uds3_security_quality.py:366:48: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+uds3\uds3_security_quality.py:445:28: error: Argument 2 to
+"_calculate_completeness_score" of "DataQualityManager" has incompatible type
+"dict[Any, Any] | None"; expected "dict[Any, Any]"  [arg-type]
+                document_data, vector_data, graph_data, relational_data
+                               ^~~~~~~~~~~
+uds3\uds3_security_quality.py:445:41: error: Argument 3 to
+"_calculate_completeness_score" of "DataQualityManager" has incompatible type
+"dict[Any, Any] | None"; expected "dict[Any, Any]"  [arg-type]
+                document_data, vector_data, graph_data, relational_data
+                                            ^~~~~~~~~~
+uds3\uds3_security_quality.py:445:53: error: Argument 4 to
+"_calculate_completeness_score" of "DataQualityManager" has incompatible type
+"dict[Any, Any] | None"; expected "dict[Any, Any]"  [arg-type]
+                document_data, vector_data, graph_data, relational_data
+                                                        ^~~~~~~~~~~~~~~
+uds3\uds3_security_quality.py:451:28: error: Argument 2 to
+"_calculate_consistency_score" of "DataQualityManager" has incompatible type
+"dict[Any, Any] | None"; expected "dict[Any, Any]"  [arg-type]
+                document_data, vector_data, graph_data, relational_data
+                               ^~~~~~~~~~~
+uds3\uds3_security_quality.py:451:41: error: Argument 3 to
+"_calculate_consistency_score" of "DataQualityManager" has incompatible type
+"dict[Any, Any] | None"; expected "dict[Any, Any]"  [arg-type]
+                document_data, vector_data, graph_data, relational_data
+                                            ^~~~~~~~~~
+uds3\uds3_security_quality.py:451:53: error: Argument 4 to
+"_calculate_consistency_score" of "DataQualityManager" has incompatible type
+"dict[Any, Any] | None"; expected "dict[Any, Any]"  [arg-type]
+                document_data, vector_data, graph_data, relational_data
+                                                        ^~~~~~~~~~~~~~~
+uds3\uds3_security_quality.py:734:17: error: Unsupported target for indexed
+assignment ("object")  [index]
+                    cross_db_quality["database_scores"][db_name] = db_scor...
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_security_quality.py:744:29: error: "object" has no attribute "values"
+ [attr-defined]
+                avg_score = sum(cross_db_quality["database_scores"].values...
+                                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_security_quality.py:745:17: error: Argument 1 to "len" has
+incompatible type "object"; expected "Sized"  [arg-type]
+                    cross_db_quality["database_scores"]
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_security_quality.py:840:32: error: Argument 1 to
+"DataSecurityManager" has incompatible type "SecurityConfig"; expected
+"SecurityLevel"  [arg-type]
+        return DataSecurityManager(config)
+                                   ^~~~~~
+uds3\uds3_security.py:151:77: error: Incompatible default for argument
+"security_level" (default has type "None", argument has type "SecurityLevel") 
+[assignment]
+    ...lf, content: str, file_path: str, security_level: SecurityLevel = None
+                                                                         ^~~~
+uds3\uds3_security.py:151:77: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+uds3\uds3_security.py:151:77: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+uds3\uds3_security.py:267:20: error: Incompatible return value type (got
+"None", expected "str")  [return-value]
+                return None
+                       ^~~~
+uds3\uds3_security.py:297:17: error: Unsupported target for indexed assignment
+("object")  [index]
+                    verification_result["checks"]["content_hash"] = {
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_security.py:308:17: error: Unsupported target for indexed assignment
+("object")  [index]
+                    verification_result["checks"]["checksum"] = {
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_security.py:325:21: error: Unsupported target for indexed assignment
+("object")  [index]
+                        verification_result["checks"]["hmac"] = {
+                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_security.py:334:30: error: "object" has no attribute "values" 
+[attr-defined]
+                    for check in verification_result["checks"].values()
+                                 ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_security.py:342:28: error: Argument "result" to
+"create_audit_log_entry" of "DataSecurityManager" has incompatible type
+"object"; expected "bool"  [arg-type]
+                        result=verification_result["integrity_verified"],
+                               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_security.py:343:29: error: Argument "details" to
+"create_audit_log_entry" of "DataSecurityManager" has incompatible type
+"object"; expected "dict[Any, Any] | None"  [arg-type]
+                        details=verification_result["checks"],
+                                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_security.py:436:13: error: "object" has no attribute "append" 
+[attr-defined]
+                deletion_result["steps_completed"].append("audit_log_creat...
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_security.py:444:13: error: "object" has no attribute "append" 
+[attr-defined]
+                deletion_result["steps_completed"].append("security_info_p...
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_security.py:455:13: error: "object" has no attribute "append" 
+[attr-defined]
+                deletion_result["steps_completed"].append("deletion_confir...
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+database\database_manager.py:27:1: error: Cannot find implementation or library
+stub for module named "module_status_manager"  [import-not-found]
+        from module_status_manager import (
+    ^
+database\database_manager.py:61:9: error: Need type annotation for
+"backend_errors" (hint: "backend_errors: list[<type>] = ...")  [var-annotated]
+            self.backend_errors = []        # Sammle Backend-Fehler
+            ^~~~~~~~~~~~~~~~~~~
+database\database_manager.py:67:9: error: Need type annotation for
+"governance_conf" (hint: "governance_conf: dict[<type>, <type>] = ...") 
+[var-annotated]
+            governance_conf = {}
+            ^~~~~~~~~~~~~~~
+database\database_manager.py:97:1: error: Cannot find implementation or library
+stub for module named "database.database_api_chromadb_remote" 
+[import-not-found]
+                            from database.database_api_chromadb_remote imp...
+    ^
+database\database_manager.py:142:60: error: Incompatible types in assignment
+(expression has type "tuple[type[Neo4jGraphBackend], dict[Any, Any]]", target
+has type "tuple[type[ChromaVectorBackend], dict[Any, Any]]")  [assignment]
+    ...              self._backend_factories['graph'] = (Neo4jGraphBackend, c...
+                                                        ^~~~~~~~~~~~~~~~~~~~~...
+database\database_manager.py:188:1: error: Cannot find implementation or
+library stub for module named "database.database_api_mongodb" 
+[import-not-found]
+                                from database.database_api_mongodb import ...
+    ^
+database\database_manager.py:192:47: error: Incompatible types in assignment
+(expression has type "type[CouchDBAdapter]", variable has type
+"type[PostgreSQLRelationalBackend]")  [assignment]
+                                backend_cls_rel = CouchDBAdapter
+                                                  ^~~~~~~~~~~~~~
+database\database_manager.py:196:47: error: Incompatible types in assignment
+(expression has type "type[SQLiteRelationalBackend]", variable has type
+"type[PostgreSQLRelationalBackend]")  [assignment]
+                                backend_cls_rel = SQLiteRelationalBackend
+                                                  ^~~~~~~~~~~~~~~~~~~~~~~
+database\database_manager.py:199:69: error: Incompatible types in assignment
+(expression has type "tuple[type[PostgreSQLRelationalBackend], dict[Any, Any]]",
+target has type "tuple[type[ChromaVectorBackend], dict[Any, Any]]") 
+[assignment]
+    ...         self._backend_factories['relational'] = (backend_cls_rel, con...
+                                                        ^~~~~~~~~~~~~~~~~~~~~~~
+database\database_manager.py:232:59: error: Incompatible types in assignment
+(expression has type "tuple[type[FileSystemStorageBackend], dict[Any, Any]]",
+target has type "tuple[type[ChromaVectorBackend], dict[Any, Any]]") 
+[assignment]
+    ...               self._backend_factories['file'] = (FileSystemStorageBac...
+                                                        ^~~~~~~~~~~~~~~~~~~~~...
+database\database_manager.py:268:31: error: Incompatible types in assignment
+(expression has type "None", variable has type "type[ChromaVectorBackend]") 
+[assignment]
+                    backend_cls = None
+                                  ^~~~
+database\database_manager.py:276:39: error: Incompatible types in assignment
+(expression has type "type[PostgreSQLKeyValueBackend]", variable has type
+"type[ChromaVectorBackend]")  [assignment]
+                            backend_cls = PostgreSQLKeyValueBackend
+                                          ^~~~~~~~~~~~~~~~~~~~~~~~~
+database\database_manager.py:284:20: error: Function "backend_cls" could always
+be true in boolean context  [truthy-function]
+                    if backend_cls:
+                       ^~~~~~~~~~~
+database\database_manager.py:460:36: error: "DatabaseManager" has no attribute
+"backend_modules"  [attr-defined]
+                if backend_type not in self.backend_modules:
+                                       ^~~~~~~~~~~~~~~~~~~~
+database\database_manager.py:464:27: error: "DatabaseManager" has no attribute
+"backend_modules"  [attr-defined]
+                module_name = self.backend_modules[backend_type]
+                              ^~~~~~~~~~~~~~~~~~~~
+database\database_manager.py:484:36: error: "DatabaseManager" has no attribute
+"backend_modules"  [attr-defined]
+                if backend_type not in self.backend_modules:
+                                       ^~~~~~~~~~~~~~~~~~~~
+database\database_manager.py:488:27: error: "DatabaseManager" has no attribute
+"backend_modules"  [attr-defined]
+                module_name = self.backend_modules[backend_type]
+                              ^~~~~~~~~~~~~~~~~~~~
+database\database_manager.py:508:36: error: "DatabaseManager" has no attribute
+"backend_modules"  [attr-defined]
+                if backend_type not in self.backend_modules:
+                                       ^~~~~~~~~~~~~~~~~~~~
+database\database_manager.py:512:27: error: "DatabaseManager" has no attribute
+"backend_modules"  [attr-defined]
+                module_name = self.backend_modules[backend_type]
+                              ^~~~~~~~~~~~~~~~~~~~
+database\database_manager.py:890:109: error: Incompatible default for argument
+"doc_id" (default has type "None", argument has type "str")  [assignment]
+    ...lection_name: str, document: str, metadata: dict, doc_id: str = None):
+                                                                       ^~~~
+database\database_manager.py:890:109: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_manager.py:890:109: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_manager.py:905:9: error: Need type annotation for "results"
+(hint: "results: dict[<type>, <type>] = ...")  [var-annotated]
+            results = {}
+            ^~~~~~~
+database\database_manager.py:940:50: error: "None" has no attribute "connect" 
+[attr-defined]
+                            future = executor.submit(backend_or_factory.co...
+                                                     ^~~~~~~~~~~~~~~~~~~~~...
+database\database_manager.py:941:44: error: Incompatible types in assignment
+(expression has type "tuple[Future[Any], None]", target has type
+"tuple[Future[Any], str]")  [assignment]
+                            future_map[name] = (future, backend_or_factory...
+                                               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+database\database_manager.py:1017:108: error: Incompatible default for argument
+"properties" (default has type "None", argument has type "dict[Any, Any]") 
+[assignment]
+    ...f, from_id: str, to_id: str, edge_type: str, properties: dict = None):
+                                                                       ^~~~
+database\database_manager.py:1017:108: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_manager.py:1017:108: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_manager.py:1042:35: error: Module has no attribute
+"create_backend_instances_dynamisch"  [attr-defined]
+        dbm = create_database_manager(config.create_backend_instances_dyna...
+                                      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~...
+uds3\uds3_saga_orchestrator.py:438:13: error: Item "None" of "Any | None" has
+no attribute "execute_query"  [union-attr]
+                self.relational_backend.execute_query(statement)
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_saga_orchestrator.py:455:17: error: Item "None" of "Any | None" has
+no attribute "execute_query"  [union-attr]
+                    self.relational_backend.execute_query(statement)
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_saga_orchestrator.py:462:9: error: Item "None" of "Any | None" has no
+attribute "execute_query"  [union-attr]
+            self.relational_backend.execute_query(
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_saga_orchestrator.py:485:9: error: Item "None" of "Any | None" has no
+attribute "execute_query"  [union-attr]
+            self.relational_backend.execute_query(
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_saga_orchestrator.py:503:13: error: Item "None" of "Any | None" has
+no attribute "execute_query"  [union-attr]
+                self.relational_backend.execute_query(
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_saga_orchestrator.py:535:9: error: Item "None" of "Any | None" has no
+attribute "execute_query"  [union-attr]
+            self.relational_backend.execute_query(
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_saga_orchestrator.py:601:9: error: Item "None" of "Any | None" has no
+attribute "execute_query"  [union-attr]
+            self.relational_backend.execute_query(
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_saga_orchestrator.py:633:9: error: Item "None" of "Any | None" has no
+attribute "execute_query"  [union-attr]
+            self.relational_backend.execute_query(
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_saga_orchestrator.py:658:9: error: Item "None" of "Any | None" has no
+attribute "execute_query"  [union-attr]
+            self.relational_backend.execute_query(
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+database\database_api.py:275:16: error: "PersistentBackupManager" has no
+attribute "queue_batch_operation"  [attr-defined]
+            return self.queue_batch_operation('add_documents', operation_d...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~
+database\database_api.py:278:42: error: Incompatible default for argument
+"metadata" (default has type "None", argument has type "dict[Any, Any]") 
+[assignment]
+                            metadata: Dict = None, collection_name: str = ...
+                                             ^~~~
+database\database_api.py:278:42: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api.py:278:42: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api.py:278:71: error: Incompatible default for argument
+"collection_name" (default has type "None", argument has type "str") 
+[assignment]
+    ...          metadata: Dict = None, collection_name: str = None) -> bool:
+                                                               ^~~~
+database\database_api.py:287:16: error: "PersistentBackupManager" has no
+attribute "queue_batch_operation"  [attr-defined]
+            return self.queue_batch_operation('add_vectors', operation_dat...
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~
+database\database_api.py:290:61: error: Incompatible default for argument
+"metadata" (default has type "None", argument has type "dict[Any, Any]") 
+[assignment]
+    ...def create_collection(self, name: str, metadata: Dict = None) -> bool:
+                                                               ^~~~
+database\database_api.py:290:61: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api.py:290:61: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api.py:316:1: error: Name "GraphDatabaseBackend" already
+defined (possibly by an import)  [no-redef]
+    class GraphDatabaseBackend(DatabaseBackend):
+    ^
+database\database_api.py:319:39: error: Incompatible default for argument
+"config" (default has type "None", argument has type "dict[Any, Any]") 
+[assignment]
+        def __init__(self, config: Dict = None):
+                                          ^~~~
+database\database_api.py:319:39: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api.py:319:39: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api.py:370:45: error: Incompatible default for argument
+"properties" (default has type "None", argument has type "dict[Any, Any]") 
+[assignment]
+                             properties: Dict = None) -> bool:
+                                                ^~~~
+database\database_api.py:370:45: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api.py:370:45: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api.py:388:39: error: Incompatible default for argument
+"properties" (default has type "None", argument has type "dict[Any, Any]") 
+[assignment]
+                       properties: Dict = None) -> str:
+                                          ^~~~
+database\database_api.py:388:39: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api.py:388:39: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api.py:398:58: error: Incompatible default for argument
+"filters" (default has type "None", argument has type "dict[Any, Any]") 
+[assignment]
+    ... find_nodes(self, node_type: str, filters: Dict = None) -> List[Dict]:
+                                                         ^~~~
+database\database_api.py:398:58: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api.py:398:58: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api.py:407:1: error: Name "RelationalDatabaseBackend" already
+defined (possibly by an import)  [no-redef]
+    class RelationalDatabaseBackend(DatabaseBackend):
+    ^
+database\database_api.py:410:39: error: Incompatible default for argument
+"config" (default has type "None", argument has type "dict[Any, Any]") 
+[assignment]
+        def __init__(self, config: Dict = None):
+                                          ^~~~
+database\database_api.py:410:39: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api.py:410:39: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api.py:471:57: error: Incompatible default for argument
+"params" (default has type "None", argument has type "tuple[Any, ...]") 
+[assignment]
+    ...f execute_query(self, query: str, params: Tuple = None) -> List[Dict]:
+                                                         ^~~~
+database\database_api.py:471:57: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api.py:471:57: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\saga_crud.py:28:21: error: Incompatible types in assignment
+(expression has type "None", variable has type Module)  [assignment]
+        db_migrations = None
+                        ^~~~
+database\saga_crud.py:643:22: error: Incompatible types in assignment
+(expression has type "None", variable has type "CrudResult")  [assignment]
+                result = None
+                         ^~~~
+uds3\uds3_core.py:36:1: error: Cannot find implementation or library stub for
+module named "uds3_security"  [import-not-found]
+        from uds3_security import (
+    ^
+uds3\uds3_core.py:41:1: error: Cannot find implementation or library stub for
+module named "uds3_quality"  [import-not-found]
+        from uds3_quality import DataQualityManager, QualityMetric, create...
+    ^
+uds3\uds3_core.py:50:1: error: Cannot find implementation or library stub for
+module named "uds3_relations_data_framework"  [import-not-found]
+        from uds3_relations_data_framework import (
+    ^
+uds3\uds3_core.py:62:1: error: Cannot find implementation or library stub for
+module named "uds3_identity_service"  [import-not-found]
+        from uds3_identity_service import get_identity_service, IdentitySe...
+    ^
+uds3\uds3_core.py:84:1: error: Cannot find implementation or library stub for
+module named "uds3_saga_orchestrator"  [import-not-found]
+            from uds3_saga_orchestrator import (
+    ^
+uds3\uds3_core.py:84:9: error: Name "get_saga_orchestrator" already defined
+(possibly by an import)  [no-redef]
+            from uds3_saga_orchestrator import (
+            ^
+uds3\uds3_core.py:84:9: error: Name "SagaDefinition" already defined (possibly
+by an import)  [no-redef]
+            from uds3_saga_orchestrator import (
+            ^
+uds3\uds3_core.py:84:9: error: Name "SagaExecutionError" already defined
+(possibly by an import)  [no-redef]
+            from uds3_saga_orchestrator import (
+            ^
+uds3\uds3_core.py:84:9: error: Name "SagaExecutionResult" already defined
+(possibly by an import)  [no-redef]
+            from uds3_saga_orchestrator import (
+            ^
+uds3\uds3_core.py:84:9: error: Name "SagaStatus" already defined (possibly by
+an import)  [no-redef]
+            from uds3_saga_orchestrator import (
+            ^
+uds3\uds3_core.py:84:9: error: Name "SagaStep" already defined (possibly by an
+import)  [no-redef]
+            from uds3_saga_orchestrator import (
+            ^
+uds3\uds3_core.py:154:41: error: Incompatible types in assignment (expression
+has type "None", variable has type "list[str]")  [assignment]
+        graph_index_properties: List[str] = None
+                                            ^~~~
+uds3\uds3_core.py:155:37: error: Incompatible types in assignment (expression
+has type "None", variable has type "list[str]")  [assignment]
+        relational_indexes: List[str] = None
+                                        ^~~~
+uds3\uds3_core.py:156:35: error: Incompatible types in assignment (expression
+has type "None", variable has type "dict[str, int]")  [assignment]
+        batch_sizes: Dict[str, int] = None
+                                      ^~~~
+uds3\uds3_core.py:242:42: error: Incompatible types in assignment (expression
+has type "None", variable has type "UDS3SagaOrchestrator")  [assignment]
+                    self.saga_orchestrator = None
+                                             ^~~~
+uds3\uds3_core.py:247:38: error: Incompatible types in assignment (expression
+has type "None", variable has type "UDS3SagaOrchestrator")  [assignment]
+                self.saga_orchestrator = None
+                                         ^~~~
+uds3\uds3_core.py:890:43: error: Function "SagaDefinition" could always be true
+in boolean context  [truthy-function]
+                if self.saga_orchestrator and SagaDefinition and SagaStep:
+                                              ^~~~~~~~~~~~~~
+uds3\uds3_core.py:890:62: error: Function "SagaStep" could always be true in
+boolean context  [truthy-function]
+                if self.saga_orchestrator and SagaDefinition and SagaStep:
+                                                                 ^~~~~~~~
+uds3\uds3_core.py:913:17: error: "object" has no attribute "extend" 
+[attr-defined]
+                    create_result["issues"].extend(saga_execution.errors)
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:914:17: error: "object" has no attribute "extend" 
+[attr-defined]
+                    create_result["issues"].extend(saga_execution.compensa...
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:921:21: error: "object" has no attribute "update" 
+[attr-defined]
+                        create_result["saga"].update(
+                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:928:21: error: "object" has no attribute "extend" 
+[attr-defined]
+                        create_result["issues"].extend(local_result["error...
+                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:929:21: error: "object" has no attribute "extend" 
+[attr-defined]
+                        create_result["issues"].extend(local_result["compe...
+                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:934:17: error: "object" has no attribute "setdefault" 
+[attr-defined]
+                    create_result["saga"].setdefault(
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:973:12: error: "object" has no attribute "get" 
+[attr-defined]
+            if updates_copy.get("aktenzeichen"):
+               ^~~~~~~~~~~~~~~~
+uds3\uds3_core.py:974:39: error: Value of type "object" is not indexable 
+[index]
+                context["identity_key"] = updates_copy["aktenzeichen"]
+                                          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:975:39: error: Value of type "object" is not indexable 
+[index]
+                context["aktenzeichen"] = updates_copy["aktenzeichen"]
+                                          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:988:43: error: Function "SagaDefinition" could always be true
+in boolean context  [truthy-function]
+                if self.saga_orchestrator and SagaDefinition and SagaStep:
+                                              ^~~~~~~~~~~~~~
+uds3\uds3_core.py:988:62: error: Function "SagaStep" could always be true in
+boolean context  [truthy-function]
+                if self.saga_orchestrator and SagaDefinition and SagaStep:
+                                                                 ^~~~~~~~
+uds3\uds3_core.py:1082:43: error: Function "SagaDefinition" could always be
+true in boolean context  [truthy-function]
+                if self.saga_orchestrator and SagaDefinition and SagaStep:
+                                              ^~~~~~~~~~~~~~
+uds3\uds3_core.py:1082:62: error: Function "SagaStep" could always be true in
+boolean context  [truthy-function]
+                if self.saga_orchestrator and SagaDefinition and SagaStep:
+                                                                 ^~~~~~~~
+uds3\uds3_core.py:1516:17: error: Argument 1 to
+"_validate_cross_db_consistency" of "UnifiedDatabaseStrategy" has incompatible
+type "Any | None"; expected "str"  [arg-type]
+                    document_id,
+                    ^~~~~~~~~~~
+uds3\uds3_core.py:2074:30: error: Incompatible types in assignment (expression
+has type "Any | None", variable has type "dict[str, Any]")  [assignment]
+                    file_state = ctx.get("file_update_result")
+                                 ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:2588:12: error: Function "SagaStatus" could always be true in
+boolean context  [truthy-function]
+            if SagaStatus:
+               ^~~~~~~~~~
+uds3\uds3_core.py:2640:13: error: Unsupported target for indexed assignment
+("dict[Any, Any] | str")  [index]
+                operation_plan["databases"]["vector"] = {
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:2658:13: error: Unsupported target for indexed assignment
+("dict[Any, Any] | str")  [index]
+                operation_plan["databases"]["graph"] = {
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:2675:13: error: Unsupported target for indexed assignment
+("dict[Any, Any] | str")  [index]
+                operation_plan["databases"]["relational"] = {
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:2690:13: error: Unsupported target for indexed assignment
+("dict[Any, Any] | str")  [index]
+                operation_plan["databases"]["file_storage"] = {
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:2719:26: error: Need type annotation for "operation_plan" 
+[var-annotated]
+            operation_plan = {
+                             ^
+uds3\uds3_core.py:2733:9: error: Unsupported target for indexed assignment
+("list[Any] | dict[Any, Any] | bool | str")  [index]
+            operation_plan["databases"]["vector"] = {
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:2733:9: error: No overload variant of "__setitem__" of "list"
+matches argument types "str", "dict[str, Collection[Collection[str]]]" 
+[call-overload]
+            operation_plan["databases"]["vector"] = {
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:2733:9: note: Possible overload variants:
+uds3\uds3_core.py:2733:9: note:     def __setitem__(self, SupportsIndex, Any, /) -> None
+uds3\uds3_core.py:2733:9: note:     def __setitem__(self, slice[Any, Any, Any], Iterable[Any], /) -> None
+uds3\uds3_core.py:2751:9: error: Unsupported target for indexed assignment
+("list[Any] | dict[Any, Any] | bool | str")  [index]
+            operation_plan["databases"]["graph"] = {
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:2751:9: error: No overload variant of "__setitem__" of "list"
+matches argument types "str", "dict[str, Collection[Collection[str]]]" 
+[call-overload]
+            operation_plan["databases"]["graph"] = {
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:2751:9: note: Possible overload variants:
+uds3\uds3_core.py:2751:9: note:     def __setitem__(self, SupportsIndex, Any, /) -> None
+uds3\uds3_core.py:2751:9: note:     def __setitem__(self, slice[Any, Any, Any], Iterable[Any], /) -> None
+uds3\uds3_core.py:2767:9: error: Unsupported target for indexed assignment
+("list[Any] | dict[Any, Any] | bool | str")  [index]
+            operation_plan["databases"]["relational"] = {
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:2767:9: error: No overload variant of "__setitem__" of "list"
+matches argument types "str", "dict[str, Collection[Collection[str]]]" 
+[call-overload]
+            operation_plan["databases"]["relational"] = {
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:2767:9: note: Possible overload variants:
+uds3\uds3_core.py:2767:9: note:     def __setitem__(self, SupportsIndex, Any, /) -> None
+uds3\uds3_core.py:2767:9: note:     def __setitem__(self, slice[Any, Any, Any], Iterable[Any], /) -> None
+uds3\uds3_core.py:2785:9: error: Unsupported target for indexed assignment
+("list[Any] | dict[Any, Any] | bool | str")  [index]
+            operation_plan["databases"]["file_storage"] = {
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:2785:9: error: No overload variant of "__setitem__" of "list"
+matches argument types "str", "dict[str, Collection[Collection[str]]]" 
+[call-overload]
+            operation_plan["databases"]["file_storage"] = {
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:2785:9: note: Possible overload variants:
+uds3\uds3_core.py:2785:9: note:     def __setitem__(self, SupportsIndex, Any, /) -> None
+uds3\uds3_core.py:2785:9: note:     def __setitem__(self, slice[Any, Any, Any], Iterable[Any], /) -> None
+uds3\uds3_core.py:2840:32: error: Item "int" of
+"dict[str, object] | dict[str, dict[str, object]] | int | str" has no attribute
+"items"  [union-attr]
+            for db_type, config in batch_plan["databases"].items():
+                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:2840:32: error: Item "str" of
+"dict[str, object] | dict[str, dict[str, object]] | int | str" has no attribute
+"items"  [union-attr]
+            for db_type, config in batch_plan["databases"].items():
+                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:2842:59: error: Value of type "object | Any" is not indexable
+ [index]
+    ...   batches = self._create_batches(db_operations, config["batch_size"])
+                                                        ^~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:2843:13: error: Unsupported target for indexed assignment
+("object | Any")  [index]
+                config["batches"] = batches
+                ^~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:2874:9: error: Unsupported target for indexed assignment
+("object")  [index]
+            read_plan["databases"]["vector"] = {
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:2886:9: error: Unsupported target for indexed assignment
+("object")  [index]
+            read_plan["databases"]["graph"] = {
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:2898:9: error: Unsupported target for indexed assignment
+("object")  [index]
+            read_plan["databases"]["relational"] = {
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:2910:9: error: Unsupported target for indexed assignment
+("object")  [index]
+            read_plan["databases"]["file_storage"] = {
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:3070:9: error: Unsupported target for indexed assignment
+("object")  [index]
+            validation_result["databases"]["vector"] = vector_validation
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:3074:9: error: Unsupported target for indexed assignment
+("object")  [index]
+            validation_result["databases"]["graph"] = graph_validation
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:3078:9: error: Unsupported target for indexed assignment
+("object")  [index]
+            validation_result["databases"]["relational"] = relational_vali...
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:3987:9: error: Unsupported target for indexed assignment
+("object")  [index]
+            validation_result["checks"]["id_consistency"] = ids_consistent
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:3991:13: error: "object" has no attribute "append" 
+[attr-defined]
+                validation_result["issues"].append("Document ID mismatch b...
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:4007:9: error: Unsupported target for indexed assignment
+("object")  [index]
+            validation_result["checks"]["operation_success"] = all_success...
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:4011:13: error: "object" has no attribute "append" 
+[attr-defined]
+                validation_result["issues"].append("Not all database opera...
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:4021:9: error: Unsupported target for indexed assignment
+("object")  [index]
+            validation_result["checks"]["data_presence"] = data_present
+            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:4024:13: error: "object" has no attribute "append" 
+[attr-defined]
+                validation_result["issues"].append("Missing data in one or...
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:4029:17: error: Unsupported target for indexed assignment
+("object")  [index]
+                    validation_result["checks"]["file_storage"] = True
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:4034:17: error: Unsupported target for indexed assignment
+("object")  [index]
+                    validation_result["checks"]["file_storage"] = file_ok
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:4037:21: error: "object" has no attribute "append" 
+[attr-defined]
+                        validation_result["issues"].append("File storage o...
+                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:4047:17: error: "object" has no attribute "append" 
+[attr-defined]
+                    validation_result["issues"].append("Low cross-database...
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core.py:4378:52: error: "type[OperationType]" has no attribute
+"BATCH_UPDATE"  [attr-defined]
+    ...  batch_op = strategy.batch_operation(batch_ops, OperationType.BATCH_U...
+                                                        ^~~~~~~~~~~~~~~~~~~~~...
+database\database_api_sqlite.py:21:42: error: Function "builtins.callable" is
+not valid as a type  [valid-type]
+            get_unified_database_strategy: Optional[callable] = UnifiedDat...
+                                                    ^
+database\database_api_sqlite.py:21:42: note: Perhaps you meant "typing.Callable" instead of "callable"?
+database\database_api_sqlite.py:37:36: error: Incompatible default for argument
+"config" (default has type "None", argument has type "dict[Any, Any]") 
+[assignment]
+            def __init__(self, config: Dict = None):
+                                              ^~~~
+database\database_api_sqlite.py:37:36: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_sqlite.py:37:36: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_sqlite.py:48:5: error: Cannot determine type of
+"strategy"  [has-type]
+                                    self.strategy = None
+                                    ^~~~~~~~~~~~~
+database\database_api_sqlite.py:51:4: error: Cannot determine type of
+"strategy"  [has-type]
+                            self.strategy = None
+                            ^~~~~~~~~~~~~
+database\database_api_sqlite.py:53:30: error: Cannot determine type of
+"strategy"  [has-type]
+                    strategy_version = getattr(self.strategy, 'version', '...
+                                               ^~~~~~~~~~~~~
+database\database_api_sqlite.py:104:54: error: Incompatible default for
+argument "params" (default has type "None", argument has type "tuple[Any, ...]")
+ [assignment]
+    ...f execute_query(self, query: str, params: Tuple = None) -> List[Dict]:
+                                                         ^~~~
+database\database_api_sqlite.py:104:54: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_sqlite.py:104:54: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_sqlite.py:207:50: error: Incompatible default for
+argument "conditions" (default has type "None", argument has type
+"dict[Any, Any]")  [assignment]
+    ... def select(self, table: str, conditions: Dict = None, order_by: str =...
+                                                        ^~~~
+database\database_api_sqlite.py:207:50: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+database\database_api_sqlite.py:207:50: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+database\database_api_sqlite.py:207:72: error: Incompatible default for
+argument "order_by" (default has type "None", argument has type "str") 
+[assignment]
+    ...e: str, conditions: Dict = None, order_by: str = None, limit: int = No...
+                                                        ^~~~
+database\database_api_sqlite.py:207:91: error: Incompatible default for
+argument "limit" (default has type "None", argument has type "int") 
+[assignment]
+    ...: Dict = None, order_by: str = None, limit: int = None) -> List[Dict]:
+                                                         ^~~~
+database\database_api_sqlite.py:221:35: error: Argument 2 to "execute_query" of
+"SQLiteRelationalBackend" has incompatible type "tuple[Any, ...] | None";
+expected "tuple[Any, ...]"  [arg-type]
+    ...                  return self.execute_query(sql, tuple(params) if para...
+                                                        ^~~~~~~~~~~~~~~~~~~~~...
+database\database_api_sqlite.py:258:12: error: List comprehension has
+incompatible type List[Any | None]; expected List[str]  [misc]
+                            return [r.get('name') for r in rows]
+                                    ^~~~~~~~~~~~~
+uds3\uds3_identity_service.py:356:15: error: Item "None" of "Any | None" has no
+attribute "execute_query"  [union-attr]
+            row = self.relational_backend.execute_query(
+                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_identity_service.py:502:13: error: Item "None" of "Any | None" has no
+attribute "execute_query"  [union-attr]
+                self.relational_backend.execute_query(statement)
+                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_identity_service.py:538:18: error: Item "None" of "Any | None" has no
+attribute "execute_query"  [union-attr]
+            result = self.relational_backend.execute_query(query, params)
+                     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_identity_service.py:546:16: error: Item "None" of "Any | None" has no
+attribute "execute_query"  [union-attr]
+            rows = self.relational_backend.execute_query(
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_identity_service.py:558:16: error: Item "None" of "Any | None" has no
+attribute "execute_query"  [union-attr]
+            rows = self.relational_backend.execute_query(
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_core_geo.py:51:1: error: Cannot find implementation or library stub
+for module named "uds3_core"  [import-not-found]
+        from uds3_core import UDS3CoreSystem, DatabaseRole
+    ^
+uds3\uds3_core_geo.py:60:1: error: Cannot find implementation or library stub
+for module named "uds3_geo_extension"  [import-not-found]
+        from uds3_geo_extension import (
+    ^
+uds3\uds3_core_geo.py:120:47: error: Argument 1 to "_load_config" of
+"UDS3CoreWithGeo" has incompatible type "str | None"; expected "str"  [arg-type]
+                    base_conf = self._load_config(config_path)
+                                                  ^~~~~~~~~~~
+uds3\uds3_core_geo.py:123:43: error: Argument 1 to "_load_config" of
+"UDS3CoreWithGeo" has incompatible type "str | None"; expected "str"  [arg-type]
+                file_conf = self._load_config(config_path)
+                                              ^~~~~~~~~~~
+uds3\uds3_core_geo.py:184:21: error: Name "base" already defined on line 182 
+[no-redef]
+                        base: dict[Any, Any] = {}
+                        ^~~~
+uds3\uds3_core_geo.py:612:20: error: Need type annotation for "geo_info" 
+[var-annotated]
+            geo_info = {
+                       ^
+uds3\uds3_core_geo.py:686:25: error: Need type annotation for "relationships" 
+[var-annotated]
+            relationships = {
+                            ^
+uds3\uds3_api_backend.py:323:17: error: "object" has no attribute "append" 
+[attr-defined]
+                    result["compliance_issues"].append(line.strip())
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_api_backend.py:326:17: error: "object" has no attribute "append" 
+[attr-defined]
+                    result["optimization_suggestions"].append(line.strip()...
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_api_backend.py:329:17: error: "object" has no attribute "append" 
+[attr-defined]
+                    result["missing_elements"].append(line.strip())
+                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_api_backend.py:446:15: error: Incompatible types in assignment
+(expression has type "None", variable has type Module)  [assignment]
+        _config = None
+                  ^~~~
+uds3\uds3_api_backend.py:494:12: error: Name "uds3_backend" is not defined 
+[name-defined]
+        return uds3_backend
+               ^~~~~~~~~~~~
+uds3\uds3_geo_extension.py:58:1: error: Cannot find implementation or library
+stub for module named "geopy.geocoders"  [import-not-found]
+        from geopy.geocoders import Nominatim
+    ^
+uds3\uds3_geo_extension.py:59:1: error: Cannot find implementation or library
+stub for module named "geopy.distance"  [import-not-found]
+        from geopy.distance import geodesic
+    ^
+uds3\uds3_geo_extension.py:185:17: error: Name "base" already defined on line
+183  [no-redef]
+                    base: dict[Any, Any] = {}
+                    ^~~~
+uds3\uds3_geo_extension.py:205:31: error: Incompatible types in assignment
+(expression has type "connection", variable has type "None")  [assignment]
+                self.connection = psycopg2.connect(
+                                  ^
+uds3\uds3_geo_extension.py:215:18: error: "None" has no attribute "cursor" 
+[attr-defined]
+                with self.connection.cursor() as cursor:
+                     ^~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_geo_extension.py:218:17: error: "None" has no attribute "commit" 
+[attr-defined]
+                    self.connection.commit()
+                    ^~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_geo_extension.py:325:18: error: "None" has no attribute "cursor" 
+[attr-defined]
+                with self.connection.cursor() as cursor:
+                     ^~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_geo_extension.py:359:17: error: "None" has no attribute "commit" 
+[attr-defined]
+                    self.connection.commit()
+                    ^~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_geo_extension.py:404:39: error: Argument 1 to "append" of "list" has
+incompatible type "str"; expected "float"  [arg-type]
+                            params.append(f"%{value}%")
+                                          ^~~~~~~~~~~~
+uds3\uds3_geo_extension.py:411:18: error: "None" has no attribute "cursor" 
+[attr-defined]
+                with self.connection.cursor() as cursor:
+                     ^~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_geo_extension.py:445:18: error: "None" has no attribute "cursor" 
+[attr-defined]
+                with self.connection.cursor() as cursor:
+                     ^~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_geo_extension.py:670:81: error: Incompatible default for argument
+"location" (default has type "None", argument has type "GeoLocation") 
+[assignment]
+    ...content: str, title: str, metadata: Dict, location: GeoLocation = None
+                                                                         ^~~~
+uds3\uds3_geo_extension.py:670:81: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+uds3\uds3_geo_extension.py:670:81: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+uds3\uds3_geo_extension.py:690:24: error: Incompatible types in assignment
+(expression has type "GeoLocation | None", variable has type "GeoLocation") 
+[assignment]
+                location = self.geo_extractor.extract_from_document(
+                           ^
+uds3\uds3_geo_extension.py:743:17: error: Name "admin_hierarchy" already
+defined on line 741  [no-redef]
+                    admin_hierarchy: list[Any] = []
+                    ^~~~~~~~~~~~~~~
+uds3\uds3_geo_extension.py:863:18: error: Need type annotation for "result" 
+[var-annotated]
+            result = {
+                     ^
+uds3\uds3_geo_extension.py:876:18: error: "None" has no attribute "cursor" 
+[attr-defined]
+                with self.postgis.connection.cursor() as cursor:
+                     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_geo_extension.py:935:18: error: "None" has no attribute "cursor" 
+[attr-defined]
+                with self.postgis.connection.cursor() as cursor:
+                     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_4d_geo_extension.py:85:1: error: Cannot find implementation or
+library stub for module named "pyproj"  [import-not-found]
+        import pyproj
+    ^
+uds3\uds3_4d_geo_extension.py:85:1: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+uds3\uds3_4d_geo_extension.py:164:9: error: Property "name" defined in "Enum"
+is read-only  [misc]
+            self.name = name
+            ^~~~~~~~~
+uds3\uds3_4d_geo_extension.py:332:22: error: Incompatible types in assignment
+(expression has type
+"list[SpatialCoordinate] | list[list[SpatialCoordinate]] | list[list[list[SpatialCoordinate]]]",
+variable has type "list[SpatialCoordinate]")  [assignment]
+                coords = self.coordinates
+                         ^~~~~~~~~~~~~~~~
+uds3\uds3_4d_geo_extension.py:335:13: error: Name "coords" already defined on
+line 330  [no-redef]
+                coords: list[Any] = []
+                ^~~~~~
+uds3\uds3_4d_geo_extension.py:366:26: error: Dict entry 0 has incompatible type
+"str": "datetime"; expected "str": "float"  [dict-item]
+                bbox.update({"min_t": min(t_coords), "max_t": max(t_coords...
+                             ^~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_4d_geo_extension.py:366:50: error: Dict entry 1 has incompatible type
+"str": "datetime"; expected "str": "float"  [dict-item]
+                bbox.update({"min_t": min(t_coords), "max_t": max(t_coords...
+                                                     ^~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_4d_geo_extension.py:368:16: error: Incompatible return value type
+(got "dict[str, float]", expected "dict[str, float | datetime] | None") 
+[return-value]
+            return bbox
+                   ^~~~
+uds3\uds3_4d_geo_extension.py:395:22: error: Unsupported operand types for *
+("float" and "None")  [operator]
+                volume = params.width * params.height * params.depth
+                         ^
+uds3\uds3_4d_geo_extension.py:395:22: error: Unsupported operand types for *
+("None" and "float")  [operator]
+                volume = params.width * params.height * params.depth
+                         ^
+uds3\uds3_4d_geo_extension.py:395:22: error: Unsupported left operand type for
+* ("None")  [operator]
+                volume = params.width * params.height * params.depth
+                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_4d_geo_extension.py:395:22: note: Both left and right operands are unions
+uds3\uds3_4d_geo_extension.py:426:28: error: Item "list[SpatialCoordinate]" of
+"SpatialCoordinate | list[SpatialCoordinate] | list[list[SpatialCoordinate]]"
+has no attribute "z"  [union-attr]
+                        if any(c.z is not None for c in coords):
+                               ^~~
+uds3\uds3_4d_geo_extension.py:426:28: error: Item
+"list[list[SpatialCoordinate]]" of
+"SpatialCoordinate | list[SpatialCoordinate] | list[list[SpatialCoordinate]]"
+has no attribute "z"  [union-attr]
+                        if any(c.z is not None for c in coords):
+                               ^~~
+uds3\uds3_4d_geo_extension.py:427:41: error: Item "list[SpatialCoordinate]" of
+"SpatialCoordinate | list[SpatialCoordinate] | list[list[SpatialCoordinate]]"
+has no attribute "x"  [union-attr]
+                            coord_strs = [f"{c.x} {c.y} {c.z or 0}" for c ...
+                                            ^~~~
+uds3\uds3_4d_geo_extension.py:427:41: error: Item
+"list[list[SpatialCoordinate]]" of
+"SpatialCoordinate | list[SpatialCoordinate] | list[list[SpatialCoordinate]]"
+has no attribute "x"  [union-attr]
+                            coord_strs = [f"{c.x} {c.y} {c.z or 0}" for c ...
+                                            ^~~~
+uds3\uds3_4d_geo_extension.py:427:47: error: Item "list[SpatialCoordinate]" of
+"SpatialCoordinate | list[SpatialCoordinate] | list[list[SpatialCoordinate]]"
+has no attribute "y"  [union-attr]
+                            coord_strs = [f"{c.x} {c.y} {c.z or 0}" for c ...
+                                                  ^~~~
+uds3\uds3_4d_geo_extension.py:427:47: error: Item
+"list[list[SpatialCoordinate]]" of
+"SpatialCoordinate | list[SpatialCoordinate] | list[list[SpatialCoordinate]]"
+has no attribute "y"  [union-attr]
+                            coord_strs = [f"{c.x} {c.y} {c.z or 0}" for c ...
+                                                  ^~~~
+uds3\uds3_4d_geo_extension.py:427:54: error: Item "list[SpatialCoordinate]" of
+"SpatialCoordinate | list[SpatialCoordinate] | list[list[SpatialCoordinate]]"
+has no attribute "z"  [union-attr]
+    ...                    coord_strs = [f"{c.x} {c.y} {c.z or 0}" for c in c...
+                                                        ^~~
+uds3\uds3_4d_geo_extension.py:427:54: error: Item
+"list[list[SpatialCoordinate]]" of
+"SpatialCoordinate | list[SpatialCoordinate] | list[list[SpatialCoordinate]]"
+has no attribute "z"  [union-attr]
+    ...                    coord_strs = [f"{c.x} {c.y} {c.z or 0}" for c in c...
+                                                        ^~~
+uds3\uds3_4d_geo_extension.py:430:41: error: Item "list[SpatialCoordinate]" of
+"SpatialCoordinate | list[SpatialCoordinate] | list[list[SpatialCoordinate]]"
+has no attribute "x"  [union-attr]
+                            coord_strs = [f"{c.x} {c.y}" for c in coords]
+                                            ^~~~
+uds3\uds3_4d_geo_extension.py:430:41: error: Item
+"list[list[SpatialCoordinate]]" of
+"SpatialCoordinate | list[SpatialCoordinate] | list[list[SpatialCoordinate]]"
+has no attribute "x"  [union-attr]
+                            coord_strs = [f"{c.x} {c.y}" for c in coords]
+                                            ^~~~
+uds3\uds3_4d_geo_extension.py:430:47: error: Item "list[SpatialCoordinate]" of
+"SpatialCoordinate | list[SpatialCoordinate] | list[list[SpatialCoordinate]]"
+has no attribute "y"  [union-attr]
+                            coord_strs = [f"{c.x} {c.y}" for c in coords]
+                                                  ^~~~
+uds3\uds3_4d_geo_extension.py:430:47: error: Item
+"list[list[SpatialCoordinate]]" of
+"SpatialCoordinate | list[SpatialCoordinate] | list[list[SpatialCoordinate]]"
+has no attribute "y"  [union-attr]
+                            coord_strs = [f"{c.x} {c.y}" for c in coords]
+                                                  ^~~~
+uds3\uds3_4d_geo_extension.py:598:9: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+uds3\uds3_4d_geo_extension.py:678:17: error: Name "new_coordinates" already
+defined on line 674  [no-redef]
+                    new_coordinates: list[Any] = []
+                    ^~~~~~~~~~~~~~~
+uds3\uds3_4d_geo_extension.py:683:29: error: "SpatialCoordinate" has no
+attribute "append"  [attr-defined]
+                                new_coordinates.append(transformed)
+                                ^~~~~~~~~~~~~~~~~~~~~~
+uds3\uds3_4d_geo_extension.py:698:25: error: "SpatialCoordinate" has no
+attribute "append"  [attr-defined]
+                            new_coordinates.append(nested_coords)
+                            ^~~~~~~~~~~~~~~~~~~~~~
+Found 485 errors in 36 files (checked 55 source files)

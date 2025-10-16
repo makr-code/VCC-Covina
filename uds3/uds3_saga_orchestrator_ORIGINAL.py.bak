@@ -1,0 +1,930 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""UDS3 Saga Orchestrator
+
+Stellt einen generischen Saga-Orchestrator bereit, der mehrstufige
+Operationen mit Kompensationslogik ausführt und den Status in der
+relationalen Datenbank persistiert. Der Orchestrator wird vom
+`UnifiedDatabaseStrategy` genutzt, um verteilte Transaktionen über die
+verschiedenen Datenbanken hinweg kontrolliert abzuwickeln.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import threading
+import time
+import uuid
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from enum import Enum
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+# Lazy Import Platzhalter – wird erst bei Bedarf aufgelöst, um
+# zirkuläre Importe zu vermeiden.
+get_relational_db: Any = None
+
+RelationalDatabaseBackend = Any  # type: ignore
+
+SagaAction = Callable[[Dict[str, Any]], Optional[Dict[str, Any]]]
+SagaCompensation = Callable[[Dict[str, Any]], None]
+
+
+class SagaExecutionError(Exception):
+    """Signalisiert einen Fehler während der Saga-Ausführung."""
+
+
+class SagaCompensationError(Exception):
+    """Signalisiert einen Fehler während einer Kompensation."""
+
+
+class SagaStatus(str, Enum):
+    """Mögliche Saga-Statuswerte."""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    COMPENSATING = "compensating"
+    COMPENSATED = "compensated"
+    COMPENSATION_FAILED = "compensation_failed"
+
+
+@dataclass(slots=True)
+class SagaStep:
+    """Beschreibt einen Schritt innerhalb einer Saga."""
+
+    name: str
+    action: SagaAction
+    compensation: Optional[SagaCompensation] = None
+
+
+@dataclass(slots=True)
+class SagaDefinition:
+    """Definition einer Saga mit Namen und geordneten Schritten."""
+
+    name: str
+    steps: List[SagaStep]
+
+
+@dataclass(slots=True)
+class SagaExecutionResult:
+    """Ergebnis einer Saga-Ausführung."""
+
+    saga_id: str
+    status: SagaStatus
+    context: Dict[str, Any]
+    errors: List[str]
+    compensation_errors: List[str]
+
+
+class UDS3SagaOrchestrator:
+    """Führt Sagas aus und persistiert Fortschritt sowie Events."""
+
+    def __init__(self, relational_backend: Optional[RelationalDatabaseBackend] = None):
+        self.logger = logging.getLogger("uds3.saga.orchestrator")
+        self.relational_backend = (
+            relational_backend or self._resolve_relational_backend()
+        )
+        if self.relational_backend is None:
+            raise SagaExecutionError(
+                "Relationales Backend nicht verfügbar – Saga-Orchestrator kann nicht initialisiert werden."
+            )
+
+        self._lock = threading.RLock()
+        self._ensure_schema()
+
+    # ------------------------------------------------------------------
+    # Öffentliche API
+    # ------------------------------------------------------------------
+    def execute(
+        self,
+        definition: SagaDefinition,
+        context: Optional[Dict[str, Any]] = None,
+        *,
+        saga_id: Optional[str] = None,
+    ) -> SagaExecutionResult:
+        """Führt die übergebene Saga aus und persistiert Status & Events."""
+
+        ctx: Dict[str, Any] = dict(context or {})
+        errors: List[str] = []
+        compensation_errors: List[str] = []
+        execution_id = saga_id or str(uuid.uuid4())
+        executed_steps: List[SagaStep] = []
+        trace_id = ctx.setdefault("trace_id", str(uuid.uuid4()))
+        ctx.setdefault("saga_name", definition.name)
+        saga_started_at = time.perf_counter()
+        step_metric_ids: Dict[str, str] = {}
+        step_timings: Dict[str, float] = {}
+
+        with self._lock:
+            self._create_saga_record(execution_id, definition.name, ctx, trace_id)
+
+        try:
+            self._update_saga_status(
+                execution_id, SagaStatus.RUNNING, current_step=None, context=ctx
+            )
+            saga_name, identity_key, document_id = self._build_log_context(
+                ctx, definition.name
+            )
+            self._log_event(
+                execution_id,
+                None,
+                "saga_start",
+                {"definition": definition.name},
+                trace_id=trace_id,
+                saga_name=saga_name,
+                identity_key=identity_key,
+                document_id=document_id,
+                status="running",
+            )
+            for step in definition.steps:
+                metric_id = step_metric_ids.setdefault(step.name, str(uuid.uuid4()))
+                step_timings[step.name] = time.perf_counter()
+                saga_name, identity_key, document_id = self._build_log_context(
+                    ctx, definition.name
+                )
+                self.logger.info(
+                    "Saga %s Schritt %s gestartet [trace=%s]",
+                    execution_id,
+                    step.name,
+                    trace_id,
+                )
+                self._log_event(
+                    execution_id,
+                    step.name,
+                    "start",
+                    {"context_keys": list(ctx.keys())},
+                    trace_id=trace_id,
+                    saga_name=saga_name,
+                    identity_key=identity_key,
+                    document_id=document_id,
+                    status="running",
+                    metric_id=metric_id,
+                )
+                try:
+                    result = step.action(ctx)
+                    if result:
+                        ctx.update(result)
+                    saga_name, identity_key, document_id = self._build_log_context(
+                        ctx, definition.name
+                    )
+                    executed_steps.append(step)
+                    duration_ms = int(
+                        (time.perf_counter() - step_timings[step.name]) * 1000
+                    )
+                    self.logger.info(
+                        "Saga %s Schritt %s erfolgreich (%d ms) [trace=%s]",
+                        execution_id,
+                        step.name,
+                        duration_ms,
+                        trace_id,
+                    )
+                    self._log_event(
+                        execution_id,
+                        step.name,
+                        "success",
+                        result,
+                        trace_id=trace_id,
+                        saga_name=saga_name,
+                        identity_key=identity_key,
+                        document_id=document_id,
+                        status="success",
+                        duration_ms=duration_ms,
+                        metric_id=metric_id,
+                    )
+                    self._update_saga_status(
+                        execution_id,
+                        SagaStatus.RUNNING,
+                        current_step=step.name,
+                        context=ctx,
+                    )
+                except (
+                    Exception
+                ) as exc:  # pragma: no cover - Fehlerfall wird unten behandelt
+                    error_message = f"Saga-Schritt '{step.name}' fehlgeschlagen: {exc}"
+                    self.logger.error(error_message, exc_info=True)
+                    errors.append(error_message)
+                    duration_ms = int(
+                        (
+                            time.perf_counter()
+                            - step_timings.get(step.name, time.perf_counter())
+                        )
+                        * 1000
+                    )
+                    saga_name, identity_key, document_id = self._build_log_context(
+                        ctx, definition.name
+                    )
+                    self._log_event(
+                        execution_id,
+                        step.name,
+                        "error",
+                        {"error": str(exc)},
+                        trace_id=trace_id,
+                        saga_name=saga_name,
+                        identity_key=identity_key,
+                        document_id=document_id,
+                        status="error",
+                        duration_ms=duration_ms,
+                        metric_id=metric_id,
+                        error_message=str(exc),
+                    )
+                    break
+
+            total_duration_ms = int((time.perf_counter() - saga_started_at) * 1000)
+
+            if errors:
+                compensation_errors = self._run_compensations(
+                    execution_id,
+                    executed_steps,
+                    ctx,
+                    trace_id,
+                    step_metric_ids,
+                    step_timings,
+                )
+                final_status = (
+                    SagaStatus.COMPENSATED
+                    if not compensation_errors
+                    else SagaStatus.COMPENSATION_FAILED
+                )
+                self._update_saga_status(
+                    execution_id,
+                    final_status,
+                    current_step=executed_steps[-1].name if executed_steps else None,
+                    context=ctx,
+                    duration_ms=total_duration_ms,
+                )
+                saga_name, identity_key, document_id = self._build_log_context(
+                    ctx, definition.name
+                )
+                self._log_event(
+                    execution_id,
+                    None,
+                    "final",
+                    {"errors": errors, "compensation_errors": compensation_errors},
+                    trace_id=trace_id,
+                    saga_name=saga_name,
+                    identity_key=identity_key,
+                    document_id=document_id,
+                    status=final_status.value,
+                    duration_ms=total_duration_ms,
+                )
+                return SagaExecutionResult(
+                    saga_id=execution_id,
+                    status=final_status,
+                    context=ctx,
+                    errors=errors,
+                    compensation_errors=compensation_errors,
+                )
+
+            self._update_saga_status(
+                execution_id,
+                SagaStatus.COMPLETED,
+                current_step=None,
+                context=ctx,
+                duration_ms=total_duration_ms,
+            )
+            saga_name, identity_key, document_id = self._build_log_context(
+                ctx, definition.name
+            )
+            self._log_event(
+                execution_id,
+                None,
+                "final",
+                {"errors": errors, "compensation_errors": compensation_errors},
+                trace_id=trace_id,
+                saga_name=saga_name,
+                identity_key=identity_key,
+                document_id=document_id,
+                status=SagaStatus.COMPLETED.value,
+                duration_ms=total_duration_ms,
+            )
+            return SagaExecutionResult(
+                saga_id=execution_id,
+                status=SagaStatus.COMPLETED,
+                context=ctx,
+                errors=errors,
+                compensation_errors=compensation_errors,
+            )
+        except Exception as exc:  # pragma: no cover - Schutz vor unerwarteten Fehlern
+            error_message = f"Saga-Ausführung '{definition.name}' fehlgeschlagen: {exc}"
+            self.logger.error(error_message, exc_info=True)
+            errors.append(error_message)
+            compensation_errors.extend(
+                self._run_compensations(
+                    execution_id,
+                    executed_steps,
+                    ctx,
+                    trace_id,
+                    step_metric_ids,
+                    step_timings,
+                )
+            )
+            final_status = (
+                SagaStatus.COMPENSATION_FAILED
+                if compensation_errors
+                else SagaStatus.COMPENSATED
+            )
+            total_duration_ms = int((time.perf_counter() - saga_started_at) * 1000)
+            self._update_saga_status(
+                execution_id,
+                final_status,
+                current_step=None,
+                context=ctx,
+                duration_ms=total_duration_ms,
+            )
+            saga_name, identity_key, document_id = self._build_log_context(
+                ctx, definition.name
+            )
+            self._log_event(
+                execution_id,
+                None,
+                "final",
+                {"errors": errors, "compensation_errors": compensation_errors},
+                trace_id=trace_id,
+                saga_name=saga_name,
+                identity_key=identity_key,
+                document_id=document_id,
+                status=final_status.value,
+                duration_ms=total_duration_ms,
+            )
+            return SagaExecutionResult(
+                saga_id=execution_id,
+                status=final_status,
+                context=ctx,
+                errors=errors,
+                compensation_errors=compensation_errors,
+            )
+
+    # ------------------------------------------------------------------
+    # Schema & Persistenz
+    # ------------------------------------------------------------------
+    def _ensure_schema(self) -> None:
+        statements = [
+            """
+            CREATE TABLE IF NOT EXISTS uds3_sagas (
+                saga_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                trace_id TEXT,
+                status TEXT NOT NULL,
+                context TEXT,
+                current_step TEXT,
+                duration_ms INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS uds3_saga_events (
+                event_id TEXT PRIMARY KEY,
+                saga_id TEXT NOT NULL REFERENCES uds3_sagas(saga_id) ON DELETE CASCADE,
+                trace_id TEXT,
+                step_name TEXT,
+                event_type TEXT NOT NULL,
+                status TEXT,
+                duration_ms INTEGER,
+                payload TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS uds3_audit_log (
+                audit_id TEXT PRIMARY KEY,
+                saga_id TEXT NOT NULL,
+                saga_name TEXT,
+                trace_id TEXT,
+                identity_key TEXT,
+                document_id TEXT,
+                step_name TEXT,
+                event_type TEXT,
+                status TEXT,
+                duration_ms INTEGER,
+                details TEXT,
+                actor TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS uds3_saga_metrics (
+                metric_id TEXT PRIMARY KEY,
+                saga_id TEXT NOT NULL,
+                saga_name TEXT,
+                trace_id TEXT,
+                identity_key TEXT,
+                step_name TEXT,
+                status TEXT,
+                started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                finished_at TIMESTAMP,
+                duration_ms INTEGER,
+                error_message TEXT,
+                details TEXT
+            )
+            """,
+            """CREATE INDEX IF NOT EXISTS idx_saga_events_saga_id ON uds3_saga_events(saga_id)""",
+            """CREATE INDEX IF NOT EXISTS idx_saga_events_trace ON uds3_saga_events(trace_id)""",
+            """CREATE INDEX IF NOT EXISTS idx_sagas_status ON uds3_sagas(status)""",
+            """CREATE INDEX IF NOT EXISTS idx_sagas_trace ON uds3_sagas(trace_id)""",
+            """CREATE INDEX IF NOT EXISTS idx_audit_trace ON uds3_audit_log(trace_id)""",
+            """CREATE INDEX IF NOT EXISTS idx_audit_identity ON uds3_audit_log(identity_key)""",
+            """CREATE INDEX IF NOT EXISTS idx_audit_saga_name ON uds3_audit_log(saga_name)""",
+            """CREATE INDEX IF NOT EXISTS idx_metrics_saga ON uds3_saga_metrics(saga_id)""",
+            """CREATE INDEX IF NOT EXISTS idx_metrics_trace ON uds3_saga_metrics(trace_id)""",
+            """CREATE INDEX IF NOT EXISTS idx_metrics_identity ON uds3_saga_metrics(identity_key)""",
+            """CREATE INDEX IF NOT EXISTS idx_metrics_saga_name ON uds3_saga_metrics(saga_name)""",
+        ]
+
+        for statement in statements:
+            self.relational_backend.execute_query(statement)
+
+        alter_statements = [
+            "ALTER TABLE uds3_sagas ADD COLUMN trace_id TEXT",
+            "ALTER TABLE uds3_sagas ADD COLUMN duration_ms INTEGER",
+            "ALTER TABLE uds3_saga_events ADD COLUMN trace_id TEXT",
+            "ALTER TABLE uds3_saga_events ADD COLUMN status TEXT",
+            "ALTER TABLE uds3_saga_events ADD COLUMN duration_ms INTEGER",
+            "ALTER TABLE uds3_audit_log ADD COLUMN saga_name TEXT",
+            "ALTER TABLE uds3_audit_log ADD COLUMN identity_key TEXT",
+            "ALTER TABLE uds3_audit_log ADD COLUMN document_id TEXT",
+            "ALTER TABLE uds3_saga_metrics ADD COLUMN saga_name TEXT",
+            "ALTER TABLE uds3_saga_metrics ADD COLUMN identity_key TEXT",
+        ]
+
+        for statement in alter_statements:
+            try:
+                self.relational_backend.execute_query(statement)
+            except Exception:
+                continue
+
+    def _create_saga_record(
+        self, saga_id: str, name: str, context: Dict[str, Any], trace_id: str
+    ) -> None:
+        self.relational_backend.execute_query(
+            """
+            INSERT INTO uds3_sagas (saga_id, name, trace_id, status, context, current_step, duration_ms, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            """,
+            (
+                saga_id,
+                name,
+                trace_id,
+                SagaStatus.PENDING.value,
+                self._serialize_context(context),
+            ),
+        )
+
+    def _update_saga_status(
+        self,
+        saga_id: str,
+        status: SagaStatus,
+        *,
+        current_step: Optional[str],
+        context: Dict[str, Any],
+        duration_ms: Optional[int] = None,
+    ) -> None:
+        self.relational_backend.execute_query(
+            """
+            UPDATE uds3_sagas
+               SET status = ?,
+                   current_step = ?,
+                   context = ?,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE saga_id = ?
+            """,
+            (
+                status.value,
+                current_step,
+                self._serialize_context(context),
+                saga_id,
+            ),
+        )
+
+        if duration_ms is not None:
+            self.relational_backend.execute_query(
+                """
+                UPDATE uds3_sagas
+                   SET duration_ms = ?,
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE saga_id = ?
+                """,
+                (
+                    duration_ms,
+                    saga_id,
+                ),
+            )
+
+    def _log_event(
+        self,
+        saga_id: str,
+        step_name: Optional[str],
+        event_type: str,
+        payload: Optional[Dict[str, Any]],
+        *,
+        trace_id: str,
+        saga_name: Optional[str],
+        identity_key: Optional[str],
+        document_id: Optional[str],
+        status: Optional[str] = None,
+        duration_ms: Optional[int] = None,
+        metric_id: Optional[str] = None,
+        error_message: Optional[str] = None,
+    ) -> None:
+        event_id = str(uuid.uuid4())
+        serialized_payload = self._serialize_context(payload)
+
+        self.relational_backend.execute_query(
+            """
+            INSERT INTO uds3_saga_events (event_id, saga_id, trace_id, step_name, event_type, status, duration_ms, payload, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """,
+            (
+                event_id,
+                saga_id,
+                trace_id,
+                step_name,
+                event_type,
+                status,
+                duration_ms,
+                serialized_payload,
+            ),
+        )
+
+        self._write_audit_log(
+            event_id=event_id,
+            saga_id=saga_id,
+            saga_name=saga_name,
+            trace_id=trace_id,
+            identity_key=identity_key,
+            document_id=document_id,
+            step_name=step_name,
+            event_type=event_type,
+            status=status,
+            duration_ms=duration_ms,
+            payload=serialized_payload,
+        )
+
+        if metric_id:
+            if event_type.endswith("start"):
+                self._insert_metric_record(
+                    metric_id=metric_id,
+                    saga_id=saga_id,
+                    saga_name=saga_name,
+                    trace_id=trace_id,
+                    identity_key=identity_key,
+                    step_name=step_name,
+                    status=status or event_type,
+                )
+            else:
+                self._finalize_metric_record(
+                    metric_id=metric_id,
+                    status=status or event_type,
+                    duration_ms=duration_ms,
+                    error_message=error_message,
+                    payload=serialized_payload,
+                )
+
+    def _write_audit_log(
+        self,
+        *,
+        event_id: str,
+        saga_id: str,
+        saga_name: Optional[str],
+        trace_id: str,
+        identity_key: Optional[str],
+        document_id: Optional[str],
+        step_name: Optional[str],
+        event_type: str,
+        status: Optional[str],
+        duration_ms: Optional[int],
+        payload: Optional[str],
+    ) -> None:
+        self.relational_backend.execute_query(
+            """
+            INSERT INTO uds3_audit_log (audit_id, saga_id, saga_name, trace_id, identity_key, document_id, step_name, event_type, status, duration_ms, details, actor, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """,
+            (
+                str(uuid.uuid4()),
+                saga_id,
+                saga_name,
+                trace_id,
+                identity_key,
+                document_id,
+                step_name,
+                event_type,
+                status,
+                duration_ms,
+                payload,
+                "uds3.saga",
+            ),
+        )
+
+    def _insert_metric_record(
+        self,
+        *,
+        metric_id: str,
+        saga_id: str,
+        saga_name: Optional[str],
+        trace_id: str,
+        identity_key: Optional[str],
+        step_name: Optional[str],
+        status: str,
+    ) -> None:
+        self.relational_backend.execute_query(
+            """
+            INSERT INTO uds3_saga_metrics (metric_id, saga_id, saga_name, trace_id, identity_key, step_name, status, started_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """,
+            (
+                metric_id,
+                saga_id,
+                saga_name,
+                trace_id,
+                identity_key,
+                step_name,
+                status,
+            ),
+        )
+
+    def _finalize_metric_record(
+        self,
+        *,
+        metric_id: str,
+        status: str,
+        duration_ms: Optional[int],
+        error_message: Optional[str],
+        payload: Optional[str],
+    ) -> None:
+        self.relational_backend.execute_query(
+            """
+            UPDATE uds3_saga_metrics
+               SET status = ?,
+                   finished_at = CURRENT_TIMESTAMP,
+                   duration_ms = ?,
+                   error_message = ?,
+                   details = ?
+             WHERE metric_id = ?
+            """,
+            (
+                status,
+                duration_ms,
+                error_message,
+                payload,
+                metric_id,
+            ),
+        )
+
+    def _build_log_context(
+        self, context: Dict[str, Any], default_saga_name: str
+    ) -> Tuple[str, Optional[str], Optional[str]]:
+        saga_name = str(context.get("saga_name") or default_saga_name)
+        identity_key = self._extract_identity_key(context)
+        document_id = self._extract_document_id(context)
+        return saga_name, identity_key, document_id
+
+    @staticmethod
+    def _extract_identity_key(context: Dict[str, Any]) -> Optional[str]:
+        candidates = [
+            context.get("identity_key"),
+            context.get("aktenzeichen"),
+            context.get("identity_id"),
+            context.get("identity_uuid"),
+        ]
+        for value in candidates:
+            if value:
+                return str(value)
+
+        nested_candidates = [
+            "identity",
+            "identity_info",
+            "identity_record",
+            "actor",
+            "metadata",
+            "previous_state",
+            "updates",
+            "delete_result",
+            "update_result",
+            "create_result",
+        ]
+        keys_to_check = ("identity_key", "aktenzeichen", "uuid", "id", "key")
+        for key in nested_candidates:
+            nested = context.get(key)
+            if isinstance(nested, dict):
+                for nested_key in keys_to_check:
+                    value = nested.get(nested_key)
+                    if value:
+                        return str(value)
+                for subvalue in nested.values():
+                    if isinstance(subvalue, dict):
+                        for nested_key in keys_to_check:
+                            value = subvalue.get(nested_key)
+                            if value:
+                                return str(value)
+
+        return None
+
+    @staticmethod
+    def _extract_document_id(context: Dict[str, Any]) -> Optional[str]:
+        candidates = [
+            context.get("document_id"),
+            context.get("doc_id"),
+            context.get("document_uuid"),
+        ]
+        for value in candidates:
+            if value:
+                return str(value)
+
+        keys_to_check = ("document_id", "id", "doc_id", "uuid")
+        for key in (
+            "document",
+            "document_info",
+            "document_data",
+            "metadata",
+            "current_metadata",
+            "previous_state",
+            "updates",
+            "delete_result",
+            "update_result",
+            "create_result",
+        ):
+            nested = context.get(key)
+            if isinstance(nested, dict):
+                for nested_key in keys_to_check:
+                    value = nested.get(nested_key)
+                    if value:
+                        return str(value)
+                for subvalue in nested.values():
+                    if isinstance(subvalue, dict):
+                        for nested_key in keys_to_check:
+                            value = subvalue.get(nested_key)
+                            if value:
+                                return str(value)
+
+        return None
+
+    def _run_compensations(
+        self,
+        saga_id: str,
+        executed_steps: List[SagaStep],
+        context: Dict[str, Any],
+        trace_id: str,
+        step_metric_ids: Dict[str, str],
+        step_timings: Dict[str, float],
+    ) -> List[str]:
+        if not executed_steps:
+            return []
+
+        self._update_saga_status(
+            saga_id, SagaStatus.COMPENSATING, current_step=None, context=context
+        )
+        errors: List[str] = []
+
+        for step in reversed(executed_steps):
+            if step.compensation is None:
+                continue
+            metric_id = f"{step_metric_ids.get(step.name, str(uuid.uuid4()))}::comp"
+            start_time = time.perf_counter()
+            saga_name, identity_key, document_id = self._build_log_context(
+                context,
+                context.get("saga_name", step.name),
+            )
+            self._log_event(
+                saga_id,
+                step.name,
+                "compensation_start",
+                None,
+                trace_id=trace_id,
+                saga_name=saga_name,
+                identity_key=identity_key,
+                document_id=document_id,
+                status="compensation_running",
+                metric_id=metric_id,
+            )
+            try:
+                self.logger.info(
+                    "Starte Kompensation für Saga %s / Schritt %s [trace=%s]",
+                    saga_id,
+                    step.name,
+                    trace_id,
+                )
+                step.compensation(context)
+                duration_ms = int((time.perf_counter() - start_time) * 1000)
+                saga_name, identity_key, document_id = self._build_log_context(
+                    context,
+                    context.get("saga_name", step.name),
+                )
+                self._log_event(
+                    saga_id,
+                    step.name,
+                    "compensation_success",
+                    None,
+                    trace_id=trace_id,
+                    saga_name=saga_name,
+                    identity_key=identity_key,
+                    document_id=document_id,
+                    status="compensation_success",
+                    duration_ms=duration_ms,
+                    metric_id=metric_id,
+                )
+                step_timings[f"{step.name}::comp"] = duration_ms
+            except Exception as exc:  # pragma: no cover - Fehlerfall wird getestet
+                duration_ms = int((time.perf_counter() - start_time) * 1000)
+                message = (
+                    f"Kompensation für Schritt '{step.name}' fehlgeschlagen: {exc}"
+                )
+                self.logger.error(message, exc_info=True)
+                errors.append(message)
+                saga_name, identity_key, document_id = self._build_log_context(
+                    context,
+                    context.get("saga_name", step.name),
+                )
+                self._log_event(
+                    saga_id,
+                    step.name,
+                    "compensation_error",
+                    {"error": str(exc)},
+                    trace_id=trace_id,
+                    saga_name=saga_name,
+                    identity_key=identity_key,
+                    document_id=document_id,
+                    status="compensation_error",
+                    duration_ms=duration_ms,
+                    metric_id=metric_id,
+                    error_message=str(exc),
+                )
+
+        return errors
+
+    # ------------------------------------------------------------------
+    # Hilfsmethoden
+    # ------------------------------------------------------------------
+    def _resolve_relational_backend(self) -> Optional[RelationalDatabaseBackend]:
+        global get_relational_db
+        if callable(get_relational_db):
+            try:
+                return get_relational_db()
+            except Exception as exc:  # pragma: no cover
+                self.logger.warning(
+                    "Relational Backend konnte nicht geladen werden: %s", exc
+                )
+                return None
+
+        try:
+            from database.database_api import get_relational_db as resolver  # type: ignore
+
+            get_relational_db = resolver
+            return resolver()
+        except ImportError:
+            self.logger.debug(
+                "database_api konnte nicht importiert werden – kein globales Relational-Backend verfügbar"
+            )
+            return None
+
+    @staticmethod
+    def _serialize_context(payload: Optional[Dict[str, Any]]) -> Optional[str]:
+        if payload is None:
+            return None
+        try:
+            return json.dumps(payload, ensure_ascii=False, default=_json_serializer)
+        except TypeError:
+            # Fallback: Strings repräsentieren
+            return json.dumps({"repr": repr(payload)}, ensure_ascii=False)
+
+
+_saga_orchestrator: Optional[UDS3SagaOrchestrator] = None
+_saga_lock = threading.Lock()
+
+
+def get_saga_orchestrator(
+    relational_backend: Optional[RelationalDatabaseBackend] = None,
+) -> UDS3SagaOrchestrator:
+    """Singleton-Zugriff auf den Saga-Orchestrator."""
+
+    global _saga_orchestrator
+    if _saga_orchestrator is None:
+        with _saga_lock:
+            if _saga_orchestrator is None:
+                _saga_orchestrator = UDS3SagaOrchestrator(relational_backend)
+    return _saga_orchestrator
+
+
+def _json_serializer(value: Any) -> Any:
+    """JSON-Serializer für nicht standardmäßige Objekte."""
+
+    if isinstance(value, (datetime,)):
+        return value.astimezone(timezone.utc).isoformat()
+    if isinstance(value, (set, frozenset)):
+        return list(value)
+    return repr(value)
+
+
+__all__ = [
+    "SagaExecutionError",
+    "SagaCompensationError",
+    "SagaDefinition",
+    "SagaExecutionResult",
+    "SagaStatus",
+    "SagaStep",
+    "UDS3SagaOrchestrator",
+    "get_saga_orchestrator",
+]

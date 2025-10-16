@@ -1,0 +1,95 @@
+# .dockerignore - Exclude unnecessary files from Docker build
+# =============================================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+logs/
+*.log
+
+# Data
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary
+temp/
+tmp/
+*.tmp
+*.bak
+*.backup
+
+# Docker
+docker-compose.yml.backup
+Dockerfile.*.backup
+
+# Documentation (not needed in runtime)
+docs/
+README.md
+*.md
+
+# Tests
+tests/
+*.test.py
+test_*.py
+
+# Scripts (build only, not runtime)
+scripts/
+devtools/
+
+# Examples
+examples/
+demo_*.py
+run_demo*.py
+
+# Config examples (not actual configs)
+*.example
+*.sample
+
+# Frontend (if building backend only)
+frontend/
+
+# Misc
+.env.local
+.env.*.local

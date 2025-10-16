@@ -1,0 +1,125 @@
+{
+  "process_id": "VPB_2025_001",
+  "metadata": {
+    "name": "Baugenehmigungsverfahren Nordrhein-Westfalen",
+    "legal_context": "BauO NRW, VwVfG",
+    "version": "2.1",
+    "last_updated": "2025-10-01",
+    "responsible_authority": "Bauordnungsamt Köln",
+    "process_category": "building_permit"
+  },
+  "elements": [
+    {
+      "id": "elem_001",
+      "name": "Antragstellung",
+      "type": "task",
+      "properties": {
+        "description": "Bauherr reicht Bauantrag ein gemäß BauO NRW § 64",
+        "required_documents": [
+          "Bauzeichnungen",
+          "Statische Berechnungen",
+          "Baubeschreibung"
+        ],
+        "knowledge_base_refs": []
+      }
+    },
+    {
+      "id": "elem_002",
+      "name": "Vollständigkeitsprüfung",
+      "type": "task",
+      "properties": {
+        "description": "Prüfung der eingereichten Unterlagen",
+        "legal_basis": "VwVfG § 28",
+        "knowledge_base_refs": []
+      }
+    },
+    {
+      "id": "elem_003",
+      "name": "Fachliche Prüfung",
+      "type": "task",
+      "properties": {
+        "description": "Prüfung nach BauO NRW § 65 und DIN 18065",
+        "compliance_requirements": [
+          "Brandschutz nach DIN 4102",
+          "Schallschutz nach DIN 4109",
+          "Energieeinsparverordnung EnEV"
+        ],
+        "knowledge_base_refs": []
+      }
+    },
+    {
+      "id": "elem_004",
+      "name": "Nachbarschaftsanhörung",
+      "type": "task",
+      "properties": {
+        "description": "Anhörung der Nachbarn gemäß BauO NRW",
+        "deadline_days": 14,
+        "knowledge_base_refs": []
+      }
+    },
+    {
+      "id": "elem_005",
+      "name": "Bescheid erstellen",
+      "type": "task",
+      "properties": {
+        "description": "Erstellung des Baugenehmigungsbescheids",
+        "legal_references": "VwVfG § 37, BauO NRW § 68",
+        "knowledge_base_refs": []
+      }
+    },
+    {
+      "id": "elem_006",
+      "name": "Gebührenbescheid",
+      "type": "task",
+      "properties": {
+        "description": "Berechnung der Verwaltungsgebühren",
+        "knowledge_base_refs": []
+      }
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow_001",
+      "source": "elem_001",
+      "target": "elem_002",
+      "description": "Nach Antragstellung erfolgt Vollständigkeitsprüfung"
+    },
+    {
+      "id": "flow_002",
+      "source": "elem_002",
+      "target": "elem_003",
+      "condition": "Unterlagen vollständig",
+      "description": "Bei vollständigen Unterlagen folgt fachliche Prüfung"
+    },
+    {
+      "id": "flow_003",
+      "source": "elem_003",
+      "target": "elem_004",
+      "description": "Parallel zur Prüfung erfolgt Nachbarschaftsanhörung"
+    },
+    {
+      "id": "flow_004",
+      "source": "elem_004",
+      "target": "elem_005",
+      "description": "Nach Anhörung wird Bescheid erstellt"
+    },
+    {
+      "id": "flow_005",
+      "source": "elem_005",
+      "target": "elem_006",
+      "description": "Bescheid wird mit Gebührenbescheid versandt"
+    }
+  ],
+  "potential_gaps": [
+    {
+      "element": "elem_003",
+      "issue": "Unvollständige Referenz zu DIN 18065 - keine Verlinkung zur aktuellen Norm",
+      "severity": "medium"
+    },
+    {
+      "element": "elem_006",
+      "issue": "Fehlende Rechtsgrundlage für Gebührenberechnung",
+      "severity": "high"
+    }
+  ]
+}

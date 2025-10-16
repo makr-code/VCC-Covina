@@ -1,0 +1,46 @@
+{
+  "name": "Simple Text Pipeline",
+  "description": "Aktualisierte Beschreibung",
+  "pipeline_priority": 70,
+  "specialization_level": "low",
+  "conflict_resolution": "fallback",
+  "file_patterns": [
+    "*.txt",
+    "*.log"
+  ],
+  "mime_types": [
+    "text/plain"
+  ],
+  "tasks": [
+    {
+      "task_type": "preprocessing",
+      "worker_type": "preprocessor",
+      "priority": 1,
+      "depends_on": []
+    },
+    {
+      "task_type": "analysis",
+      "worker_type": "document",
+      "priority": 2,
+      "depends_on": [
+        "preprocessing"
+      ]
+    },
+    {
+      "task_type": "storage",
+      "worker_type": "backend",
+      "priority": 3,
+      "depends_on": [
+        "analysis"
+      ]
+    },
+    {
+      "task_type": "postprocessing",
+      "worker_type": "postprocessor",
+      "priority": 4,
+      "depends_on": [
+        "storage"
+      ]
+    }
+  ]
+}

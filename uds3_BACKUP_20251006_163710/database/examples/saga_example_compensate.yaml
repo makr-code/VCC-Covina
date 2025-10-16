@@ -1,0 +1,26 @@
+saga_name: create_document_with_failure
+trace_id: trace-99999
+steps:
+  - step_id: vector_add
+    backend: vector
+    operation: add_documents
+    payload:
+      collection: document_chunks
+      documents: '{{chunks}}'
+    compensation: vector_delete_chunks
+    idempotency_key: '{{document_id}}::vector'
+  - step_id: relational_store
+    backend: relational
+    operation: upsert_documents_metadata
+    payload:
+      table: documents_metadata
+      data: '{{metadata}}'
+    compensation: relational_delete_by_document_id
+    idempotency_key: '{{document_id}}::meta'
+  - step_id: external_failing_step
+    backend: relational
+    operation: call_external_service_that_fails
+    payload:
+      url: 'http://192.0.2.1/fail'
+    compensation: none
+    idempotency_key: '{{document_id}}::external'
