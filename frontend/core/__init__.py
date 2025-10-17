@@ -25,9 +25,8 @@ from frontend.core.task_executor import (
     Task
 )
 
-from frontend.core.view_manager import (
-    ViewManager
-)
+# Hinweis: ViewManager wird NICHT hier re-exportiert, um Kreisimporte zu vermeiden.
+# Bitte direkt importieren: from frontend.core.view_manager import ViewManager
 
 from frontend.core.backend_service import (
     CovinaBackendService
@@ -52,7 +51,6 @@ __all__ = [
     'Event',
     'TaskExecutor',
     'Task',
-    'ViewManager',
     'CovinaBackendService',
     # Chart Management (Legacy)
     'ChartType',

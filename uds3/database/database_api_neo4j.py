@@ -94,21 +94,29 @@ class Neo4jGraphBackend(GraphDatabaseBackend):
             self._is_connected = False
             return False
         try:
-            # Create driver
-            self._driver = GraphDatabase.driver(self.uri, auth=basic_auth(self.user, self.password))
+            # Connection timeout (5 seconds) - prevents long startup hangs
+            connection_timeout = self.config.get('connection_timeout', 5)
+            
+            # Create driver with connection timeout
+            self._driver = GraphDatabase.driver(
+                self.uri, 
+                auth=basic_auth(self.user, self.password),
+                connection_timeout=connection_timeout,
+                max_connection_lifetime=3600
+            )
             # test simple session
             session_kwargs = {}
             if self.database_name:
                 session_kwargs['database'] = self.database_name
             with self._driver.session(**session_kwargs) as session:
-                # run a trivial query
-                res = session.run('RETURN 1 as ok')
+                # run a trivial query with timeout
+                res = session.run('RETURN 1 as ok', timeout=connection_timeout)
                 _ = list(res)
             self._is_connected = True
             logger.info('Neo4j connected %s', self.uri)
             return True
         except Exception as exc:
-            logger.exception('Failed to connect to Neo4j: %s', exc)
+            logger.error('Failed to connect to Neo4j: %s', exc)
             self._driver = None
             self._is_connected = False
             return False

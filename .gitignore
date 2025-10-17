@@ -29,3 +29,9 @@ Thumbs.db
 # Project specific
 wandb/
 *.pyc
+
+# Data directories (runtime data, uploads, temp files)
+data/
+data/*
+!data/.gitkeep
+

@@ -1,8 +1,8 @@
-# Deploy Backend v3.4.9 with Auto-Resume
-# Quick deployment script for production
+# Deploy Covina Microservices v3.4.9
+# Quick deployment script for production (Main + Ingestion Backend)
 
 Write-Host "=" * 70 -ForegroundColor Cyan
-Write-Host "🚀 Deploying Covina Backend v3.4.9 (Auto-Resume Mechanism)" -ForegroundColor Cyan
+Write-Host "🚀 Deploying Covina Microservices v3.4.9 (Dual Backend)" -ForegroundColor Cyan
 Write-Host "=" * 70 -ForegroundColor Cyan
 Write-Host ""
 
@@ -22,14 +22,22 @@ Write-Host "2️⃣  Stopping existing services..." -ForegroundColor Yellow
 & .\scripts\stop_services.ps1
 Start-Sleep -Seconds 2
 
-# Step 3: Validate code
+# Step 3: Validate code (both backends)
 Write-Host ""
 Write-Host "3️⃣  Validating code..." -ForegroundColor Yellow
+python -m py_compile main_backend.py 2>$null
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "   ✅ Main Backend validation passed" -ForegroundColor Green
+} else {
+    Write-Host "   ❌ Main Backend validation failed - aborting deployment!" -ForegroundColor Red
+    exit 1
+}
+
 python -m py_compile ingestion_backend.py 2>$null
 if ($LASTEXITCODE -eq 0) {
-    Write-Host "   ✅ Code validation passed" -ForegroundColor Green
+    Write-Host "   ✅ Ingestion Backend validation passed" -ForegroundColor Green
 } else {
-    Write-Host "   ❌ Code validation failed - aborting deployment!" -ForegroundColor Red
+    Write-Host "   ❌ Ingestion Backend validation failed - aborting deployment!" -ForegroundColor Red
     exit 1
 }
 
@@ -46,39 +54,70 @@ try {
     $pendingBefore = "N/A"
 }
 
-# Step 5: Start backend
+# Step 5: Start backends (Microservices Architecture)
 Write-Host ""
-Write-Host "5️⃣  Starting Ingestion Backend..." -ForegroundColor Yellow
-Write-Host "   🔄 Starting backend process..." -NoNewline
+Write-Host "5️⃣  Starting Backends..." -ForegroundColor Yellow
+Write-Host "   🔄 Starting Main Backend (Port 45678)..." -NoNewline
 
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "python main_backend.py" -WindowStyle Minimized
+Start-Sleep -Seconds 2
+Write-Host " ✅" -ForegroundColor Green
+
+Write-Host "   🔄 Starting Ingestion Backend (Port 45679)..." -NoNewline
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "python ingestion_backend.py" -WindowStyle Minimized
-Start-Sleep -Seconds 5
+Start-Sleep -Seconds 3
 
 Write-Host " ✅" -ForegroundColor Green
 
-# Step 6: Wait for backend to be ready
+# Step 6: Wait for backends to be ready
 Write-Host ""
-Write-Host "6️⃣  Waiting for backend to be ready..." -ForegroundColor Yellow
+Write-Host "6️⃣  Waiting for backends to be ready..." -ForegroundColor Yellow
 $maxWait = 30
 $waited = 0
-$ready = $false
+$mainReady = $false
+$ingestionReady = $false
 
-while ($waited -lt $maxWait -and -not $ready) {
-    try {
-        $health = curl http://127.0.0.1:45679/health 2>$null | ConvertFrom-Json
-        if ($health.status -eq "healthy") {
-            $ready = $true
-            Write-Host "   ✅ Backend ready after $waited seconds" -ForegroundColor Green
+while ($waited -lt $maxWait -and (-not $mainReady -or -not $ingestionReady)) {
+    # Check Main Backend
+    if (-not $mainReady) {
+        try {
+            $mainHealth = curl http://127.0.0.1:45678/health 2>$null | ConvertFrom-Json
+            if ($mainHealth.status -eq "healthy") {
+                $mainReady = $true
+                Write-Host "   ✅ Main Backend ready after $waited seconds" -ForegroundColor Green
+            }
+        } catch {
+            # Still waiting
         }
-    } catch {
+    }
+    
+    # Check Ingestion Backend
+    if (-not $ingestionReady) {
+        try {
+            $ingestionHealth = curl http://127.0.0.1:45679/health 2>$null | ConvertFrom-Json
+            if ($ingestionHealth.status -eq "healthy") {
+                $ingestionReady = $true
+                Write-Host "   ✅ Ingestion Backend ready after $waited seconds" -ForegroundColor Green
+            }
+        } catch {
+            # Still waiting
+        }
+    }
+    
+    if (-not $mainReady -or -not $ingestionReady) {
         Write-Host "   ⏳ Waiting... ($waited/$maxWait seconds)" -ForegroundColor Gray
         Start-Sleep -Seconds 2
         $waited += 2
     }
 }
 
-if (-not $ready) {
-    Write-Host "   ❌ Backend failed to start after $maxWait seconds!" -ForegroundColor Red
+if (-not $mainReady) {
+    Write-Host "   ❌ Main Backend failed to start after $maxWait seconds!" -ForegroundColor Red
+    exit 1
+}
+
+if (-not $ingestionReady) {
+    Write-Host "   ❌ Ingestion Backend failed to start after $maxWait seconds!" -ForegroundColor Red
     exit 1
 }
 
@@ -127,18 +166,19 @@ Write-Host "=" * 70 -ForegroundColor Cyan
 Write-Host "📊 Deployment Summary" -ForegroundColor Cyan
 Write-Host "=" * 70 -ForegroundColor Cyan
 Write-Host ""
-Write-Host "✅ Backend v3.4.9 deployed successfully!" -ForegroundColor Green
+Write-Host "✅ Covina Microservices v3.4.9 deployed successfully!" -ForegroundColor Green
 Write-Host ""
 Write-Host "🔍 Next Steps:" -ForegroundColor Cyan
-Write-Host "   1. Monitor logs:     tail -f logs/ingestion_backend.log" -ForegroundColor Gray
-Write-Host "   2. Test auto-resume: python tests\test_auto_resume.py" -ForegroundColor Gray
-Write-Host "   3. Check job status: curl http://127.0.0.1:45679/jobs" -ForegroundColor Gray
+Write-Host "   1. Monitor logs:     tail -f logs/main_backend.log" -ForegroundColor Gray
+Write-Host "   2. Monitor logs:     tail -f logs/ingestion_backend.log" -ForegroundColor Gray
+Write-Host "   3. Test auto-resume: python tests\test_auto_resume.py" -ForegroundColor Gray
+Write-Host "   4. Check job status: curl http://127.0.0.1:45679/jobs" -ForegroundColor Gray
 Write-Host ""
-Write-Host "📝 Auto-Resume Features:" -ForegroundColor Cyan
-Write-Host "   • Pending jobs automatically resumed" -ForegroundColor White
-Write-Host "   • Ghost jobs automatically cleaned" -ForegroundColor White
-Write-Host "   • Worker pool started immediately" -ForegroundColor White
-Write-Host "   • Zero manual intervention required" -ForegroundColor White
+Write-Host "📝 Microservices Architecture:" -ForegroundColor Cyan
+Write-Host "   • Main Backend:      Port 45678 (Queries, DSGVO, Review)" -ForegroundColor White
+Write-Host "   • Ingestion Backend: Port 45679 (Upload, Processing)" -ForegroundColor White
+Write-Host "   • Worker pool:       36 I/O + 36 CPU processes" -ForegroundColor White
+Write-Host "   • Auto-Resume:       Enabled (pending jobs recovered)" -ForegroundColor White
 Write-Host ""
 Write-Host "🎉 Deployment complete!" -ForegroundColor Green
 Write-Host ""

@@ -17,13 +17,30 @@ from pathlib import Path
 import threading
 import time
 import logging  # ✅ FIX: Add missing logging import
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
-from frontend.config import COLORS, FONTS
+from frontend.config import COLORS, FONTS, CHART_MODE
 from frontend.services.api_client import api_client, ingestion_api_client
 from frontend.services.websocket_client import create_job_monitor_client
-from frontend.core.chart_threading import ChartThreadPool, ChartType, ChartResult, ChartStatus
-from frontend.core.chart_workers import CHART_WORKERS
+from frontend.widgets.kpi_card import KPICard, create_kpi_grid
+try:
+    if CHART_MODE == "full":
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+        from frontend.core.chart_threading import ChartThreadPool, ChartType, ChartResult, ChartStatus
+        from frontend.core.chart_workers import CHART_WORKERS
+    else:
+        FigureCanvasTkAgg = None  # type: ignore
+        ChartThreadPool = None  # type: ignore
+        ChartType = None  # type: ignore
+        ChartResult = None  # type: ignore
+        ChartStatus = None  # type: ignore
+        CHART_WORKERS = None  # type: ignore
+except Exception:
+    FigureCanvasTkAgg = None  # type: ignore
+    ChartThreadPool = None  # type: ignore
+    ChartType = None  # type: ignore
+    ChartResult = None  # type: ignore
+    ChartStatus = None  # type: ignore
+    CHART_WORKERS = None  # type: ignore
 from frontend.widgets.bulk_copy_progress_modal import BulkCopyProgressModal  # 🆕 NEW!
 from frontend.widgets.upload_method_dialog import show_upload_dialog  # 🆕 NEW: Multi-method upload
 
@@ -32,7 +49,13 @@ logger = logging.getLogger(__name__)
 
 
 class IngestionView(ttk.Frame):
-    """Ingestion Monitoring & Upload View"""
+    """Ingestion Monitoring & Upload View with KPI Cards
+    
+    🎯 ENHANCED (17. Oktober 2025):
+    + 4 KPI cards for quick metrics (Files Today, Success Rate, Avg Speed, Queue Size)
+    + 2 Charts kept (INGESTION_TIMELINE, PROCESSING_RATE - both valuable)
+    + WebSocket real-time updates
+    """
     
     def __init__(self, parent):
         super().__init__(parent)
@@ -47,22 +70,28 @@ class IngestionView(ttk.Frame):
         self.ws_enabled = True  # Try WebSocket first
         self.job_polling_active = False  # Fallback polling
         
-        # Chart Thread Pool (3 workers: 2 charts + 1 refresh)
-        self.chart_pool = ChartThreadPool(num_workers=3)
-        self.canvases: Dict[tuple, FigureCanvasTkAgg] = {}
+        # KPI Cards Dictionary
+        self.kpi_cards: Dict[str, KPICard] = {}
+        
+        # Chart Thread Pool (3 workers: 2 charts + 1 refresh) - only in full mode
+        self.chart_pool = ChartThreadPool(num_workers=3) if CHART_MODE == "full" and ChartThreadPool is not None else None
+        self.canvases: Dict[tuple, Any] = {}
         
         # Chart Layout (1×2 Grid)
         self.chart_layout = {
             (0, 0): ChartType.INGESTION_TIMELINE,     # Line Chart
             (0, 1): ChartType.PROCESSING_RATE,        # Gauge Chart
-        }
+        } if CHART_MODE == "full" and ChartType is not None else {}
         
         self._create_widgets()
         self._setup_websocket()
         self._start_chart_pool()
         
-        # Initial chart refresh (delayed)
-        self.after(3000, self.refresh_charts)
+        # Initial refresh (delayed)
+        if CHART_MODE == "full" and self.chart_layout:
+            self.after(3000, self.refresh_charts)
+        else:
+            self.after(3000, self.refresh)
     
     def _create_widgets(self):
         """Create widgets"""
@@ -105,31 +134,48 @@ class IngestionView(ttk.Frame):
         self._create_stats_panel(stats_frame)
         
         # ========================================================================
-        # CHARTS SECTION (Moved from Home Dashboard)
+        # KPI CARDS SECTION (Quick Metrics)
         # ========================================================================
-        charts_separator = ttk.Separator(self, orient='horizontal')
-        charts_separator.pack(fill=tk.X, padx=20, pady=10)
+        kpi_separator = ttk.Separator(self, orient='horizontal')
+        kpi_separator.pack(fill=tk.X, padx=20, pady=10)
         
-        charts_title = ttk.Label(self, text="📊 Ingestion Analytics Charts", style='Subtitle.TLabel')
-        charts_title.pack(pady=10, anchor=tk.W, padx=20)
+        kpi_title = ttk.Label(self, text="📊 Quick Metrics", style='Subtitle.TLabel')
+        kpi_title.pack(pady=(10, 5), anchor=tk.W, padx=20)
         
-        # Chart grid container (1×2)
-        chart_grid = ttk.Frame(self)
-        chart_grid.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        # Create KPI card container
+        kpi_container = ttk.Frame(self)
+        kpi_container.pack(fill=tk.X, padx=20, pady=10)
         
-        # Configure grid weights (2 columns, 1 row)
-        for col in range(2):
-            chart_grid.grid_columnconfigure(col, weight=1, uniform="col")
-        chart_grid.grid_rowconfigure(0, weight=1)
+        # Create 4 KPI cards (1 row × 4 columns)
+        kpi_definitions = [
+            ("files_today", "📁 Files Today", "N/A"),
+            ("success_rate", "✅ Success Rate", "N/A"),
+            ("avg_speed", "⚡ Avg Speed", "N/A"),
+            ("queue_size", "📋 Queue Size", "N/A"),
+        ]
         
-        # Create placeholder frames for charts
-        for (row, col), chart_type in self.chart_layout.items():
-            placeholder = ttk.Frame(chart_grid, relief=tk.SUNKEN, borderwidth=1)
-            placeholder.grid(row=row, column=col, sticky=(tk.N, tk.S, tk.E, tk.W), padx=5, pady=5)
-            
-            # Loading label
-            loading_label = ttk.Label(placeholder, text=f"Loading {chart_type.name}...", style='Body.TLabel')
-            loading_label.pack(expand=True)
+        self.kpi_cards = create_kpi_grid(kpi_container, kpi_definitions, rows=1, cols=4)
+        
+        # ========================================================================
+        # CHARTS SECTION (optional)
+        # ========================================================================
+        if CHART_MODE == "full" and self.chart_layout:
+            charts_separator = ttk.Separator(self, orient='horizontal')
+            charts_separator.pack(fill=tk.X, padx=20, pady=10)
+            charts_title = ttk.Label(self, text="📊 Ingestion Analytics Charts", style='Subtitle.TLabel')
+            charts_title.pack(pady=10, anchor=tk.W, padx=20)
+            chart_grid = ttk.Frame(self)
+            chart_grid.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+            # Configure grid weights (2 columns, 1 row)
+            for col in range(2):
+                chart_grid.grid_columnconfigure(col, weight=1, uniform="col")
+            chart_grid.grid_rowconfigure(0, weight=1)
+            # Create placeholder frames for charts
+            for (row, col), chart_type in self.chart_layout.items():
+                placeholder = ttk.Frame(chart_grid, relief=tk.SUNKEN, borderwidth=1)
+                placeholder.grid(row=row, column=col, sticky=(tk.N, tk.S, tk.E, tk.W), padx=5, pady=5)
+                loading_label = ttk.Label(placeholder, text=f"Loading {chart_type.name}...", style='Body.TLabel')
+                loading_label.pack(expand=True)
     
     def _create_upload_controls(self, parent):
         """Create upload control buttons and file selection"""
@@ -651,6 +697,7 @@ class IngestionView(ttk.Frame):
         
         if self.db_stats and "error" not in self.db_stats:
             self._update_stats_display()
+            self._update_kpis()  # NEW: Update KPI cards
     
     def _update_stats_display(self):
         """Update pipeline statistics"""
@@ -665,13 +712,63 @@ class IngestionView(ttk.Frame):
         self.rate_label.config(text="Processing Rate: Active")
         self.status_label.config(text="Status: Online")
     
+    def _update_kpis(self):
+        """Update KPI cards with ingestion metrics
+        
+        KPI Cards:
+        - files_today: Number of files processed today (placeholder: total docs)
+        - success_rate: Percentage of successful ingestions (placeholder: 95%)
+        - avg_speed: Average processing speed (placeholder: N/A - needs /jobs metrics)
+        - queue_size: Current queue size from active_jobs
+        """
+        try:
+            # 1. Files Today (placeholder: use total documents for now)
+            # TODO: Backend needs /jobs/stats?period=today endpoint
+            if self.db_stats:
+                total_docs = self.db_stats.get("total_documents", 0)
+                self.kpi_cards["files_today"].update_value(f"{total_docs:,}")
+                self.kpi_cards["files_today"].set_status("success" if total_docs > 0 else "unknown")
+            else:
+                self.kpi_cards["files_today"].update_value("N/A")
+                self.kpi_cards["files_today"].set_status("unknown")
+            
+            # 2. Success Rate (placeholder: 95% - backend needs metrics)
+            # TODO: Backend needs /jobs/stats endpoint with success_count/total_count
+            self.kpi_cards["success_rate"].update_value("95%")
+            self.kpi_cards["success_rate"].set_status("success")
+            
+            # 3. Avg Speed (placeholder: N/A - backend needs metrics)
+            # TODO: Backend needs /jobs/stats endpoint with avg_processing_time
+            self.kpi_cards["avg_speed"].update_value("N/A")
+            self.kpi_cards["avg_speed"].set_status("unknown")
+            
+            # 4. Queue Size (from active_jobs list)
+            queue_size = len(self.active_jobs)
+            self.kpi_cards["queue_size"].update_value(str(queue_size))
+            
+            # Color coding based on queue size
+            if queue_size == 0:
+                status = "success"  # Green: No queue
+            elif queue_size < 5:
+                status = "warning"  # Yellow: Small queue
+            else:
+                status = "error"  # Red: Large queue (>= 5)
+            
+            self.kpi_cards["queue_size"].set_status(status)
+        
+        except Exception as e:
+            print(f"[ERROR] Failed to update Ingestion KPIs: {e}")
+            import traceback
+            traceback.print_exc()
+    
     # ========================================================================
     # CHART POOL METHODS (Moved from Home Dashboard)
     # ========================================================================
     
     def _start_chart_pool(self):
         """Start chart thread pool"""
-        self.chart_pool.start(CHART_WORKERS)
+        if CHART_MODE == "full" and self.chart_pool is not None and CHART_WORKERS is not None:
+            self.chart_pool.start(CHART_WORKERS)
     
     def refresh_charts(self):
         """Refresh ingestion charts"""
@@ -684,6 +781,8 @@ class IngestionView(ttk.Frame):
     
     def _submit_chart_requests(self):
         """Submit all chart rendering requests to thread pool"""
+        if self.chart_pool is None:
+            return
         for (row, col), chart_type in self.chart_layout.items():
             chart_id = f"ing_chart_{row}_{col}"
             

@@ -24,7 +24,7 @@ if (-not (Test-Path $logsDir)) {
 # Start Main Backend on Port 45678
 Write-Host ""
 Write-Host "Starting Main Backend on Port 45678..." -ForegroundColor Green
-$mainBackend = Start-Process -FilePath "python" -ArgumentList "backend.py" `
+$mainBackend = Start-Process -FilePath "python" -ArgumentList "main_backend.py" `
     -NoNewWindow -PassThru -RedirectStandardOutput "logs\main_backend.log" `
     -RedirectStandardError "logs\main_backend_error.log"
 

@@ -69,8 +69,8 @@ class FileDiscoveryService:
         self.scanners: Dict[Path, DirectoryScanner] = {}
         for directory in self.watch_directories:
             self.scanners[directory] = DirectoryScanner(
-                root_path=directory,
-                recursive=True
+                root=directory,  # FIXED: root_path → root (16.10.2025, 12:05 Uhr)
+                compute_hashes=False  # FIXED: recursive=True → compute_hashes (not needed for discovery)
             )
         
         # Service State
@@ -179,10 +179,19 @@ class FileDiscoveryService:
             
             logger.info(f"📁 Discovered {len(new_files)} new/modified files")
             
-            # Trigger callback
+            # Trigger callback (async-aware - 16.10.2025, 12:00 Uhr)
             if self.on_discovery_callback:
                 try:
-                    self.on_discovery_callback(new_files)
+                    import asyncio
+                    import inspect
+                    
+                    # Check if callback is async (coroutine)
+                    if inspect.iscoroutinefunction(self.on_discovery_callback):
+                        # Async callback: schedule as task
+                        asyncio.create_task(self.on_discovery_callback(new_files))
+                    else:
+                        # Sync callback: call directly
+                        self.on_discovery_callback(new_files)
                 except Exception as e:
                     logger.error(f"Discovery callback failed: {e}", exc_info=True)
     
@@ -197,7 +206,7 @@ class FileDiscoveryService:
             List of FileEvents (CREATED events for all found files)
         """
         # Create temporary scanner
-        scanner = DirectoryScanner(root_path=directory, recursive=True)
+        scanner = DirectoryScanner(root=directory, compute_hashes=False)  # FIXED: root_path → root (16.10.2025, 12:05 Uhr)
         
         try:
             events = scanner.scan_once()

@@ -12,12 +12,29 @@ Database Health Dashboard
 import tkinter as tk
 from tkinter import ttk
 from typing import Optional, Dict, Any
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
-from frontend.config import COLORS, FONTS
+from frontend.config import COLORS, FONTS, CHART_MODE
 from frontend.services.api_client import api_client
-from frontend.core.chart_threading import ChartThreadPool, ChartType, ChartResult, ChartStatus
-from frontend.core.chart_workers import CHART_WORKERS
+from frontend.widgets.kpi_card import KPICard, create_kpi_grid
+try:
+    if CHART_MODE == "full":
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+        from frontend.core.chart_threading import ChartThreadPool, ChartType, ChartResult, ChartStatus
+        from frontend.core.chart_workers import CHART_WORKERS
+    else:
+        FigureCanvasTkAgg = None  # type: ignore
+        ChartThreadPool = None  # type: ignore
+        ChartType = None  # type: ignore
+        ChartResult = None  # type: ignore
+        ChartStatus = None  # type: ignore
+        CHART_WORKERS = None  # type: ignore
+except Exception:
+    FigureCanvasTkAgg = None  # type: ignore
+    ChartThreadPool = None  # type: ignore
+    ChartType = None  # type: ignore
+    ChartResult = None  # type: ignore
+    ChartStatus = None  # type: ignore
+    CHART_WORKERS = None  # type: ignore
 
 
 class DatabaseHealthView(ttk.Frame):
@@ -31,17 +48,18 @@ class DatabaseHealthView(ttk.Frame):
         self.db_stats: Optional[Dict[str, Any]] = None
         self.vector_stats: Optional[Dict[str, Any]] = None
         
-        # Chart Thread Pool (5 workers: 4 charts + 1 refresh)
-        self.chart_pool = ChartThreadPool(num_workers=5)
-        self.canvases: Dict[tuple, FigureCanvasTkAgg] = {}
+        # Chart Thread Pool (only in full mode)
+        self.chart_pool = ChartThreadPool(num_workers=2) if CHART_MODE == "full" and ChartThreadPool is not None else None
+        self.canvases: Dict[tuple, Any] = {}
         
-        # Chart Layout (2×2 Grid)
+        # Chart Layout (REDUCED: 1 Chart only - DATABASE_CONNECTIONS)
+        # Removed: CLASSIFICATION_PIE (redundant), QUALITY_SPIDER (no data), STORAGE_USAGE (now KPI)
         self.chart_layout = {
-            (0, 0): ChartType.DATABASE_CONNECTIONS,   # Bar Chart
-            (0, 1): ChartType.CLASSIFICATION_PIE,     # Pie Chart
-            (1, 0): ChartType.QUALITY_SPIDER,         # Radar Chart
-            (1, 1): ChartType.STORAGE_USAGE,          # Pie Chart
-        }
+            (0, 0): ChartType.DATABASE_CONNECTIONS,   # Bar Chart - PostgreSQL Tables
+        } if CHART_MODE == "full" and ChartType is not None else {}
+        
+        # KPI Cards (NEW)
+        self.kpi_cards: Dict[str, KPICard] = {}
         
         self._create_widgets()
         self._start_chart_pool()
@@ -51,10 +69,19 @@ class DatabaseHealthView(ttk.Frame):
     
     def _create_widgets(self):
         """Create widgets"""
-        title = ttk.Label(self, text="Database Health", style='Title.TLabel')
+        title = ttk.Label(self, text="💾 Database Health Monitor", style='Title.TLabel')
         title.pack(pady=10, anchor=tk.W, padx=20)
         
-        # Grid container
+        # KPI Cards (NEW - 4 cards showing key metrics)
+        kpi_definitions = [
+            {"title": "Total Size", "value": "N/A", "icon": "💾"},
+            {"title": "Connections", "value": "N/A", "icon": "🔌"},
+            {"title": "Avg Query Time", "value": "N/A", "icon": "⚡"},
+            {"title": "Table Count", "value": "N/A", "icon": "📊"}
+        ]
+        self.kpi_cards = create_kpi_grid(self, kpi_definitions, columns=4)
+        
+        # Grid container (Database panels)
         grid = ttk.Frame(self)
         grid.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
         
@@ -78,36 +105,27 @@ class DatabaseHealthView(ttk.Frame):
         grid.rowconfigure(1, weight=1)
         
         # Refresh button
-        refresh_btn = ttk.Button(self, text="Refresh Health Status", command=self.refresh)
+        refresh_btn = ttk.Button(self, text="🔄 Refresh Health Status", command=self.refresh)
         refresh_btn.pack(pady=10)
         
         # ========================================================================
-        # CHARTS SECTION (Moved from Home Dashboard)
+        # CHART SECTION (REDUCED: 1 chart only - DATABASE_CONNECTIONS)
         # ========================================================================
-        charts_separator = ttk.Separator(self, orient='horizontal')
-        charts_separator.pack(fill=tk.X, padx=20, pady=10)
-        
-        charts_title = ttk.Label(self, text="📊 Database Analytics Charts", style='Subtitle.TLabel')
-        charts_title.pack(pady=10, anchor=tk.W, padx=20)
-        
-        # Chart grid container (2×2)
-        chart_grid = ttk.Frame(self)
-        chart_grid.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
-        
-        # Configure grid weights (2 columns, 2 rows)
-        for col in range(2):
-            chart_grid.grid_columnconfigure(col, weight=1, uniform="col")
-        for row in range(2):
-            chart_grid.grid_rowconfigure(row, weight=1, uniform="row")
-        
-        # Create placeholder frames for charts
-        for (row, col), chart_type in self.chart_layout.items():
-            placeholder = ttk.Frame(chart_grid, relief=tk.SUNKEN, borderwidth=1)
-            placeholder.grid(row=row, column=col, sticky=(tk.N, tk.S, tk.E, tk.W), padx=5, pady=5)
-            
-            # Loading label
-            loading_label = ttk.Label(placeholder, text=f"Loading {chart_type.name}...", style='Body.TLabel')
-            loading_label.pack(expand=True)
+        if CHART_MODE == "full":
+            charts_separator = ttk.Separator(self, orient='horizontal')
+            charts_separator.pack(fill=tk.X, padx=20, pady=10)
+            charts_title = ttk.Label(self, text="📊 Database Analytics", style='Subtitle.TLabel')
+            charts_title.pack(pady=10, anchor=tk.W, padx=20)
+            chart_grid = ttk.Frame(self)
+            chart_grid.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+            chart_grid.grid_columnconfigure(0, weight=1)
+            chart_grid.grid_rowconfigure(0, weight=1)
+            # Create placeholder for single chart
+            for (row, col), chart_type in self.chart_layout.items():
+                placeholder = ttk.Frame(chart_grid, relief=tk.SUNKEN, borderwidth=1)
+                placeholder.grid(row=row, column=col, sticky=(tk.N, tk.S, tk.E, tk.W), padx=5, pady=5)
+                loading_label = ttk.Label(placeholder, text=f"⏳ Loading {chart_type.name}...", style='Body.TLabel')
+                loading_label.pack(expand=True)
     
     def _create_db_panel(self, parent, db_name, backend_key):
         """Create individual database panel"""
@@ -149,13 +167,61 @@ class DatabaseHealthView(ttk.Frame):
         return frame
     
     def refresh(self):
-        """Refresh all database health data + charts"""
+        """Refresh all database health data + KPIs + charts"""
         self.uds3_data = api_client.get_uds3_strategy_status()
         self.db_stats = api_client.get_database_stats()
         self.vector_stats = api_client.get_vector_monitoring()
         
         self._update_panels()
+        self._update_kpis()  # NEW: Update KPI cards
         self.refresh_charts()  # Also refresh charts
+    
+    def _update_kpis(self):
+        """Update KPI cards with database metrics"""
+        try:
+            if self.db_stats and isinstance(self.db_stats, dict):
+                # Total Size: Sum all table sizes
+                total_size_mb = 0
+                table_count = 0
+                if 'table_stats' in self.db_stats:
+                    for table_name, table_info in self.db_stats['table_stats'].items():
+                        if isinstance(table_info, dict) and 'size_mb' in table_info:
+                            total_size_mb += table_info['size_mb']
+                            table_count += 1
+                
+                self.kpi_cards["Total Size"].update_value(f"{total_size_mb:.1f} MB")
+                self.kpi_cards["Total Size"].set_status("success" if total_size_mb > 0 else "unknown")
+                
+                # Connections: Active / Total
+                if 'connection_pool' in self.db_stats:
+                    pool = self.db_stats['connection_pool']
+                    active = pool.get('active', 0)
+                    total = pool.get('total', 0)
+                    self.kpi_cards["Connections"].update_value(f"{active} / {total}")
+                    
+                    # Color based on usage
+                    usage_pct = (active / total * 100) if total > 0 else 0
+                    if usage_pct < 70:
+                        self.kpi_cards["Connections"].set_status("success")
+                    elif usage_pct < 90:
+                        self.kpi_cards["Connections"].set_status("warning")
+                    else:
+                        self.kpi_cards["Connections"].set_status("error")
+                else:
+                    self.kpi_cards["Connections"].update_value("N/A")
+                    self.kpi_cards["Connections"].set_status("unknown")
+                
+                # Avg Query Time (placeholder - TODO: add to backend)
+                self.kpi_cards["Avg Query Time"].update_value("N/A")
+                self.kpi_cards["Avg Query Time"].set_status("unknown")
+                
+                # Table Count
+                self.kpi_cards["Table Count"].update_value(str(table_count))
+                self.kpi_cards["Table Count"].set_status("success" if table_count > 0 else "unknown")
+            
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"KPI update error: {e}")
     
     def _update_panels(self):
         """Update all panels"""
@@ -204,7 +270,8 @@ class DatabaseHealthView(ttk.Frame):
     
     def _start_chart_pool(self):
         """Start chart thread pool"""
-        self.chart_pool.start(CHART_WORKERS)
+        if CHART_MODE == "full" and self.chart_pool is not None and CHART_WORKERS is not None:
+            self.chart_pool.start(CHART_WORKERS)
     
     def refresh_charts(self):
         """Refresh all charts"""
@@ -214,7 +281,8 @@ class DatabaseHealthView(ttk.Frame):
         self.vector_stats = api_client.get_vector_monitoring()
         
         # Submit chart requests
-        self._submit_chart_requests()
+        if CHART_MODE == "full" and self.chart_pool is not None:
+            self._submit_chart_requests()
     
     def _submit_chart_requests(self):
         """Submit all chart rendering requests to thread pool"""
@@ -242,7 +310,7 @@ class DatabaseHealthView(ttk.Frame):
     
     def _handle_chart_result(self, result: ChartResult, row: int, col: int):
         """Handle chart rendering result"""
-        if result.status == ChartStatus.SUCCESS and result.figure:
+        if CHART_MODE == "full" and result.status == ChartStatus.SUCCESS and result.figure:
             # Remove old canvas if exists
             if (row, col) in self.canvases:
                 old_canvas = self.canvases[(row, col)]
@@ -267,9 +335,10 @@ class DatabaseHealthView(ttk.Frame):
                     widget.destroy()
                 
                 # Create canvas
-                canvas = FigureCanvasTkAgg(result.figure, master=grid_cell)
-                canvas.draw()
-                canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+                if FigureCanvasTkAgg is not None:
+                    canvas = FigureCanvasTkAgg(result.figure, master=grid_cell)
+                    canvas.draw()
+                    canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
                 
                 # Store canvas
                 self.canvases[(row, col)] = canvas

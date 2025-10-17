@@ -19,8 +19,8 @@ from frontend.views.home_dashboard_threaded import ThreadedHomeDashboardView  # 
 from frontend.views.system_status_view import SystemStatusView
 from frontend.views.database_health_view import DatabaseHealthView
 from frontend.views.ingestion_view import IngestionView
+# Optional/available views
 from frontend.views.security_view import SecurityView
-from frontend.views.error_tracking_view import ErrorTrackingView
 from frontend.views.golden_dataset_view import GoldenDatasetView
 
 # Import widgets
@@ -134,13 +134,15 @@ class CovinaLiveViewApp:
         self.views["SAGA Monitor"] = SAGAMonitorWidget(self.notebook)
         self.notebook.add(self.views["SAGA Monitor"], text="SAGA Monitor")
         
-        # Security
-        self.views["Security"] = SecurityView(self.notebook)
-        self.notebook.add(self.views["Security"], text="Security & Audit")
+        # Security (if available)
+        try:
+            self.views["Security"] = SecurityView(self.notebook)
+            self.notebook.add(self.views["Security"], text="Security & Audit")
+        except Exception as e:
+            print(f"SecurityView not available: {e}")
         
-        # Error Tracking
-        self.views["Errors"] = ErrorTrackingView(self.notebook)
-        self.notebook.add(self.views["Errors"], text="Error Tracking")
+        # Error Tracking (temporarily disabled – view file not present)
+        # If needed, add a lightweight placeholder tab later
         
         # Golden Dataset
         self.views["Golden Dataset"] = GoldenDatasetView(self.notebook)
@@ -271,14 +273,8 @@ class CovinaLiveViewApp:
     
     def _update_errors(self):
         """Update error tracking view (only if visible)"""
-        view_name = "Errors"
-        if view_name in self.views:
-            try:
-                current_tab = self.notebook.tab(self.notebook.select(), "text")
-                if current_tab == view_name:
-                    self.views[view_name].refresh()
-            except:
-                pass
+        # Errors tab currently not active
+        return
     
     def _update_golden_dataset(self):
         """Update golden dataset view (only if visible)"""
@@ -367,16 +363,16 @@ class CovinaLiveViewApp:
         """Handle window closing with graceful shutdown"""
         if messagebox.askokcancel("Quit", "Do you want to quit Covina LiveView?"):
             print("\n" + "="*60)
-            print("🛑 Shutting down Covina LiveView...")
+            print("[SHUTDOWN] Shutting down Covina LiveView...")
             print("="*60)
             
             try:
                 # 1. Stop LiveUpdater first (no more refresh requests)
                 print("1/4 Stopping LiveUpdater...")
                 live_updater.stop()
-                print("    ✅ LiveUpdater stopped")
+                print("    [OK] LiveUpdater stopped")
             except Exception as e:
-                print(f"    ⚠️ LiveUpdater stop error: {e}")
+                print(f"    [WARNING] LiveUpdater stop error: {e}")
             
             try:
                 # 2. Shutdown all view resources (chart pools, websockets)
@@ -387,29 +383,29 @@ class CovinaLiveViewApp:
                             print(f"    - Shutting down {view_name}...")
                             view.destroy()
                         except Exception as e:
-                            print(f"    ⚠️ {view_name} shutdown error: {e}")
-                print("    ✅ All views shut down")
+                            print(f"    [WARNING] {view_name} shutdown error: {e}")
+                print("    [OK] All views shut down")
             except Exception as e:
-                print(f"    ⚠️ Views shutdown error: {e}")
+                print(f"    [WARNING] Views shutdown error: {e}")
             
             try:
                 # 3. Cleanup PID file
                 print("3/4 Cleaning up PID file...")
                 self._cleanup_pid_file()
-                print("    ✅ PID file cleaned")
+                print("    [OK] PID file cleaned")
             except Exception as e:
-                print(f"    ⚠️ PID cleanup error: {e}")
+                print(f"    [WARNING] PID cleanup error: {e}")
             
             try:
                 # 4. Destroy root window
                 print("4/4 Destroying GUI...")
                 self.root.destroy()
-                print("    ✅ GUI destroyed")
+                print("    [OK] GUI destroyed")
             except Exception as e:
-                print(f"    ⚠️ GUI destroy error: {e}")
+                print(f"    [WARNING] GUI destroy error: {e}")
             
             print("="*60)
-            print("✅ Shutdown complete!")
+            print("[OK] Shutdown complete!")
             print("="*60 + "\n")
             
             # Exit cleanly

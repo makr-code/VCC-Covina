@@ -114,6 +114,174 @@ logging.getLogger('neo4j.pool').setLevel(logging.WARNING)
 logging.getLogger('neo4j.io').setLevel(logging.WARNING)
 
 # ================================================================
+# CHROMADB BATCH INSERT CONFIGURATION
+# ================================================================
+
+def should_use_batch_insert() -> bool:
+    """
+    Check if ChromaDB Batch Insert is enabled via ENV.
+    
+    Returns:
+        bool: True if ENABLE_CHROMA_BATCH_INSERT=true in ENV
+    """
+    enabled = os.getenv('ENABLE_CHROMA_BATCH_INSERT', 'false').lower() == 'true'
+    return enabled
+
+
+def get_batch_insert_size() -> int:
+    """
+    Get ChromaDB Batch Insert batch size from ENV.
+    
+    Returns:
+        int: Batch size (default: 100)
+    """
+    try:
+        size = int(os.getenv('CHROMA_BATCH_INSERT_SIZE', '100'))
+        return max(1, min(size, 1000))  # Clamp between 1-1000
+    except ValueError:
+        return 100
+
+
+logger.info(f"[CONFIG] ChromaDB Batch Insert: {'ENABLED' if should_use_batch_insert() else 'DISABLED'}")
+if should_use_batch_insert():
+    logger.info(f"[CONFIG] Batch Insert Size: {get_batch_insert_size()}")
+
+
+# ================================================================
+# SAGA TOGGLE (ENV)
+# ================================================================
+
+def should_use_saga() -> bool:
+    """Check if SAGA processing is enabled via ENV (ENABLE_SAGA=true)."""
+    return os.getenv('ENABLE_SAGA', 'false').lower() == 'true'
+
+
+# ================================================================
+# CHROMADB BATCH INSERTER
+# ================================================================
+
+class ChromaBatchInserter:
+    """
+    Context manager for batched ChromaDB inserts.
+    
+    Usage:
+        with ChromaBatchInserter(chromadb_backend, batch_size=100) as inserter:
+            for chunk_id, vector, metadata in items:
+                inserter.add_vector(chunk_id, vector, metadata)
+        # Auto-flush on exit
+    """
+    
+    def __init__(self, chromadb_backend, batch_size: int = 100, auto_flush: bool = True):
+        """
+        Initialize batch inserter.
+        
+        Args:
+            chromadb_backend: ChromaDB backend instance
+            batch_size: Maximum batch size before auto-flush
+            auto_flush: Flush remaining items on context exit
+        """
+        self.backend = chromadb_backend
+        self.batch_size = batch_size
+        self.auto_flush = auto_flush
+        self.batch: List[Tuple[str, List[float], Dict]] = []
+        self.total_added = 0
+        self.flush_count = 0
+    
+    def add_vector(self, doc_id: str, vector: List[float], metadata: Dict) -> bool:
+        """
+        Add vector to batch.
+        
+        Args:
+            doc_id: Document/chunk ID
+            vector: Embedding vector
+            metadata: Metadata dict
+        
+        Returns:
+            bool: True if added successfully
+        """
+        self.batch.append((doc_id, vector, metadata))
+        
+        # Auto-flush when batch is full
+        if len(self.batch) >= self.batch_size:
+            return self.flush()
+        
+        return True
+    
+    def flush(self) -> bool:
+        """
+        Flush current batch to ChromaDB.
+        
+        Returns:
+            bool: True if successful
+        """
+        if not self.batch:
+            return True
+        
+        try:
+            success = False
+            # Prefer batch API when available
+            if hasattr(self.backend, 'add_vectors'):
+                try:
+                    success = self.backend.add_vectors(self.batch)
+                except Exception as e:
+                    logger.warning(f"[BATCH] add_vectors raised: {e} - falling back to per-item")
+                    success = False
+            
+            if not success:
+                # Fallback: add items one-by-one
+                added = 0
+                for doc_id, vector, metadata in self.batch:
+                    try:
+                        if hasattr(self.backend, 'add_vector'):
+                            ok = self.backend.add_vector(vector, metadata, doc_id)
+                        else:
+                            ok = False
+                        if ok:
+                            added += 1
+                    except Exception as e:
+                        logger.error(f"[BATCH] add_vector failed for {doc_id}: {e}")
+                self.total_added += added
+                # Mark a flush attempt regardless of partial success to reflect activity
+                self.flush_count += 1
+                logger.info(f"[BATCH] Fallback flushed {added}/{len(self.batch)} vectors (total: {self.total_added}, flushes: {self.flush_count})")
+                self.batch = []
+                return added > 0
+            else:
+                self.total_added += len(self.batch)
+                self.flush_count += 1
+                logger.debug(f"[BATCH] Flushed {len(self.batch)} vectors (total: {self.total_added}, flushes: {self.flush_count})")
+                self.batch = []
+                return True
+        except Exception as e:
+            logger.error(f"[BATCH] Flush failed: {e}")
+            self.batch = []
+            return False
+    
+    def get_stats(self) -> Dict[str, int]:
+        """
+        Get batch insert statistics.
+        
+        Returns:
+            Dict with total_added, flush_count, pending_count
+        """
+        return {
+            "total_added": self.total_added,
+            "flush_count": self.flush_count,
+            "pending_count": len(self.batch)
+        }
+    
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit with auto-flush."""
+        if self.auto_flush and self.batch:
+            self.flush()
+        return False
+
+
+# ================================================================
 # PYDANTIC MODELS
 # ================================================================
 
@@ -985,14 +1153,25 @@ class IngestionJobManager:
     def update_job_status(self, job_id: str, status: str, error: str = None):
         """Update Job Status with Persistent Storage"""
         with self._jobs_lock:  # [OK] Thread-safe
-            if job_id in self.jobs:
-                self.jobs[job_id]["status"] = status
-                self.jobs[job_id]["updated_at"] = datetime.now().isoformat()
-                if error:
-                    self.jobs[job_id]["error_message"] = error
-                
-                # [OK] NEW: Save to persistent storage
-                self.job_storage.save_job(self.jobs[job_id])
+            # [OK] FIX: Load job from DB if not in memory (Singleton broken in background threads!)
+            if job_id not in self.jobs:
+                logger.warning(f"[FIX] Job {job_id} not in memory - loading from DB...")
+                job_data = self.job_storage.get_job(job_id)
+                if job_data:
+                    self.jobs[job_id] = job_data
+                    logger.info(f"[OK] Job {job_id} loaded from DB into memory")
+                else:
+                    logger.error(f"[ERROR] Job {job_id} not found in DB either!")
+                    return  # Job doesn't exist - can't update
+            
+            # Now update the job
+            self.jobs[job_id]["status"] = status
+            self.jobs[job_id]["updated_at"] = datetime.now().isoformat()
+            if error:
+                self.jobs[job_id]["error_message"] = error
+            
+            # [OK] NEW: Save to persistent storage
+            self.job_storage.save_job(self.jobs[job_id])
         
         # Broadcast WebSocket Update (outside lock!)
         asyncio.create_task(self._broadcast_job_update(job_id))
@@ -1000,12 +1179,23 @@ class IngestionJobManager:
     def update_job_progress(self, job_id: str, processed: int):
         """Update Job Progress with Persistent Storage"""
         with self._jobs_lock:  # [OK] Thread-safe
-            if job_id in self.jobs:
-                self.jobs[job_id]["processed_files"] = processed
-                self.jobs[job_id]["updated_at"] = datetime.now().isoformat()
-                
-                # [OK] NEW: Save to persistent storage
-                self.job_storage.save_job(self.jobs[job_id])
+            # [OK] FIX: Load job from DB if not in memory (Singleton broken in background threads!)
+            if job_id not in self.jobs:
+                logger.warning(f"[FIX] Job {job_id} not in memory - loading from DB...")
+                job_data = self.job_storage.get_job(job_id)
+                if job_data:
+                    self.jobs[job_id] = job_data
+                    logger.info(f"[OK] Job {job_id} loaded from DB into memory")
+                else:
+                    logger.error(f"[ERROR] Job {job_id} not found in DB either!")
+                    return  # Job doesn't exist - can't update
+            
+            # Now update the progress
+            self.jobs[job_id]["processed_files"] = processed
+            self.jobs[job_id]["updated_at"] = datetime.now().isoformat()
+            
+            # [OK] NEW: Save to persistent storage
+            self.job_storage.save_job(self.jobs[job_id])
         
         # Broadcast WebSocket Update (outside lock!)
         asyncio.create_task(self._broadcast_job_update(job_id))
@@ -1013,9 +1203,13 @@ class IngestionJobManager:
     async def _broadcast_job_update(self, job_id: str):
         """Broadcast job update via WebSocket"""
         with self._jobs_lock:  # [OK] Thread-safe read
+            # [OK] FIX: Load job from DB if not in memory
             if job_id not in self.jobs:
-                return
-            job_data = self.jobs[job_id].copy()
+                job_data = self.job_storage.get_job(job_id)
+                if not job_data:
+                    return  # Job doesn't exist
+            else:
+                job_data = self.jobs[job_id].copy()
         
         job_data["type"] = "job_update"
         await ws_manager.broadcast_job_update(job_data)
@@ -1236,9 +1430,10 @@ async def process_document_with_uds3(
                     get_batch_size,
                     get_use_gpu
                 )
-                # Batch operations deaktiviert für Covina (nur in Clara)
-                should_use_batch_insert = lambda: False
-                get_batch_insert_size = lambda: 100
+                # ChromaDB Batch Insert functions defined at module level (Lines 113-145)
+                
+                # Decision logging for diagnostics
+                logger.info(f"[DEBUG] Embedding mode decision: enable_batch={should_use_batch_embeddings()} chunks={len(chunks)}")
                 
                 if should_use_batch_embeddings() and len(chunks) > 1:
                     # ═══════════════════════════════════════════════════════════
@@ -1270,11 +1465,11 @@ async def process_document_with_uds3(
                             def batch_insert_sync():
                                 chunk_count_local = 0
                                 
-                                # Create Batch Inserter with context manager (auto-flush on exit)
+                                # Create Batch Inserter; we will flush explicitly to ensure stats reflect writes
                                 with ChromaBatchInserter(
                                     chromadb_backend=job_manager.uds3_strategy.vector_backend,
                                     batch_size=get_batch_insert_size(),
-                                    auto_flush=True
+                                    auto_flush=False
                                 ) as batch_inserter:
                                     
                                     for idx, (chunk, vector) in enumerate(zip(chunks, embeddings)):
@@ -1292,8 +1487,9 @@ async def process_document_with_uds3(
                                         # Add to buffer (auto-flush at batch_size)
                                         batch_inserter.add_vector(chunk_id, vector, metadata)
                                         chunk_count_local += 1
-                                    
-                                    # Context manager calls flush() on exit
+
+                                    # Ensure remaining vectors are flushed before reading stats
+                                    batch_inserter.flush()
                                     stats = batch_inserter.get_stats()
                                     return chunk_count_local, stats
                             
@@ -1305,7 +1501,7 @@ async def process_document_with_uds3(
                         
                         else:
                             # SINGLE INSERT MODE (Legacy - individual API calls)
-                            logger.debug(f"[SYNC] ChromaDB Single Insert Mode (chunks={len(chunks)})")
+                            logger.info(f"[DEBUG] Using Single Insert Mode (chunks={len(chunks)})")
                             
                             for idx, (chunk, vector) in enumerate(zip(chunks, embeddings)):
                                 chunk_id = f"{document_id}_chunk_{idx}"
@@ -1693,7 +1889,7 @@ async def process_single_document(
     file_path: str,
     job_manager: IngestionJobManager,
     job_id: str = None,  # [OK] NEW: Job ID for file tracking
-    use_saga: bool = True  # [OK] NEW: Toggle SAGA mode
+    use_saga: bool = None  # If None, decide via ENV (ENABLE_SAGA)
 ) -> Dict[str, Any]:
     """
     Verarbeite einzelnes Dokument mit File-Level Tracking
@@ -1702,7 +1898,7 @@ async def process_single_document(
         file_path: Pfad zur Datei
         job_manager: Job Manager Instanz
         job_id: Job ID für File-Level Tracking in DB
-        use_saga: Wenn True, nutze SAGA Pattern (default), sonst Direct Writes
+    use_saga: Wenn True, nutze SAGA Pattern; wenn None, via ENV (ENABLE_SAGA)
     
     Returns:
         Verarbeitungs-Metriken
@@ -1723,6 +1919,10 @@ async def process_single_document(
         
         content = await loop.run_in_executor(io_executor, read_file)
         
+        # Decide SAGA usage
+        if use_saga is None:
+            use_saga = should_use_saga()
+
         # [OK] Choose processing mode: SAGA (transactional) vs Direct (best-effort)
         if use_saga:
             # SAGA Mode: Transactional consistency with automatic rollback
@@ -1807,9 +2007,27 @@ async def process_documents_batch(
         
         print(f"[OK] [BATCH] asyncio.gather() completed! Results: {len(results)}\n", flush=True)
         
-        # Aggregiere Metriken
-        successful = sum(1 for r in results if not isinstance(r, Exception) and r.get('error') is None)
-        failed = len(results) - successful
+        # Aggregiere Metriken und logge Exceptions
+        successful = 0
+        failed = 0
+        
+        for idx, result in enumerate(results):
+            if isinstance(result, Exception):
+                # Exception during processing
+                failed += 1
+                logger.error(f"[ERROR] File {idx} ({file_paths[idx]}) raised Exception: {result}")
+                logger.error(f"[ERROR] Exception type: {type(result).__name__}")
+                import traceback
+                logger.error(f"[ERROR] Traceback:\n{''.join(traceback.format_exception(type(result), result, result.__traceback__))}")
+            elif result.get('error') is not None:
+                # Processing returned error
+                failed += 1
+                logger.error(f"[ERROR] File {idx} ({file_paths[idx]}) returned error: {result.get('error')}")
+                logger.error(f"[ERROR] Full result: {result}")
+            else:
+                # Success
+                successful += 1
+                logger.debug(f"[OK] File {idx} ({file_paths[idx]}) processed successfully")
         
         print(f"[CHART] [BATCH] Successful: {successful}, Failed: {failed}\n", flush=True)
         
@@ -1927,18 +2145,19 @@ app.add_middleware(
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """Health Check"""
-    jm = get_job_manager()
+    """Health Check - Lightweight version (no JobManager initialization)"""
+    # FIXED (17.10.2025, 00:05 Uhr): Removed get_job_manager() call
+    # Reason: Triggers UDS3 initialization on first request, causes DB timeout crashes
     
     return HealthResponse(
         status="healthy",
         timestamp=datetime.now().isoformat(),
         components={
-            "uds3": "[OK] ready" if jm.uds3_ready else "[ERROR] not ready",
-            "vector_db": "[OK]" if getattr(jm.uds3_strategy, 'vector_backend', None) else "[ERROR]",
-            "graph_db": "[OK]" if getattr(jm.uds3_strategy, 'graph_backend', None) else "[ERROR]",
-            "relational_db": "[OK]" if getattr(jm.uds3_strategy, 'relational_backend', None) else "[ERROR]",
-            "document_db": "[OK]" if getattr(jm.uds3_strategy, 'document_backend', None) else "[ERROR]",
+            "uds3": "[INFO] lazy-init (not checked)",
+            "vector_db": "[INFO] lazy-init (not checked)",
+            "graph_db": "[INFO] lazy-init (not checked)",
+            "relational_db": "[INFO] lazy-init (not checked)",
+            "document_db": "[INFO] lazy-init (not checked)",
         },
         worker_pool={
             "io_workers": IO_WORKERS,
@@ -2174,6 +2393,14 @@ async def list_jobs(limit: int = 50):
     """Liste alle Jobs"""
     jobs = get_job_manager().list_jobs(limit)
     return [JobStatus(**job) for job in jobs]
+
+@app.get("/jobs/{job_id}", response_model=JobStatus)
+async def get_job(job_id: str):
+    """Hole Job-Details (Alias für /jobs/{job_id}/status)"""
+    job = get_job_manager().get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job nicht gefunden")
+    return JobStatus(**job)
 
 @app.get("/jobs/{job_id}/status", response_model=JobStatus)
 async def get_job_status(job_id: str):
@@ -2917,3 +3144,38 @@ if __name__ == "__main__":
         log_level=args.log_level
     )
 
+
+
+# ================================================================
+# MAIN ENTRY POINT
+# ================================================================
+
+if __name__ == "__main__":
+    import argparse
+    
+    # Parse command line arguments  
+    parser = argparse.ArgumentParser(description="Covina Ingestion Backend")
+    parser.add_argument("--host", default="127.0.0.1", help="Host to bind to")
+    parser.add_argument("--port", type=int, default=45679, help="Port to bind to")
+    parser.add_argument("--reload", action="store_true", help="Enable auto-reload")
+    parser.add_argument("--log-level", default="info", choices=["debug", "info", "warning", "error"], help="Log level")
+    
+    args = parser.parse_args()
+    
+    logger.info("=" * 60)
+    logger.info("🚀 Starting Covina Ingestion Backend")
+    logger.info("=" * 60)
+    logger.info(f"  Host: {args.host}")
+    logger.info(f"  Port: {args.port}")
+    logger.info(f"  Log-Level: {args.log_level.upper()}")
+    logger.info(f"  Worker Pool: {IO_WORKERS} I/O + {CPU_WORKERS} CPU")
+    logger.info("=" * 60)
+    
+    # Start uvicorn server
+    uvicorn.run(
+        "ingestion_backend:app",
+        host=args.host,
+        port=args.port,
+        reload=args.reload,
+        log_level=args.log_level
+    )

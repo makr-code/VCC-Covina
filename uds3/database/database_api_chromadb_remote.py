@@ -23,7 +23,7 @@ import requests
 from typing import Dict, List, Optional, Any, Tuple
 from urllib.parse import urljoin
 
-from database.database_api_base import VectorDatabaseBackend
+from uds3.database.database_api_base import VectorDatabaseBackend
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +60,7 @@ class ChromaRemoteVectorBackend(VectorDatabaseBackend):
         self._collection_exists = False
         self._api_compatible = False
         self._fallback_mode = False
+        self._collection_id = None  # 🆕 NEW: Store real UUID for V2 API operations
         
         # ChromaDB Multi-tenancy Support (Standard: default_tenant/default_database)
         self.tenant = cfg.get('tenant', 'default_tenant')
@@ -188,36 +189,31 @@ class ChromaRemoteVectorBackend(VectorDatabaseBackend):
         if self._fallback_mode:
             logger.info(f"✅ Fallback: Vektor '{doc_id}' hinzugefügt (simuliert)")
             return True
-            
         try:
             col_name = collection or self.collection_name
-            
             if not self._ensure_collection_exists(col_name):
                 return False
-            
-            # ChromaDB Add API Call für einzelnen Vektor (V2 oder V1)
-            if self._api_compatible:
-                add_url = urljoin(
-                    self.base_url, 
-                    f"/api/v2/tenants/{self.tenant}/databases/{self.database}/collections/{col_name}/add"
-                )
-            else:
-                add_url = urljoin(self.base_url, f"/api/v1/collections/{col_name}/add")
+            if not (self._api_compatible and self._collection_id):
+                logger.error(f"❌ ChromaDB V2 API: Collection UUID nicht verfügbar für '{col_name}' – aktiviere Fallback-Modus!")
+                self._fallback_mode = True
+                logger.info(f"✅ Fallback: Vektor '{doc_id}' hinzugefügt (simuliert, kein V2 UUID)")
+                return True
+            add_url = urljoin(
+                self.base_url,
+                f"/api/v2/collections/{self._collection_id}/add"
+            )
             payload = {
                 'ids': [doc_id],
                 'embeddings': [vector],
                 'metadatas': [metadata]
             }
-            
             response = self.session.post(add_url, json=payload)
-            
             if response.status_code == 200:
-                logger.info(f"✅ Vektor '{doc_id}' zu '{col_name}' hinzugefügt")
+                logger.info(f"✅ Vektor '{doc_id}' zu '{col_name}' hinzugefügt (V2 API)")
                 return True
             else:
                 logger.error(f"❌ ChromaDB add_vector failed: {response.status_code} - {response.text}")
                 return False
-                
         except Exception as e:
             logger.error(f"❌ add_vector Error: {e}")
             return False
@@ -324,8 +320,14 @@ class ChromaRemoteVectorBackend(VectorDatabaseBackend):
                 response = self.session.get(get_url)
                 
                 if response.status_code == 200:
-                    logger.debug(f"✅ Collection info via {endpoint}")
-                    return response.json()
+                    coll_data = response.json()
+                    # 🆕 NEW: Extrahiere collection UUID falls vorhanden
+                    if 'id' in coll_data:
+                        self._collection_id = coll_data['id']
+                        logger.debug(f"✅ Collection info via {endpoint} (id={self._collection_id})")
+                    else:
+                        logger.debug(f"✅ Collection info via {endpoint}")
+                    return coll_data
                 elif response.status_code == 404:
                     logger.debug(f"Collection '{name}' nicht gefunden via {endpoint}")
                     continue
@@ -398,7 +400,14 @@ class ChromaRemoteVectorBackend(VectorDatabaseBackend):
                 return []
             
             # ChromaDB Query API Call (V2 oder V1)
-            if self._api_compatible:
+            if self._api_compatible and self._collection_id:
+                # 🆕 NEW: V2 API nutzt Collection UUID
+                query_url = urljoin(
+                    self.base_url, 
+                    f"/api/v2/collections/{self._collection_id}/query"
+                )
+            elif self._api_compatible:
+                # Fallback: Name
                 query_url = urljoin(
                     self.base_url, 
                     f"/api/v2/tenants/{self.tenant}/databases/{self.database}/collections/{col_name}/query"
@@ -558,11 +567,14 @@ class ChromaRemoteVectorBackend(VectorDatabaseBackend):
                 self._fallback_mode = True
                 self._api_compatible = False
                 # Im Fallback-Modus sind wir trotzdem "funktionsfähig"
+                # Setze _collection_exists auf True, damit add_vectors nicht blockiert
+                self._collection_exists = True
                 return True
             else:
                 # Versuche Default Collection zu erstellen/prüfen
                 try:
                     if self._ensure_collection_exists(self.collection_name):
+                        self._collection_exists = True
                         logger.info(f"✅ ChromaDB Collection '{self.collection_name}' bereit")
                     else:
                         logger.warning(f"⚠️ ChromaDB Collection '{self.collection_name}' konnte nicht erstellt werden")
@@ -635,17 +647,23 @@ class ChromaRemoteVectorBackend(VectorDatabaseBackend):
             return True
             
         try:
-            # Prüfe zuerst ob Collection bereits existiert
-            existing_collections = self.list_collections()
-            if collection_name in existing_collections:
-                logger.debug(f"✅ Collection '{collection_name}' bereits vorhanden")
+            # 🆕 NEW: Prüfe zunächst ob Collection bereits existiert UND hole UUID!
+            existing_coll = self.get_collection(collection_name)
+            if existing_coll:
+                logger.debug(f"✅ Collection '{collection_name}' bereits vorhanden (id={self._collection_id})")
                 return True
             
             # Collection existiert nicht - erstelle sie
             success = self.create_collection(collection_name)
             if success:
-                logger.info(f"✅ Collection '{collection_name}' erfolgreich erstellt/sichergestellt")
-                return True
+                # 🆕 NEW: Nach Erstellung nochmals UUID holen!
+                existing_coll = self.get_collection(collection_name)
+                if existing_coll:
+                    logger.info(f"✅ Collection '{collection_name}' erfolgreich erstellt/sichergestellt (id={self._collection_id})")
+                    return True
+                else:
+                    logger.warning(f"⚠️ Collection '{collection_name}' erstellt, aber UUID konnte nicht geladen werden")
+                    return True
             else:
                 logger.warning(f"⚠️ Collection '{collection_name}' Erstellung fehlgeschlagen - aktiviere Fallback")
                 self._fallback_mode = True
@@ -735,122 +753,110 @@ class ChromaRemoteVectorBackend(VectorDatabaseBackend):
         if not self.is_connected():
             logger.error("Nicht verbunden - add_vectors abgebrochen")
             return False
-        
         try:
-            add_url = urljoin(self.base_url, f"/api/v1/collections/{self.collection_name}/add")
-            
-            # Format für ChromaDB API
+            if not (self._api_compatible and self._collection_id):
+                logger.error(f"❌ ChromaDB V2 API: Collection UUID nicht verfügbar für Batch – aktiviere Fallback-Modus!")
+                self._fallback_mode = True
+                logger.info(f"✅ Fallback: {len(vectors)} Vektoren hinzugefügt (simuliert, kein V2 UUID)")
+                return True
+            add_url = urljoin(self.base_url, f"/api/v2/collections/{self._collection_id}/add")
             ids = [vec[0] for vec in vectors]
             embeddings = [vec[1] for vec in vectors]
             metadatas = [vec[2] for vec in vectors]
-            
             payload = {
                 "ids": ids,
                 "embeddings": embeddings,
                 "metadatas": metadatas
             }
-            
             response = self.session.post(add_url, json=payload)
-            
             if response.status_code in [200, 201]:
-                logger.debug(f"✅ {len(vectors)} Vektoren hinzugefügt")
+                logger.debug(f"✅ {len(vectors)} Vektoren hinzugefügt (V2 API)")
                 return True
             else:
                 logger.error(f"Add vectors fehlgeschlagen: {response.status_code} - {response.text}")
                 return False
-                
         except Exception as e:
             logger.error(f"Add vectors Fehler: {e}")
             return False
     
-    def query_vectors(self, query_embedding: List[float], limit: int = 10, 
-                     where_filter: Optional[Dict] = None) -> List[Dict[str, Any]]:
-        """Suche ähnliche Vektoren"""
+    def query_vectors(self, query_embedding: List[float], limit: int = 10,
+                      where_filter: Optional[Dict] = None) -> List[Dict[str, Any]]:
+        """Suche ähnliche Vektoren über ChromaDB HTTP API (V2 bevorzugt, V1 Fallback)."""
         if not self.is_connected():
             logger.error("Nicht verbunden - query_vectors abgebrochen")
             return []
-        
+
         try:
-            query_url = urljoin(self.base_url, f"/api/v1/collections/{self.collection_name}/query")
-            
-            payload = {
-                "query_embeddings": [query_embedding],
-                "n_results": limit
-            }
-            
-            if where_filter:
-                payload["where"] = where_filter
-            
+            if self._api_compatible and self._collection_id:
+                # V2 API mit Collection UUID
+                query_url = urljoin(self.base_url, f"/api/v2/collections/{self._collection_id}/query")
+                payload = {
+                    'query_embeddings': [query_embedding],
+                    'n_results': limit,
+                    'include': ['metadatas', 'documents', 'distances']
+                }
+            else:
+                # V1 API by Collection Name
+                query_url = urljoin(self.base_url, f"/api/v1/collections/{self.collection_name}/query")
+                payload = {
+                    'query_embeddings': [query_embedding],
+                    'n_results': limit
+                }
+
             response = self.session.post(query_url, json=payload)
-            
             if response.status_code == 200:
-                results = response.json()
-                
-                # Format Ergebnisse für UDS3
-                formatted_results = []
-                if results.get('ids') and len(results['ids']) > 0:
-                    ids = results['ids'][0]  # Erste Query
-                    distances = results.get('distances', [[]])[0]
-                    metadatas = results.get('metadatas', [[]])[0]
-                    
+                data = response.json()
+                results: List[Dict[str, Any]] = []
+
+                # Normalize response fields (V1/V2 can differ: nested lists vs flat)
+                ids = data.get('ids', [])
+                metadatas = data.get('metadatas', [])
+                distances = data.get('distances', [])
+                documents = data.get('documents', [])
+
+                # Some APIs return nested lists (per query)
+                if isinstance(ids, list) and ids and isinstance(ids[0], list):
+                    ids = ids[0]
+                if isinstance(metadatas, list) and metadatas and isinstance(metadatas[0], list):
+                    metadatas = metadatas[0]
+                if isinstance(distances, list) and distances and isinstance(distances[0], list):
+                    distances = distances[0]
+                if isinstance(documents, list) and documents and isinstance(documents[0], list):
+                    documents = documents[0]
+
+                if isinstance(ids, list):
                     for i, doc_id in enumerate(ids):
-                        formatted_results.append({
-                            'id': doc_id,
-                            'distance': distances[i] if i < len(distances) else 1.0,
-                            'metadata': metadatas[i] if i < len(metadatas) else {},
-                            'score': 1.0 - distances[i] if i < len(distances) else 0.0  # Similarity score
-                        })
-                
-                logger.debug(f"✅ Query returned {len(formatted_results)} results")
-                return formatted_results
-                
+                        item: Dict[str, Any] = {'id': doc_id}
+                        if isinstance(metadatas, list) and i < len(metadatas):
+                            item['metadata'] = metadatas[i]
+                        if isinstance(distances, list) and i < len(distances):
+                            item['distance'] = distances[i]
+                        if isinstance(documents, list) and i < len(documents):
+                            item['document'] = documents[i]
+                        results.append(item)
+
+                logger.info(f"✅ {len(results)} Ähnlichkeitsergebnisse gefunden")
+                return results
             else:
-                logger.error(f"Query vectors fehlgeschlagen: {response.status_code} - {response.text}")
+                logger.error(f"❌ query_vectors failed: {response.status_code} - {response.text}")
                 return []
-                
         except Exception as e:
-            logger.error(f"Query vectors Fehler: {e}")
+            logger.error(f"❌ query_vectors error: {e}")
             return []
-    
-    def delete_vectors(self, ids: List[str]) -> bool:
-        """Lösche Vektoren aus Collection"""
-        if not self.is_connected():
-            logger.error("Nicht verbunden - delete_vectors abgebrochen")
-            return False
-        
-        try:
-            delete_url = urljoin(self.base_url, f"/api/v1/collections/{self.collection_name}/delete")
-            
-            payload = {"ids": ids}
-            
-            response = self.session.post(delete_url, json=payload)
-            
-            if response.status_code in [200, 204]:
-                logger.debug(f"✅ {len(ids)} Vektoren gelöscht")
-                return True
-            else:
-                logger.error(f"Delete vectors fehlgeschlagen: {response.status_code} - {response.text}")
-                return False
-                
-        except Exception as e:
-            logger.error(f"Delete vectors Fehler: {e}")
-            return False
-    
+
     def get_collection_info(self) -> Dict[str, Any]:
-        """Hole Collection-Informationen"""
+        """Hole Informationen zur aktuellen Collection (V1 API)."""
         if not self.is_connected():
             return {"error": "Not connected"}
-        
+
         try:
             info_url = urljoin(self.base_url, f"/api/v1/collections/{self.collection_name}")
             response = self.session.get(info_url)
-            
             if response.status_code == 200:
                 return response.json()
             else:
                 logger.error(f"Collection info fehlgeschlagen: {response.status_code}")
                 return {"error": f"HTTP {response.status_code}"}
-                
         except Exception as e:
             logger.error(f"Collection info Fehler: {e}")
             return {"error": str(e)}

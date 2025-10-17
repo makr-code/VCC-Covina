@@ -193,8 +193,19 @@ class DocumentCountsWorker(ChartWorker):
         return fig
 
 
+# ============================================================================
+# DEPRECATED WORKERS (Removed from active use - 17. Oktober 2025)
+# ============================================================================
+# These workers are kept for reference but removed from CHART_WORKERS mapping.
+# Reason: Chart reduction optimization (replaced with KPI cards)
+# ============================================================================
+
 class ClassificationPieWorker(ChartWorker):
-    """Classification Distribution Pie Chart"""
+    """[DEPRECATED] Classification Distribution Pie Chart
+    
+    Removed from: Database Health View (replaced with KPI cards)
+    Reason: Redundant with Home Dashboard, replaced by lightweight KPIs
+    """
     
     def render_chart(self, data: Dict[str, Any], config: Dict[str, Any]) -> Figure:
         fig = Figure(figsize=(4, 3), facecolor=COLORS["panel"])
@@ -251,7 +262,11 @@ class IngestionTimelineWorker(ChartWorker):
 
 
 class QualitySpiderWorker(ChartWorker):
-    """Quality Metrics Radar Chart"""
+    """[DEPRECATED] Quality Metrics Radar Chart
+    
+    Removed from: Database Health View
+    Reason: No data source (endpoint /monitoring/quality not found)
+    """
     
     def render_chart(self, data: Dict[str, Any], config: Dict[str, Any]) -> Figure:
         fig = Figure(figsize=(4, 3), facecolor=COLORS["panel"])
@@ -285,7 +300,11 @@ class QualitySpiderWorker(ChartWorker):
 
 
 class BackendMatrixWorker(ChartWorker):
-    """Backend Heatmap Matrix"""
+    """[DEPRECATED] Backend Heatmap Matrix
+    
+    Removed from: System Status View
+    Reason: Replaced with individual KPI cards (Main Backend, Ingestion Backend)
+    """
     
     def render_chart(self, data: Dict[str, Any], config: Dict[str, Any]) -> Figure:
         fig = Figure(figsize=(4, 3), facecolor=COLORS["panel"])
@@ -342,7 +361,11 @@ class ProcessingRateWorker(ChartWorker):
 
 
 class StorageUsageWorker(ChartWorker):
-    """Storage Usage Stacked Bar"""
+    """[DEPRECATED] Storage Usage Stacked Bar
+    
+    Removed from: Database Health View
+    Reason: Replaced with "Total Size" KPI card (simpler, more direct)
+    """
     
     def render_chart(self, data: Dict[str, Any], config: Dict[str, Any]) -> Figure:
         fig = Figure(figsize=(4, 3), facecolor=COLORS["panel"])
@@ -373,7 +396,11 @@ class StorageUsageWorker(ChartWorker):
 
 
 class SystemMetricsWorker(ChartWorker):
-    """System Metrics Text Display"""
+    """[DEPRECATED] System Metrics Text Display
+    
+    Removed from: System Status View
+    Reason: Replaced with UDS3 Mode + Database KPI cards (more granular)
+    """
     
     def render_chart(self, data: Dict[str, Any], config: Dict[str, Any]) -> Figure:
         fig = Figure(figsize=(4, 3), facecolor=COLORS["panel"])
@@ -440,18 +467,14 @@ class RefreshAllWorker(ChartWorker):
 
 
 # Worker-Mapping für ChartThreadPool
+# 🎯 OPTIMIZED (17. Oktober 2025): Removed 5 unused workers
 CHART_WORKERS = {
     ChartType.SYSTEM_HEALTH: SystemHealthWorker,
     ChartType.BACKEND_STATUS: BackendStatusWorker,
     ChartType.DATABASE_CONNECTIONS: DatabaseConnectionsWorker,
     ChartType.PERFORMANCE_GAUGE: PerformanceGaugeWorker,
     ChartType.DOCUMENT_COUNTS: DocumentCountsWorker,
-    ChartType.CLASSIFICATION_PIE: ClassificationPieWorker,
     ChartType.INGESTION_TIMELINE: IngestionTimelineWorker,
-    ChartType.QUALITY_SPIDER: QualitySpiderWorker,
-    ChartType.BACKEND_MATRIX: BackendMatrixWorker,
     ChartType.PROCESSING_RATE: ProcessingRateWorker,
-    ChartType.STORAGE_USAGE: StorageUsageWorker,
-    ChartType.SYSTEM_METRICS: SystemMetricsWorker,
     ChartType.REFRESH_ALL: RefreshAllWorker,  # Special command worker
 }

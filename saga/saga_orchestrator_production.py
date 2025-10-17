@@ -170,12 +170,21 @@ class SagaStateStore:
     def _get_existing_tables(self) -> List[str]:
         """Get list of existing tables"""
         try:
+            schema = getattr(self.backend, 'schema', 'public')
             with self.backend.conn.cursor() as cursor:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT tablename FROM pg_tables 
                     WHERE schemaname = %s
-                """, (self.backend.schema,))
-                return [row[0] for row in cursor.fetchall()]
+                    """,
+                    (schema,)
+                )
+                rows = cursor.fetchall()
+                # psycopg3 with row_factory=dict_row returns list of dicts
+                if rows and isinstance(rows[0], dict):
+                    return [row.get('tablename') for row in rows]
+                # Fallback for tuple rows
+                return [row[0] for row in rows]
         except Exception as e:
             logger.warning(f"⚠️ Could not list tables: {e}")
             return []
@@ -208,16 +217,17 @@ class SagaStateStore:
     def load(self, saga_id: str) -> Optional[SagaState]:
         """Load SAGA state from database"""
         try:
-            with self.backend.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+            with self.backend.conn.cursor() as cursor:
                 cursor.execute(
                     "SELECT * FROM uds3_sagas WHERE saga_id = %s",
                     (saga_id,)
                 )
                 row = cursor.fetchone()
-                
-                if row:
-                    return SagaState.from_dict(dict(row))
-                return None
+                if not row:
+                    return None
+                # row is dict if row_factory=dict_row, else map manually
+                mapped = dict(row) if not isinstance(row, dict) else row
+                return SagaState.from_dict(mapped)
         except Exception as e:
             logger.error(f"❌ Failed to load SAGA state {saga_id}: {e}")
             return None
@@ -225,13 +235,20 @@ class SagaStateStore:
     def list_active(self) -> List[SagaState]:
         """List all active (non-completed) SAGAs"""
         try:
-            with self.backend.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute("""
+            with self.backend.conn.cursor() as cursor:
+                cursor.execute(
+                    """
                     SELECT * FROM uds3_sagas 
                     WHERE status IN ('pending', 'in_progress', 'compensating')
                     ORDER BY created_at DESC
-                """)
-                return [SagaState.from_dict(dict(row)) for row in cursor.fetchall()]
+                    """
+                )
+                rows = cursor.fetchall()
+                results: List[SagaState] = []
+                for row in rows:
+                    mapped = dict(row) if not isinstance(row, dict) else row
+                    results.append(SagaState.from_dict(mapped))
+                return results
         except Exception as e:
             logger.error(f"❌ Failed to list active SAGAs: {e}")
             return []

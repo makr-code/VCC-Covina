@@ -175,13 +175,13 @@ class IngestionWebSocketClient:
             self.is_connected = True
             self.is_connecting = False
         
-        logger.info("✅ WebSocket connected")
+        logger.info("[OK] WebSocket connected")
         
         if self.on_connected:
             try:
                 self.on_connected()
             except Exception as e:
-                logger.error(f"❌ on_connected callback error: {e}")
+                logger.error(f"[ERROR] on_connected callback error: {e}")
     
     def _on_message(self, ws, message):
         """WebSocket Message Received"""
@@ -191,23 +191,23 @@ class IngestionWebSocketClient:
             
             # Log message type
             msg_type = data.get("type", "unknown")
-            logger.debug(f"📨 Received: {msg_type}")
+            logger.debug(f"[MSG] Received: {msg_type}")
             
             # Call user callback
             if self.on_message:
                 try:
                     self.on_message(data)
                 except Exception as e:
-                    logger.error(f"❌ on_message callback error: {e}")
+                    logger.error(f"[ERROR] on_message callback error: {e}")
                     
         except json.JSONDecodeError:
-            logger.warning(f"⚠️ Invalid JSON message: {message}")
+            logger.warning(f"[WARNING] Invalid JSON message: {message}")
         except Exception as e:
-            logger.error(f"❌ Message handling error: {e}")
+            logger.error(f"[ERROR] Message handling error: {e}")
     
     def _on_error(self, ws, error):
         """WebSocket Error Occurred"""
-        logger.error(f"❌ WebSocket error: {error}")
+        logger.error(f"[ERROR] WebSocket error: {error}")
         
         if self.on_error:
             try:

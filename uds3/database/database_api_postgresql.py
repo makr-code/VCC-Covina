@@ -25,11 +25,23 @@ class PostgreSQLRelationalBackend(RelationalDatabaseBackend):
         self.dsn = cfg.get('dsn') or cfg.get('connection_string')
         self._pool: Optional[psycopg.Connection] = None
         self._is_connected = False
+    
+    @property
+    def conn(self):
+        """SAGA Orchestrator compatibility: Expose _pool as conn"""
+        return self._pool
 
     def connect(self) -> bool:
         try:
+            # Connection timeout (5 seconds) - prevents long startup hangs
+            connect_timeout = self.config.get('connect_timeout', 5)
+            
             if self.dsn:
-                self._pool = psycopg.connect(self.dsn, row_factory=dict_row)
+                self._pool = psycopg.connect(
+                    self.dsn, 
+                    row_factory=dict_row,
+                    connect_timeout=connect_timeout
+                )
             else:
                 self._pool = psycopg.connect(
                     host=self.config.get('host', 'localhost'),
@@ -38,12 +50,13 @@ class PostgreSQLRelationalBackend(RelationalDatabaseBackend):
                     password=self.config.get('password'),
                     dbname=self.config.get('database') or self.config.get('dbname'),
                     row_factory=dict_row,
+                    connect_timeout=connect_timeout
                 )
             self._is_connected = True
             logger.info('PostgreSQL connected')
             return True
         except Exception as exc:
-            logger.exception('PostgreSQL connect failed: %s', exc)
+            logger.error('PostgreSQL connect failed: %s', exc)
             self._pool = None
             self._is_connected = False
             return False

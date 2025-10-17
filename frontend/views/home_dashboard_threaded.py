@@ -18,12 +18,28 @@ import logging
 import tkinter as tk
 from tkinter import ttk
 from typing import Optional, Dict, Any
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-
-from frontend.config import COLORS, FONTS
+from frontend.config import COLORS, FONTS, CHART_MODE
 from frontend.services.api_client import api_client
-from frontend.core.chart_threading import ChartThreadPool, ChartType, ChartResult, ChartStatus
-from frontend.core.chart_workers import CHART_WORKERS
+from frontend.widgets.kpi_card import KPICard, create_kpi_grid
+try:
+    if CHART_MODE == "full":
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+        from frontend.core.chart_threading import ChartThreadPool, ChartType, ChartResult, ChartStatus
+        from frontend.core.chart_workers import CHART_WORKERS
+    else:
+        FigureCanvasTkAgg = None  # type: ignore
+        ChartThreadPool = None  # type: ignore
+        ChartType = None  # type: ignore
+        ChartResult = None  # type: ignore
+        ChartStatus = None  # type: ignore
+        CHART_WORKERS = None  # type: ignore
+except Exception:
+    FigureCanvasTkAgg = None  # type: ignore
+    ChartThreadPool = None  # type: ignore
+    ChartType = None  # type: ignore
+    ChartResult = None  # type: ignore
+    ChartStatus = None  # type: ignore
+    CHART_WORKERS = None  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -48,12 +64,15 @@ class ThreadedHomeDashboardView(ttk.Frame):
         super().__init__(parent)
         self.configure(style='TFrame')
         
-        # Chart Thread Pool (5 workers: 4 charts + 1 refresh-all)
-        # 🎯 PERFORMANCE OPTIMIZED: Reduced from 13 → 5 workers (62% reduction)
-        self.chart_pool = ChartThreadPool(num_workers=5)
+        # Chart Thread Pool nur im Full-Modus
+        if CHART_MODE == "full" and ChartThreadPool is not None:
+            # 🎯 PERFORMANCE OPTIMIZED: Reduced from 13 → 5 workers (62% reduction)
+            self.chart_pool = ChartThreadPool(num_workers=5)
+        else:
+            self.chart_pool = None
         
         # Canvas storage (Grid-Position → Canvas)
-        self.canvases: Dict[tuple, FigureCanvasTkAgg] = {}
+        self.canvases: Dict[tuple, Any] = {}
         
         # Data cache
         self.health_data: Optional[Dict[str, Any]] = None
@@ -66,12 +85,15 @@ class ThreadedHomeDashboardView(ttk.Frame):
         # Previous: 12 charts (4×3 grid) → Load: 2-3s, Memory: 60-120 MB, CPU: 30-50%
         # Current:  4 charts (2×2 grid) → Load: <1s, Memory: 20-30 MB, CPU: 10-15%
         # Improvement: 75% faster load, 70% less memory/CPU
-        self.chart_layout = {
-            (0, 0): ChartType.SYSTEM_HEALTH,          # Gauge Chart - System Overview
-            (0, 1): ChartType.BACKEND_STATUS,         # Bar Chart - Backend Health
-            (1, 0): ChartType.DOCUMENT_COUNTS,        # Bar Chart - Database Metrics
-            (1, 1): ChartType.PERFORMANCE_GAUGE,      # Gauge Chart - Performance Score
-        }
+        if CHART_MODE == "full" and ChartType is not None:
+            self.chart_layout = {
+                (0, 0): ChartType.SYSTEM_HEALTH,          # Gauge Chart - System Overview
+                (0, 1): ChartType.BACKEND_STATUS,         # Bar Chart - Backend Health
+                (1, 0): ChartType.DOCUMENT_COUNTS,        # Bar Chart - Database Metrics
+                (1, 1): ChartType.PERFORMANCE_GAUGE,      # Gauge Chart - Performance Score
+            }
+        else:
+            self.chart_layout = {}
         
         # ℹ️ Moved to separate tabs (for better performance & organization):
         # - Database Health Tab: DATABASE_CONNECTIONS, CLASSIFICATION_PIE, QUALITY_SPIDER, STORAGE_USAGE
@@ -90,66 +112,74 @@ class ThreadedHomeDashboardView(ttk.Frame):
         title_frame = ttk.Frame(self)
         title_frame.pack(fill=tk.X, padx=20, pady=10)
         
-        title = ttk.Label(title_frame, text="🏠 Covina System Overview (Threaded)", 
+        title = ttk.Label(title_frame, text="🏠 Covina System Overview", 
                          style='Title.TLabel')
         title.pack(side=tk.LEFT)
         
-        refresh_btn = ttk.Button(title_frame, text="🔄 Refresh All", command=self.refresh)
+        refresh_btn = ttk.Button(title_frame, text="🔄 Refresh", command=self.refresh)
         refresh_btn.pack(side=tk.RIGHT)
         
         # Stats Label
         self.stats_label = ttk.Label(title_frame, text="", style='Subtitle.TLabel')
         self.stats_label.pack(side=tk.RIGHT, padx=20)
         
-        # Main grid container
-        grid_container = ttk.Frame(self)
-        grid_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        # KPI Cards (NEW - Always shown, regardless of CHART_MODE)
+        kpi_definitions = [
+            {"title": "Total Documents", "value": "N/A", "icon": "📚"},
+            {"title": "Vector DB", "value": "N/A", "icon": "🔍"},
+            {"title": "Active Jobs", "value": "N/A", "icon": "⚙️"},
+            {"title": "Uptime", "value": "N/A", "icon": "⏱️"}
+        ]
+        self.kpi_cards = create_kpi_grid(self, kpi_definitions, columns=4)
         
-        # Configure grid weights (2 columns, 2 rows)
-        # 🎯 PERFORMANCE OPTIMIZED: 2×2 grid (was 4×3)
-        for col in range(2):
-            grid_container.grid_columnconfigure(col, weight=1, uniform="col")
-        for row in range(2):
-            grid_container.grid_rowconfigure(row, weight=1, uniform="row")
-        
-        # Create placeholder canvases in grid
-        for (row, col), chart_type in self.chart_layout.items():
-            frame = ttk.Frame(grid_container, style='Card.TFrame')
-            frame.grid(row=row, column=col, padx=5, pady=5, sticky='nsew')
-            
-            # Placeholder Label
-            placeholder = ttk.Label(frame, text=f"⏳ Loading {chart_type.value}...",
-                                   style='Subtitle.TLabel')
-            placeholder.pack(expand=True)
-            
-            # Store frame reference für später
-            self.canvases[(row, col)] = placeholder  # Wird später durch Canvas ersetzt
+        # Content: abhängig vom Modus
+        content = ttk.Frame(self)
+        content.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+
+        if CHART_MODE == "full" and self.chart_layout:
+            # Grid für Charts vorbereiten
+            for col in range(2):
+                content.grid_columnconfigure(col, weight=1, uniform="col")
+            for row in range(2):
+                content.grid_rowconfigure(row, weight=1, uniform="row")
+            for (row, col), chart_type in self.chart_layout.items():
+                frame = ttk.Frame(content, style='Card.TFrame')
+                frame.grid(row=row, column=col, padx=5, pady=5, sticky='nsew')
+                placeholder = ttk.Label(frame, text=f"⏳ Loading {chart_type.value}...", style='Subtitle.TLabel')
+                placeholder.pack(expand=True)
+                self.canvases[(row, col)] = placeholder
+        else:
+            # Minimaler KPI-Block mit Laufzeitdaten
+            self.kpi_backend = ttk.Label(content, text="Backend: Unknown", style='Subtitle.TLabel')
+            self.kpi_backend.pack(anchor=tk.W, pady=4)
+            self.kpi_docs = ttk.Label(content, text="Documents: N/A", style='Body.TLabel')
+            self.kpi_docs.pack(anchor=tk.W, pady=4)
+            self.kpi_vector = ttk.Label(content, text="Vectors: N/A", style='Body.TLabel')
+            self.kpi_vector.pack(anchor=tk.W, pady=4)
+            self.kpi_mode = ttk.Label(content, text="Mode: N/A", style='Body.TLabel')
+            self.kpi_mode.pack(anchor=tk.W, pady=4)
     
     def _start_chart_pool(self):
         """Starte Chart Worker Threads"""
-        try:
-            self.chart_pool.start(CHART_WORKERS)
-            logger.info("✅ Chart Thread Pool gestartet")
-            
-            # Pool Stats aktualisieren
-            self._update_pool_stats()
-            
-        except Exception as e:
-            logger.error(f"❌ Chart Pool Start fehlgeschlagen: {e}", exc_info=True)
+        if CHART_MODE == "full" and self.chart_pool is not None and CHART_WORKERS is not None:
+            try:
+                self.chart_pool.start(CHART_WORKERS)
+                logger.info("✅ Chart Thread Pool gestartet")
+                self._update_pool_stats()
+            except Exception as e:
+                logger.error(f"❌ Chart Pool Start fehlgeschlagen: {e}", exc_info=True)
     
     def _update_pool_stats(self):
         """Aktualisiere Pool-Statistiken in UI"""
-        try:
-            stats = self.chart_pool.get_stats()
-            stats_text = f"Workers: {stats['active_workers']}/{stats['workers']} | " \
-                        f"Queue: {stats['request_queue_size']}/{stats['result_queue_size']}"
-            self.stats_label.config(text=stats_text)
-            
-            # Repeat every second
-            self.after(1000, self._update_pool_stats)
-            
-        except Exception as e:
-            logger.debug(f"Pool stats update error: {e}")
+        if CHART_MODE == "full" and self.chart_pool is not None:
+            try:
+                stats = self.chart_pool.get_stats()
+                stats_text = f"Workers: {stats['active_workers']}/{stats['workers']} | " \
+                            f"Queue: {stats['request_queue_size']}/{stats['result_queue_size']}"
+                self.stats_label.config(text=stats_text)
+                self.after(1000, self._update_pool_stats)
+            except Exception as e:
+                logger.debug(f"Pool stats update error: {e}")
     
     def refresh(self):
         """
@@ -159,19 +189,20 @@ class ThreadedHomeDashboardView(ttk.Frame):
         REFRESH_ALL Message in die Request-Queue. Ein Worker verarbeitet
         diese und triggert dann die echten Chart-Updates.
         """
-        logger.info("� Sending REFRESH_ALL message to queue...")
-        
-        # Submit refresh command to queue
-        success = self.chart_pool.submit_request(
-            chart_id="refresh_all_trigger",
-            chart_type=ChartType.REFRESH_ALL,
-            data={},
-            callback=lambda result: self._handle_refresh_all_result(result),
-            timeout=1.0
-        )
-        
-        if not success:
-            logger.warning("⚠️ Failed to submit REFRESH_ALL message")
+        if CHART_MODE == "full" and self.chart_pool is not None and ChartType is not None:
+            logger.info("Sending REFRESH_ALL message to queue...")
+            success = self.chart_pool.submit_request(
+                chart_id="refresh_all_trigger",
+                chart_type=ChartType.REFRESH_ALL,
+                data={},
+                callback=lambda result: self._handle_refresh_all_result(result),
+                timeout=1.0
+            )
+            if not success:
+                logger.warning("⚠️ Failed to submit REFRESH_ALL message")
+        else:
+            # Minimal-Modus: direkte KPI-Aktualisierung
+            self._refresh_kpis()
     
     def _handle_refresh_all_result(self, result: ChartResult):
         """
@@ -180,7 +211,7 @@ class ThreadedHomeDashboardView(ttk.Frame):
         Wird aufgerufen wenn der RefreshAllWorker fertig ist
         mit dem Data-Fetching. Dann submitte alle Chart-Requests.
         """
-        if result.status == ChartStatus.SUCCESS and result.figure:
+        if CHART_MODE == "full" and result.status == ChartStatus.SUCCESS and result.figure:
             # Figure contains the fetched data as metadata
             logger.info("✅ Data fetched, submitting chart requests...")
             
@@ -306,7 +337,7 @@ class ThreadedHomeDashboardView(ttk.Frame):
                 return
             
             # Destroy old widget
-            if isinstance(grid_cell, FigureCanvasTkAgg):
+            if FigureCanvasTkAgg is not None and isinstance(grid_cell, FigureCanvasTkAgg):
                 grid_cell.get_tk_widget().destroy()
             elif isinstance(grid_cell, ttk.Label):
                 grid_cell.destroy()
@@ -327,12 +358,13 @@ class ThreadedHomeDashboardView(ttk.Frame):
                 return
             
             # Handle result
-            if result.status == ChartStatus.SUCCESS and result.figure:
+            if CHART_MODE == "full" and result.status == ChartStatus.SUCCESS and result.figure:
                 # Create canvas from figure
-                canvas = FigureCanvasTkAgg(result.figure, master=parent_frame)
-                canvas.draw()
-                canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-                self.canvases[(row, col)] = canvas
+                if FigureCanvasTkAgg is not None:
+                    canvas = FigureCanvasTkAgg(result.figure, master=parent_frame)
+                    canvas.draw()
+                    canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+                    self.canvases[(row, col)] = canvas
                 
                 logger.debug(f"✅ Canvas updated for ({row},{col}) - {result.render_time:.3f}s")
                 
@@ -355,13 +387,56 @@ class ThreadedHomeDashboardView(ttk.Frame):
         except Exception as e:
             logger.error(f"❌ Canvas update error for ({row},{col}): {e}", exc_info=True)
     
+    def _refresh_kpis(self):
+        """
+        Refresh KPI cards with live data (lightweight, no charts)
+        
+        Called in minimal mode or as fallback
+        """
+        try:
+            # Fetch data from API
+            health_data = api_client.get_connection_status()
+            uds3_data = api_client.get_uds3_strategy_status()
+            db_stats = api_client.get_database_stats()
+            vector_stats = api_client.get_vector_monitoring()
+            
+            # Update KPI: Total Documents
+            if db_stats and 'total_documents' in db_stats:
+                total_docs = db_stats['total_documents']
+                self.kpi_cards["Total Documents"].update_value(f"{total_docs:,}")
+                self.kpi_cards["Total Documents"].set_status("success")
+            
+            # Update KPI: Vector DB
+            if vector_stats and 'total_vectors' in vector_stats:
+                total_vectors = vector_stats['total_vectors']
+                self.kpi_cards["Vector DB"].update_value(f"{total_vectors:,}")
+                self.kpi_cards["Vector DB"].set_status("success")
+            
+            # Update KPI: Active Jobs
+            # TODO: Get from /jobs endpoint when available
+            self.kpi_cards["Active Jobs"].update_value("0")
+            self.kpi_cards["Active Jobs"].set_status("unknown")
+            
+            # Update KPI: Uptime
+            if health_data and 'uptime_seconds' in health_data:
+                uptime_sec = health_data['uptime_seconds']
+                hours = int(uptime_sec / 3600)
+                minutes = int((uptime_sec % 3600) / 60)
+                self.kpi_cards["Uptime"].update_value(f"{hours}h {minutes}m")
+                self.kpi_cards["Uptime"].set_status("success")
+            
+            logger.debug("✅ KPI cards refreshed")
+            
+        except Exception as e:
+            logger.error(f"❌ KPI refresh failed: {e}")
+    
     def destroy(self):
         """Cleanup on destroy with graceful shutdown"""
         try:
             logger.info("🛑 Shutting down ThreadedHomeDashboardView...")
             
             # Shutdown chart pool first (stop generating new content)
-            if hasattr(self, 'chart_pool'):
+            if CHART_MODE == "full" and hasattr(self, 'chart_pool') and self.chart_pool is not None:
                 try:
                     logger.debug("  - Shutting down chart pool...")
                     self.chart_pool.shutdown(timeout=10.0)
@@ -375,7 +450,7 @@ class ThreadedHomeDashboardView(ttk.Frame):
                     logger.debug("  - Destroying canvases...")
                     for canvas in self.canvases.values():
                         try:
-                            if isinstance(canvas, FigureCanvasTkAgg):
+                            if FigureCanvasTkAgg is not None and isinstance(canvas, FigureCanvasTkAgg):
                                 canvas.get_tk_widget().destroy()
                         except Exception:
                             pass
@@ -393,3 +468,27 @@ class ThreadedHomeDashboardView(ttk.Frame):
                 super().destroy()
             except Exception:
                 pass
+
+    # ==========================
+    # Minimal Mode KPI Handling
+    # ==========================
+    def _refresh_kpis(self):
+        try:
+            health = api_client.get_connection_status()
+            uds3 = api_client.get_uds3_strategy_status()
+            db = api_client.get_database_stats()
+            vec = api_client.get_vector_monitoring()
+
+            backend_txt = "Backend: ✅ Online" if health.get("connected") else f"Backend: ❌ {health.get('error','offline')}"
+            self.kpi_backend.config(text=backend_txt)
+
+            docs = (db or {}).get("total_documents", 0)
+            self.kpi_docs.config(text=f"Documents (PostgreSQL): {docs:,}")
+
+            vtotal = ((vec or {}).get("collection_stats", {}) or {}).get("total_documents", 0)
+            self.kpi_vector.config(text=f"Vectors (ChromaDB): {vtotal:,}")
+
+            mode = (uds3 or {}).get("processing_mode", "Unknown")
+            self.kpi_mode.config(text=f"Mode: {mode}")
+        except Exception as e:
+            logger.debug(f"KPI refresh error: {e}")

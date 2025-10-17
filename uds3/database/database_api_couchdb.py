@@ -49,17 +49,28 @@ class CouchDBAdapter(DatabaseBackend):
         self._is_connected = False
 
     def connect(self) -> bool:
+        import socket
         try:
-            self.server = couchdb.Server(self.url)
-            # Ensure DB exists
-            if self.db_name not in self.server:
-                self.server.create(self.db_name)
-            self.db = self.server[self.db_name]
-            self._is_connected = True
-            logger.info('CouchDB connected %s/%s', self.url, self.db_name)
-            return True
+            # Set default socket timeout (5 seconds) - prevents long startup hangs
+            old_timeout = socket.getdefaulttimeout()
+            connection_timeout = self.config.get('connection_timeout', 5)
+            socket.setdefaulttimeout(connection_timeout)
+            
+            try:
+                self.server = couchdb.Server(self.url)
+                # Ensure DB exists
+                if self.db_name not in self.server:
+                    self.server.create(self.db_name)
+                self.db = self.server[self.db_name]
+                self._is_connected = True
+                logger.info('CouchDB connected %s/%s', self.url, self.db_name)
+                return True
+            finally:
+                # Restore original timeout
+                socket.setdefaulttimeout(old_timeout)
+                
         except Exception as exc:
-            logger.exception('CouchDB connect failed: %s', exc)
+            logger.error('CouchDB connect failed: %s', exc)
             self.server = None
             self.db = None
             self._is_connected = False

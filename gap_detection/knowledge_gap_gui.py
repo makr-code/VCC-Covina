@@ -14,7 +14,13 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import threading
 import json
-from gap_detection.database import KnowledgeGapDB
+import sys
+from pathlib import Path
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from gap_detection.gap_database import KnowledgeGapDB
 from datetime import datetime
 
 class KnowledgeGapGUI(tk.Tk):
@@ -27,6 +33,45 @@ class KnowledgeGapGUI(tk.Tk):
         self._load_gaps_async()
 
     def _setup_ui(self):
+        # Toolbar mit Covina Logo
+        toolbar_frame = tk.Frame(self, bg='#f0f0f0', height=60)
+        toolbar_frame.pack(fill=tk.X, side=tk.TOP)
+        toolbar_frame.pack_propagate(False)
+        
+        # Subtitle (linksbündig)
+        subtitle_label = tk.Label(
+            toolbar_frame,
+            text="Knowledge Gap Management",
+            font=('Segoe UI', 12),
+            foreground='#666666',
+            bg='#f0f0f0',
+            padx=15,
+            pady=10
+        )
+        subtitle_label.pack(side=tk.LEFT)
+        
+        # Covina Logo/Branding (rechtsbündig) - clickable für Info
+        logo_label = tk.Label(
+            toolbar_frame,
+            text="COVINA",
+            font=('Segoe UI', 20, 'bold'),
+            foreground='#0066CC',
+            bg='#f0f0f0',
+            cursor='hand2',
+            padx=15,
+            pady=10
+        )
+        logo_label.pack(side=tk.RIGHT)
+        logo_label.bind('<Button-1>', lambda e: self._show_info())
+        
+        # Hover-Effekt für Covina Logo
+        def on_enter(e):
+            logo_label.config(foreground='#004499')
+        def on_leave(e):
+            logo_label.config(foreground='#0066CC')
+        logo_label.bind('<Enter>', on_enter)
+        logo_label.bind('<Leave>', on_leave)
+        
         # Filter Frame
         filter_frame = ttk.Frame(self)
         filter_frame.pack(fill=tk.X, padx=10, pady=5)
@@ -217,6 +262,37 @@ class KnowledgeGapGUI(tk.Tk):
                 messagebox.showinfo("Erfolg", f"Exportiert nach {file_path}")
             except Exception as e:
                 messagebox.showerror("Fehler", f"Export fehlgeschlagen: {e}")
+
+    def _show_info(self):
+        """Zeige Info-Dialog über die Knowledge Gap Management GUI"""
+        info_text = """
+╔══════════════════════════════════════════════════════════╗
+║      COVINA - Knowledge Gap Management System            ║
+╚══════════════════════════════════════════════════════════╝
+
+Version: 1.0.0
+Database: PostgreSQL (192.168.178.94:5432)
+
+FUNKTIONEN:
+• Erkennung und Verwaltung von Wissenslücken
+• Kategorisierung nach Typ, Schweregrad und Status
+• Filterung und Suche
+• Export-Funktionen (JSON)
+• Statusverfolgung (offen → in Bearbeitung → gelöst)
+
+DATENSTRUKTUR:
+• 3 Tabellen: knowledge_gaps, gap_relations, gap_history
+• Vollständige Audit-Trail-Funktionalität
+• JSONB-Felder für flexible Metadaten
+
+SUPPORT:
+Bei Fragen oder Problemen wenden Sie sich an das Covina Team.
+
+═══════════════════════════════════════════════════════════
+Covina Document Management System
+© 2025 - AGPL-3.0 License
+        """
+        messagebox.showinfo("System-Information", info_text)
 
 if __name__ == "__main__":
     app = KnowledgeGapGUI()

@@ -56,6 +56,11 @@ CHART_COLORS_DICT = {
 # Chart Colors as list (for Matplotlib)
 CHART_COLORS = list(CHART_COLORS_DICT.values())
 
+# Chart Mode
+# - "full": alle Diagramme aktiv
+# - "minimal": keine Diagramme, nur KPI/Status-Ansichten (empfohlen für Performance/Diagnose)
+CHART_MODE = "minimal"
+
 # API Endpoints
 ENDPOINTS = {
     # Main Backend Endpoints (Port 45678)
