@@ -1195,27 +1195,27 @@ async def list_governance_policies(
         policies = []
         for row in rows:
             policies.append({
-                'id': row[0],
-                'policy_id': row[1],
-                'name': row[2],
-                'description': row[3],
-                'policy_type': row[4],
-                'scope': row[5],
-                'rules': row[6],
-                'status': row[7],
-                'priority': row[8],
-                'effective_from': str(row[9]) if row[9] else None,
-                'effective_until': str(row[10]) if row[10] else None,
-                'created_by': row[11],
-                'created_at': str(row[12]),
-                'updated_at': str(row[13]),
-                'approved_by': row[14],
-                'approved_at': str(row[15]) if row[15] else None,
-                'metadata': row[16]
+                'id': row['id'],
+                'policy_id': row['policy_id'],
+                'name': row['name'],
+                'description': row['description'],
+                'policy_type': row['policy_type'],
+                'scope': row['scope'],
+                'rules': row['rules'],
+                'status': row['status'],
+                'priority': row['priority'],
+                'effective_from': str(row['effective_from']) if row['effective_from'] else None,
+                'effective_until': str(row['effective_until']) if row['effective_until'] else None,
+                'created_by': row['created_by'],
+                'created_at': str(row['created_at']),
+                'updated_at': str(row['updated_at']),
+                'approved_by': row['approved_by'],
+                'approved_at': str(row['approved_at']) if row['approved_at'] else None,
+                'metadata': row['metadata']
             })
         
         # Total Count
-        count_query = "SELECT COUNT(*) FROM governance_policies WHERE 1=1"
+        count_query = "SELECT COUNT(*) as count FROM governance_policies WHERE 1=1"
         count_params = []
         
         if active_only:
@@ -1329,16 +1329,18 @@ async def create_governance_policy(policy: GovernancePolicy):
             metadata_json
         )
         
-        postgres_backend.cursor.execute(insert_sql, params)
-        policy_id = postgres_backend.cursor.fetchone()[0]
-        postgres_backend.connection.commit()
+        with postgres_backend.conn.cursor() as cur:
+            cur.execute(insert_sql, params)
+            result = cur.fetchone()
+            policy_id_db = result['id'] if result else None
+        postgres_backend.conn.commit()
         
-        logger.info(f"✅ Governance Policy erstellt: {policy.policy_id} (ID: {policy_id})")
+        logger.info(f"✅ Governance Policy erstellt: {policy.policy_id} (ID: {policy_id_db})")
         
         return {
             "message": "Governance Policy erfolgreich erstellt",
             "policy_id": policy.policy_id,
-            "id": policy_id,
+            "id": policy_id_db,
             "name": policy.name,
             "policy_type": policy.policy_type,
             "scope": policy.scope,
@@ -1348,7 +1350,10 @@ async def create_governance_policy(policy: GovernancePolicy):
         
     except Exception as e:
         logger.error(f"Fehler beim Erstellen von Governance Policy: {e}")
-        postgres_backend.connection.rollback()
+        try:
+            postgres_backend.conn.rollback()
+        except:
+            pass  # Ignore rollback errors if already committed
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================================
