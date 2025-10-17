@@ -51,7 +51,7 @@ except Exception as e:
     logger.warning(f"⚠️ Gap Detection nicht verfügbar: {e}")
 
 try:
-    from database.database_api_postgresql import PostgreSQLRelationalBackend
+    from uds3.database.database_api_postgresql import PostgreSQLRelationalBackend
     POSTGRES_AVAILABLE = True
     logger.info("✅ PostgreSQL Backend Module geladen")
 except Exception as e:
@@ -224,7 +224,7 @@ async def startup_event():
                 'host': os.getenv('POSTGRES_HOST', '192.168.178.94'),
                 'port': int(os.getenv('POSTGRES_PORT', '5432')),
                 'database': os.getenv('POSTGRES_DATABASE', 'postgres'),
-                'username': os.getenv('POSTGRES_USER', 'postgres'),
+                'user': os.getenv('POSTGRES_USER', 'postgres'),
                 'password': os.getenv('POSTGRES_PASSWORD', 'postgres')
             }
             postgres_backend = PostgreSQLRelationalBackend(config)
@@ -519,7 +519,8 @@ async def list_golden_dataset(
         raise HTTPException(status_code=503, detail="PostgreSQL nicht verfügbar")
     
     try:
-        postgres_backend.connect()
+        # Backend ist bereits verbunden - kein connect() hier nötig!
+        # postgres_backend.connect()  # <-- ENTFERNT!
         
         # Build SQL Query mit Filtern
         query = """
@@ -558,23 +559,22 @@ async def list_golden_dataset(
         params.extend([limit, offset])
         
         # Execute Query
-        postgres_backend.cursor.execute(query, tuple(params))
-        rows = postgres_backend.cursor.fetchall()
+        rows = postgres_backend.execute_query(query, tuple(params))
         
         # Format Results
         entries = []
         for row in rows:
             entries.append({
-                'id': row[0],
-                'document_id': row[1],
-                'classification': row[2],
-                'quality_score': float(row[3]) if row[3] else None,
-                'reviewed_by': row[4],
-                'reviewed_at': str(row[5]) if row[5] else None,
-                'notes': row[6],
-                'metadata': row[7],
-                'created_at': str(row[8]),
-                'updated_at': str(row[9])
+                'id': row['id'],
+                'document_id': row['document_id'],
+                'classification': row['classification'],
+                'quality_score': float(row['quality_score']) if row['quality_score'] else None,
+                'reviewed_by': row['reviewed_by'],
+                'reviewed_at': str(row['reviewed_at']) if row['reviewed_at'] else None,
+                'notes': row['notes'],
+                'metadata': row['metadata'],
+                'created_at': str(row['created_at']),
+                'updated_at': str(row['updated_at'])
             })
         
         # Get Total Count
@@ -593,8 +593,8 @@ async def list_golden_dataset(
             count_query += " AND reviewed_by = %s"
             count_params.append(reviewed_by)
         
-        postgres_backend.cursor.execute(count_query, tuple(count_params))
-        total = postgres_backend.cursor.fetchone()[0]
+        count_result = postgres_backend.execute_query(count_query, tuple(count_params))
+        total = count_result[0]['count'] if count_result else 0
         
         return {
             "entries": entries,
@@ -637,7 +637,7 @@ async def add_golden_dataset_entry(entry: GoldenDatasetEntry):
         raise HTTPException(status_code=503, detail="PostgreSQL nicht verfügbar")
     
     try:
-        postgres_backend.connect()
+        # postgres_backend.connect()  # ← Backend bereits connected beim Start!
         
         # Insert SQL
         insert_sql = """
@@ -670,9 +670,12 @@ async def add_golden_dataset_entry(entry: GoldenDatasetEntry):
             metadata_json
         )
         
-        postgres_backend.cursor.execute(insert_sql, params)
-        entry_id = postgres_backend.cursor.fetchone()[0]
-        postgres_backend.connection.commit()
+        # Execute INSERT with cursor from connection
+        with postgres_backend.conn.cursor() as cur:
+            cur.execute(insert_sql, params)
+            result = cur.fetchone()
+            entry_id = result['id'] if result else None
+            postgres_backend.conn.commit()
         
         logger.info(f"✅ Golden Dataset Eintrag hinzugefügt: {entry.document_id} (ID: {entry_id})")
         
@@ -686,7 +689,8 @@ async def add_golden_dataset_entry(entry: GoldenDatasetEntry):
         
     except Exception as e:
         logger.error(f"Fehler beim Hinzufügen von Golden Dataset Eintrag: {e}")
-        postgres_backend.connection.rollback()
+        if postgres_backend and postgres_backend.conn:
+            postgres_backend.conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================================
@@ -718,7 +722,7 @@ async def list_graph_golden_patterns(
         raise HTTPException(status_code=503, detail="PostgreSQL nicht verfügbar")
     
     try:
-        postgres_backend.connect()
+        # postgres_backend.connect()  # ← Backend bereits connected beim Start!
         
         # Build Query
         query = """
@@ -862,7 +866,7 @@ async def create_graph_golden_pattern(pattern: GraphGoldenPattern):
         raise HTTPException(status_code=503, detail="PostgreSQL nicht verfügbar")
     
     try:
-        postgres_backend.connect()
+        # postgres_backend.connect()  # ← Backend bereits connected beim Start!
         
         # Insert SQL
         insert_sql = """
@@ -938,7 +942,7 @@ async def get_graph_golden_pattern(pattern_id: str):
         raise HTTPException(status_code=503, detail="PostgreSQL nicht verfügbar")
     
     try:
-        postgres_backend.connect()
+        # postgres_backend.connect()  # ← Backend bereits connected beim Start!
         
         query = """
         SELECT 
@@ -1117,7 +1121,7 @@ async def list_governance_policies(
         raise HTTPException(status_code=503, detail="PostgreSQL nicht verfügbar")
     
     try:
-        postgres_backend.connect()
+        # postgres_backend.connect()  # ← Backend bereits connected beim Start!
         
         # Build Query
         query = """
@@ -1266,7 +1270,7 @@ async def create_governance_policy(policy: GovernancePolicy):
         raise HTTPException(status_code=503, detail="PostgreSQL nicht verfügbar")
     
     try:
-        postgres_backend.connect()
+        # postgres_backend.connect()  # ← Backend bereits connected beim Start!
         
         # Insert SQL
         insert_sql = """
@@ -1353,7 +1357,7 @@ async def query_documents(query: DocumentQuery):
         raise HTTPException(status_code=503, detail="PostgreSQL nicht verfügbar")
     
     try:
-        postgres_backend.connect()
+        # postgres_backend.connect()  # ← Backend bereits connected beim Start!
         
         # Build SQL query with full-text search
         # Note: Using file_path as fallback since documents table may not have content column
