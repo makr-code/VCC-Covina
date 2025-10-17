@@ -335,6 +335,11 @@ async def root():
         "health": "/health"
     }
 
+@app.post("/test-graph-pattern")
+def test_graph_pattern_simple(pattern: GraphGoldenPattern):
+    """Test endpoint - simple echo"""
+    return {"status": "ok", "pattern_id": pattern.pattern_id}
+
 @app.get("/health", response_model=SystemHealth)
 async def health_check():
     """System Health Check"""
@@ -776,36 +781,35 @@ async def list_graph_golden_patterns(
         params.extend([limit, offset])
         
         # Execute
-        postgres_backend.cursor.execute(query, tuple(params))
-        rows = postgres_backend.cursor.fetchall()
+        rows = postgres_backend.execute_query(query, tuple(params))
         
         # Format Results
         patterns = []
         for row in rows:
             patterns.append({
-                'id': row[0],
-                'pattern_id': row[1],
-                'name': row[2],
-                'description': row[3],
-                'category': row[4],
-                'nodes_definition': row[5],
-                'relationships_definition': row[6],
-                'validation_rules': row[7],
-                'created_by': row[8],
-                'created_at': str(row[9]),
-                'updated_at': str(row[10]),
-                'reviewed_by': row[11],
-                'reviewed_at': str(row[12]) if row[12] else None,
-                'status': row[13],
-                'tags': row[14],
-                'neo4j_pattern_label': row[15],
-                'usage_count': row[16],
-                'last_used_at': str(row[17]) if row[17] else None,
-                'metadata': row[18]
+                'id': row['id'],
+                'pattern_id': row['pattern_id'],
+                'name': row['name'],
+                'description': row['description'],
+                'category': row['category'],
+                'nodes_definition': row['nodes_definition'],
+                'relationships_definition': row['relationships_definition'],
+                'validation_rules': row['validation_rules'],
+                'created_by': row['created_by'],
+                'created_at': str(row['created_at']),
+                'updated_at': str(row['updated_at']),
+                'reviewed_by': row['reviewed_by'],
+                'reviewed_at': str(row['reviewed_at']) if row['reviewed_at'] else None,
+                'status': row['status'],
+                'tags': row['tags'],
+                'neo4j_pattern_label': row['neo4j_pattern_label'],
+                'usage_count': row['usage_count'],
+                'last_used_at': str(row['last_used_at']) if row['last_used_at'] else None,
+                'metadata': row['metadata']
             })
         
         # Total Count
-        count_query = "SELECT COUNT(*) FROM graph_golden_dataset WHERE 1=1"
+        count_query = "SELECT COUNT(*) as count FROM graph_golden_dataset WHERE 1=1"
         count_params = []
         
         if category:
@@ -820,8 +824,8 @@ async def list_graph_golden_patterns(
             count_query += " AND tags && %s"
             count_params.append(tag_list)
         
-        postgres_backend.cursor.execute(count_query, tuple(count_params))
-        total = postgres_backend.cursor.fetchone()[0]
+        count_result = postgres_backend.execute_query(count_query, tuple(count_params))
+        total = count_result[0]['count'] if count_result else 0
         
         return {
             "patterns": patterns,
@@ -843,7 +847,7 @@ async def list_graph_golden_patterns(
 
 
 @app.post("/graph-golden-dataset", summary="Erstelle Graph Golden Pattern")
-async def create_graph_golden_pattern(pattern: GraphGoldenPattern):
+def create_graph_golden_pattern(pattern: GraphGoldenPattern):  # Changed from async def to def
     """
     Erstelle einen neuen Graph Golden Dataset Pattern.
     
@@ -908,16 +912,19 @@ async def create_graph_golden_pattern(pattern: GraphGoldenPattern):
             pattern.tags
         )
         
-        postgres_backend.cursor.execute(insert_sql, params)
-        pattern_id = postgres_backend.cursor.fetchone()[0]
-        postgres_backend.connection.commit()
+        with postgres_backend.conn.cursor() as cur:
+            cur.execute(insert_sql, params)
+            result = cur.fetchone()
+            pattern_id_db = result['id'] if result else None
         
-        logger.info(f"✅ Graph Golden Pattern erstellt: {pattern.pattern_id} (ID: {pattern_id})")
+        postgres_backend.conn.commit()  # Moved outside context manager
+        
+        logger.info(f"✅ Graph Golden Pattern erstellt: {pattern.pattern_id} (ID: {pattern_id_db})")
         
         return {
             "message": "Graph Golden Pattern erfolgreich erstellt",
             "pattern_id": pattern.pattern_id,
-            "id": pattern_id,
+            "id": pattern_id_db,
             "name": pattern.name,
             "category": pattern.category,
             "nodes_count": len(pattern.nodes_definition),
@@ -926,7 +933,10 @@ async def create_graph_golden_pattern(pattern: GraphGoldenPattern):
         
     except Exception as e:
         logger.error(f"Fehler beim Erstellen von Graph Golden Pattern: {e}")
-        postgres_backend.connection.rollback()
+        try:
+            postgres_backend.conn.rollback()
+        except:
+            pass  # Ignore rollback errors if already committed
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -954,32 +964,32 @@ async def get_graph_golden_pattern(pattern_id: str):
         WHERE pattern_id = %s
         """
         
-        postgres_backend.cursor.execute(query, (pattern_id,))
-        row = postgres_backend.cursor.fetchone()
+        rows = postgres_backend.execute_query(query, (pattern_id,))
+        row = rows[0] if rows else None
         
         if not row:
             raise HTTPException(status_code=404, detail=f"Pattern '{pattern_id}' nicht gefunden")
         
         pattern = {
-            'id': row[0],
-            'pattern_id': row[1],
-            'name': row[2],
-            'description': row[3],
-            'category': row[4],
-            'nodes_definition': row[5],
-            'relationships_definition': row[6],
-            'validation_rules': row[7],
-            'created_by': row[8],
-            'created_at': str(row[9]),
-            'updated_at': str(row[10]),
-            'reviewed_by': row[11],
-            'reviewed_at': str(row[12]) if row[12] else None,
-            'status': row[13],
-            'tags': row[14],
-            'neo4j_pattern_label': row[15],
-            'usage_count': row[16],
-            'last_used_at': str(row[17]) if row[17] else None,
-            'metadata': row[18]
+            'id': row['id'],
+            'pattern_id': row['pattern_id'],
+            'name': row['name'],
+            'description': row['description'],
+            'category': row['category'],
+            'nodes_definition': row['nodes_definition'],
+            'relationships_definition': row['relationships_definition'],
+            'validation_rules': row['validation_rules'],
+            'created_by': row['created_by'],
+            'created_at': str(row['created_at']),
+            'updated_at': str(row['updated_at']),
+            'reviewed_by': row['reviewed_by'],
+            'reviewed_at': str(row['reviewed_at']) if row['reviewed_at'] else None,
+            'status': row['status'],
+            'tags': row['tags'],
+            'neo4j_pattern_label': row['neo4j_pattern_label'],
+            'usage_count': row['usage_count'],
+            'last_used_at': str(row['last_used_at']) if row['last_used_at'] else None,
+            'metadata': row['metadata']
         }
         
         # Increment usage count
@@ -989,8 +999,9 @@ async def get_graph_golden_pattern(pattern_id: str):
             last_used_at = NOW()
         WHERE pattern_id = %s
         """
-        postgres_backend.cursor.execute(update_usage_sql, (pattern_id,))
-        postgres_backend.connection.commit()
+        with postgres_backend.conn.cursor() as cur:
+            cur.execute(update_usage_sql, (pattern_id,))
+            postgres_backend.conn.commit()
         
         return pattern
         
@@ -1178,8 +1189,7 @@ async def list_governance_policies(
         params.extend([limit, offset])
         
         # Execute
-        postgres_backend.cursor.execute(query, tuple(params))
-        rows = postgres_backend.cursor.fetchall()
+        rows = postgres_backend.execute_query(query, tuple(params))
         
         # Format Results
         policies = []
@@ -1225,8 +1235,8 @@ async def list_governance_policies(
             count_query += " AND status = %s"
             count_params.append(status)
         
-        postgres_backend.cursor.execute(count_query, tuple(count_params))
-        total = postgres_backend.cursor.fetchone()[0]
+        count_result = postgres_backend.execute_query(count_query, tuple(count_params))
+        total = count_result[0]['count'] if count_result else 0
         
         return {
             "policies": policies,
@@ -1444,8 +1454,8 @@ async def query_documents(query: DocumentQuery):
             count_query += " AND " + " AND ".join(filter_conditions)
             count_params.extend(params[1:-2])  # Exclude limit and offset
         
-        postgres_backend.cursor.execute(count_query, tuple(count_params))
-        total = postgres_backend.cursor.fetchone()[0]
+        count_result = postgres_backend.execute_query(count_query, tuple(count_params))
+        total = count_result[0]['count'] if count_result else 0
         
         return {
             "results": results,
