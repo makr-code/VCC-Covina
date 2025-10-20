@@ -1035,21 +1035,28 @@ class IngestionJobManager:
             logger.error(f"[ERROR] Failed to load incomplete jobs: {e}")
     
     def _setup_uds3(self):
-        """Initialisiere UDS3 Framework"""
+        """Initialisiere UDS3 Framework (Manual Backend Pattern mit ENV-Variablen)"""
         try:
+            logger.info("=" * 80)
+            logger.info("🔧 UDS3 v2.0.0 MANUAL BACKEND INITIALIZATION (Ingestion)")
+            logger.info("=" * 80)
+            logger.info("Pattern: Consistent with main_backend.py (ENV variables)")
+            logger.info("")
+            
             from uds3.uds3_core import get_optimized_unified_strategy
             
             self.uds3_strategy = get_optimized_unified_strategy()
+            logger.info("✅ UDS3 Strategy created (empty backends)")
             
-            # Vector Database (ChromaDB Remote HTTP)
+            # Vector Database (ChromaDB Remote HTTP) - with ENV variables
             try:
                 from uds3.database.database_api_chromadb_remote import ChromaRemoteVectorBackend
                 
                 chromadb_config = {
                     "collection": "covina_documents",
                     "remote": {
-                        "host": "192.168.178.94",
-                        "port": 8000,
+                        "host": os.getenv('CHROMADB_HOST', '192.168.178.94'),
+                        "port": int(os.getenv('CHROMADB_PORT', '8000')),
                         "protocol": "http"
                     },
                     "tenant": "default_tenant",
@@ -1059,54 +1066,66 @@ class IngestionJobManager:
                 vector_db = ChromaRemoteVectorBackend(chromadb_config)
                 if vector_db.connect():
                     self.uds3_strategy.vector_backend = vector_db
-                    logger.info("[OK] ChromaDB Remote connected")
+                    logger.info("✅ ChromaDB Remote connected and assigned to strategy")
+                    logger.info(f"   Host: {chromadb_config['remote']['host']}:{chromadb_config['remote']['port']}")
+                else:
+                    logger.warning("⚠️ ChromaDB connection failed")
             except Exception as e:
-                logger.warning(f"[WARNING] ChromaDB setup failed: {e}")
+                logger.warning(f"⚠️ ChromaDB setup failed: {e}")
             
-            # Graph Database (Neo4j)
+            # Graph Database (Neo4j) - with ENV variables
             try:
                 from uds3.uds3_relations_core import UDS3RelationsCore
                 
+                neo4j_uri = f"neo4j://{os.getenv('NEO4J_HOST', '192.168.178.94')}:{os.getenv('NEO4J_PORT', '7687')}"
+                neo4j_user = os.getenv('NEO4J_USER', 'neo4j')
+                neo4j_password = os.getenv('NEO4J_PASSWORD', 'v3f3b1d7')
+                
                 relations_core = UDS3RelationsCore(
-                    neo4j_uri="neo4j://192.168.178.94:7687",
-                    neo4j_auth=("neo4j", "v3f3b1d7")
+                    neo4j_uri=neo4j_uri,
+                    neo4j_auth=(neo4j_user, neo4j_password)
                 )
                 
                 self.uds3_strategy.graph_backend = relations_core
-                logger.info("[OK] Neo4j connected")
+                logger.info("✅ Neo4j connected and assigned to strategy")
+                logger.info(f"   URI: {neo4j_uri}")
             except Exception as e:
-                logger.warning(f"[WARNING] Neo4j setup failed: {e}")
+                logger.warning(f"⚠️ Neo4j setup failed: {e}")
             
-            # Relational Database (PostgreSQL)
+            # Relational Database (PostgreSQL) - with ENV variables
             try:
                 from uds3.database.database_api_postgresql import PostgreSQLRelationalBackend
                 
                 pg_config = {
-                    'host': '192.168.178.94',
-                    'port': 5432,
-                    'user': 'postgres',
-                    'password': 'postgres',
-                    'database': 'postgres',
+                    'host': os.getenv('POSTGRES_HOST', '192.168.178.94'),
+                    'port': int(os.getenv('POSTGRES_PORT', '5432')),
+                    'user': os.getenv('POSTGRES_USER', 'postgres'),
+                    'password': os.getenv('POSTGRES_PASSWORD', 'postgres'),
+                    'database': os.getenv('POSTGRES_DB', 'postgres'),
                     'schema': 'public'
                 }
                 
                 pg_backend = PostgreSQLRelationalBackend(pg_config)
                 if pg_backend.connect():
                     self.uds3_strategy.relational_backend = pg_backend
-                    logger.info("[OK] PostgreSQL connected")
+                    logger.info("✅ PostgreSQL connected and assigned to strategy")
+                    logger.info(f"   Host: {pg_config['host']}:{pg_config['port']}")
+                    logger.info(f"   Database: {pg_config['database']}")
+                else:
+                    logger.warning("⚠️ PostgreSQL connection failed")
             except Exception as e:
-                logger.warning(f"[WARNING] PostgreSQL setup failed: {e}")
+                logger.warning(f"⚠️ PostgreSQL setup failed: {e}")
             
-            # Document Database (CouchDB)
+            # Document Database (CouchDB) - with ENV variables
             try:
                 from uds3.database.database_api_couchdb import CouchDBAdapter
                 
                 couchdb_config = {
-                    "host": "192.168.178.94",
-                    "port": 32931,
+                    "host": os.getenv('COUCHDB_HOST', '192.168.178.94'),
+                    "port": int(os.getenv('COUCHDB_PORT', '32931')),
                     "database": "covina_documents",
-                    "username": "couchdb",
-                    "password": "couchdb"
+                    "username": os.getenv('COUCHDB_USER', 'couchdb'),
+                    "password": os.getenv('COUCHDB_PASSWORD', 'couchdb')
                 }
                 
                 couchdb = CouchDBAdapter(couchdb_config)
@@ -1114,15 +1133,46 @@ class IngestionJobManager:
                 
                 if couchdb.is_available():
                     self.uds3_strategy.document_backend = couchdb
-                    logger.info("[OK] CouchDB connected")
+                    logger.info("✅ CouchDB connected and assigned to strategy")
+                    logger.info(f"   Host: {couchdb_config['host']}:{couchdb_config['port']}")
+                    logger.info(f"   Database: {couchdb_config['database']}")
+                else:
+                    logger.warning("⚠️ CouchDB connection failed")
             except Exception as e:
-                logger.warning(f"[WARNING] CouchDB setup failed: {e}")
+                logger.warning(f"⚠️ CouchDB setup failed: {e}")
             
             self.uds3_ready = True
+            logger.info("")
+            logger.info("=" * 80)
+            logger.info("✅ UDS3 Manual Backend Setup Complete (Ingestion)")
+            logger.info("=" * 80)
+            logger.info(f"   PostgreSQL: {'✅ Connected' if hasattr(self.uds3_strategy, 'relational_backend') and self.uds3_strategy.relational_backend else '❌ Not available'}")
+            logger.info(f"   ChromaDB:   {'✅ Connected' if hasattr(self.uds3_strategy, 'vector_backend') and self.uds3_strategy.vector_backend else '❌ Not available'}")
+            logger.info(f"   Neo4j:      {'✅ Connected' if hasattr(self.uds3_strategy, 'graph_backend') and self.uds3_strategy.graph_backend else '❌ Not available'}")
+            logger.info(f"   CouchDB:    {'✅ Connected' if hasattr(self.uds3_strategy, 'document_backend') and self.uds3_strategy.document_backend else '❌ Not available'}")
+            logger.info("=" * 80)
             logger.info("[START] UDS3 Framework ready")
             
         except Exception as e:
-            logger.error(f"[ERROR] UDS3 setup failed: {e}")
+            logger.error("=" * 80)
+            logger.error("❌ CRITICAL ERROR: UDS3 Setup Failed (Ingestion)")
+            logger.error("=" * 80)
+            logger.error(f"Error: {e}")
+            logger.error("")
+            logger.error("🔍 DEBUG INFO:")
+            logger.error(f"   Environment Variables:")
+            logger.error(f"      POSTGRES_HOST: {os.getenv('POSTGRES_HOST', 'not set')}")
+            logger.error(f"      CHROMA_HOST: {os.getenv('CHROMA_HOST', 'not set')}")
+            logger.error(f"      NEO4J_HOST: {os.getenv('NEO4J_HOST', 'not set')}")
+            logger.error(f"      COUCHDB_HOST: {os.getenv('COUCHDB_HOST', 'not set')}")
+            logger.error("")
+            logger.error("💡 TROUBLESHOOTING:")
+            logger.error("   1. Check .env.production file exists and is loaded")
+            logger.error("   2. Verify all database servers running")
+            logger.error("   3. Test network connectivity to 192.168.178.94")
+            logger.error("=" * 80)
+            import traceback
+            logger.error(traceback.format_exc())
             self.uds3_ready = False
     
     def create_job(self, file_count: int, temp_directory: str = None, scan_job_id: str = None) -> str:

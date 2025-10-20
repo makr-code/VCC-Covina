@@ -51,11 +51,12 @@ except Exception as e:
     logger.warning(f"⚠️ Gap Detection nicht verfügbar: {e}")
 
 try:
-    from uds3.database.database_api_postgresql import PostgreSQLRelationalBackend
-    POSTGRES_AVAILABLE = True
-    logger.info("✅ PostgreSQL Backend Module geladen")
+    from uds3 import UDS3PolyglotManager
+    UDS3_AVAILABLE = True
+    logger.info("✅ UDS3 PolyglotManager Module geladen")
 except Exception as e:
-    logger.warning(f"⚠️ PostgreSQL Backend nicht verfügbar: {e}")
+    logger.warning(f"⚠️ UDS3 PolyglotManager nicht verfügbar: {e}")
+    UDS3_AVAILABLE = False
 
 try:
     from management_core.review_queue import ReviewQueue, TaskStatus, TaskSeverity, GapType
@@ -72,13 +73,8 @@ except Exception as e:
     logger.warning(f"⚠️ Compliance Service nicht verfügbar: {e}")
     COMPLIANCE_AVAILABLE = False
 
-try:
-    from uds3.database.database_api_chromadb_remote import ChromaRemoteVectorBackend
-    CHROMADB_AVAILABLE = True
-    logger.info("✅ ChromaDB Remote Client Module geladen")
-except Exception as e:
-    logger.warning(f"⚠️ ChromaDB Remote Client nicht verfügbar: {e}")
-    CHROMADB_AVAILABLE = False
+# ChromaDB availability will be checked via UDS3 Strategy
+CHROMADB_AVAILABLE = False  # Will be set after UDS3 initialization
 
 try:
     from sentence_transformers import SentenceTransformer
@@ -108,10 +104,11 @@ app.add_middleware(
 
 # Global State
 gap_db: Optional[KnowledgeGapDB] = None
-postgres_backend: Optional[PostgreSQLRelationalBackend] = None
+uds3_strategy = None  # UDS3 Polyglot Strategy
+postgres_backend = None  # Will be set from uds3_strategy.relational_backend
 review_queue: Optional['ReviewQueue'] = None
 compliance_service: Optional['ComplianceService'] = None
-chromadb_backend: Optional['ChromaRemoteVectorBackend'] = None
+chromadb_backend = None  # Will be set from uds3_strategy.vector_backend
 embedding_model: Optional['SentenceTransformer'] = None
 
 # Pydantic Models für API
@@ -203,7 +200,8 @@ class ReviewQueueItem(BaseModel):
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup"""
-    global gap_db, postgres_backend, review_queue, compliance_service, chromadb_backend, embedding_model
+    global gap_db, uds3_strategy, postgres_backend, review_queue, compliance_service, chromadb_backend, embedding_model
+    global POSTGRES_AVAILABLE, CHROMADB_AVAILABLE
     
     logger.info("🚀 Covina Main Backend startet...")
     logger.info("📌 Port: 45678 (Main Backend)")
@@ -217,26 +215,122 @@ async def startup_event():
         except Exception as e:
             logger.error(f"❌ Gap Detection Fehler: {e}")
     
-    # Initialize PostgreSQL Backend
-    if POSTGRES_AVAILABLE:
+    # Initialize UDS3 Polyglot Manager (Manual Backend Pattern)
+    if UDS3_AVAILABLE:
         try:
-            config = {
-                'host': os.getenv('POSTGRES_HOST', '192.168.178.94'),
-                'port': int(os.getenv('POSTGRES_PORT', '5432')),
-                'database': os.getenv('POSTGRES_DATABASE', 'postgres'),
-                'user': os.getenv('POSTGRES_USER', 'postgres'),
-                'password': os.getenv('POSTGRES_PASSWORD', 'postgres')
+            logger.info("=" * 80)
+            logger.info("🔧 UDS3 v2.0.0 MANUAL BACKEND INITIALIZATION")
+            logger.info("=" * 80)
+            logger.info("Pattern: UDS3PolyglotManager + Manual Backend Setup (like ingestion_backend.py)")
+            logger.info("")
+            
+            # Step 1: Create UDS3 Strategy (empty backends)
+            backend_config = {
+                "vector": {"enabled": True},
+                "relational": {"enabled": True},
+                "graph": {"enabled": False},
+                "file": {"enabled": False}
             }
-            postgres_backend = PostgreSQLRelationalBackend(config)
-            if postgres_backend.connect():
-                logger.info("✅ PostgreSQL Backend verbunden")
-            else:
-                logger.warning("⚠️ PostgreSQL Backend Verbindung fehlgeschlagen")
+            
+            uds3_strategy = UDS3PolyglotManager(
+                backend_config=backend_config,
+                enable_rag=False
+            )
+            logger.info("✅ UDS3 PolyglotManager created (empty strategy)")
+            
+            # Step 2: Manually instantiate PostgreSQL Backend (with ENV variables)
+            try:
+                from uds3.database.database_api_postgresql import PostgreSQLRelationalBackend
+                
+                pg_config = {
+                    'host': os.getenv('POSTGRES_HOST', '192.168.178.94'),
+                    'port': int(os.getenv('POSTGRES_PORT', '5432')),
+                    'user': os.getenv('POSTGRES_USER', 'postgres'),
+                    'password': os.getenv('POSTGRES_PASSWORD', 'postgres'),
+                    'database': os.getenv('POSTGRES_DB', 'postgres'),
+                    'schema': 'public'
+                }
+                
+                postgres_backend = PostgreSQLRelationalBackend(pg_config)
+                if postgres_backend.connect():
+                    uds3_strategy.relational_backend = postgres_backend
+                    POSTGRES_AVAILABLE = True
+                    logger.info("✅ PostgreSQL Backend connected and assigned to strategy")
+                    logger.info(f"   Host: {pg_config['host']}:{pg_config['port']}")
+                    logger.info(f"   Database: {pg_config['database']}")
+                else:
+                    logger.warning("⚠️ PostgreSQL connection failed")
+                    postgres_backend = None
+            except Exception as e:
+                logger.warning(f"⚠️ PostgreSQL setup failed: {e}")
+                postgres_backend = None
+            
+            # Step 3: Manually instantiate ChromaDB Backend (with ENV variables)
+            try:
+                from uds3.database.database_api_chromadb_remote import ChromaRemoteVectorBackend
+                
+                chromadb_config = {
+                    "collection": "covina_documents",
+                    "remote": {
+                        "host": os.getenv('CHROMADB_HOST', '192.168.178.94'),
+                        "port": int(os.getenv('CHROMADB_PORT', '8000')),
+                        "protocol": "http"
+                    },
+                    "tenant": "default_tenant",
+                    "database": "default_database"
+                }
+                
+                chromadb_backend = ChromaRemoteVectorBackend(chromadb_config)
+                if chromadb_backend.connect():
+                    uds3_strategy.vector_backend = chromadb_backend
+                    CHROMADB_AVAILABLE = True
+                    logger.info("✅ ChromaDB Backend connected and assigned to strategy")
+                    logger.info(f"   Host: {chromadb_config['remote']['host']}:{chromadb_config['remote']['port']}")
+                    logger.info(f"   Collection: {chromadb_config['collection']}")
+                else:
+                    logger.warning("⚠️ ChromaDB connection failed")
+                    chromadb_backend = None
+            except Exception as e:
+                logger.warning(f"⚠️ ChromaDB setup failed: {e}")
+                chromadb_backend = None
+            
+            logger.info("")
+            logger.info("=" * 80)
+            logger.info("✅ UDS3 Manual Backend Setup Complete")
+            logger.info("=" * 80)
+            logger.info(f"   PostgreSQL: {'✅ Connected' if postgres_backend else '❌ Not available'}")
+            logger.info(f"   ChromaDB:   {'✅ Connected' if chromadb_backend else '❌ Not available'}")
+            logger.info("=" * 80)
+            
         except Exception as e:
-            logger.error(f"❌ PostgreSQL Backend Fehler: {e}")
+            logger.error("=" * 80)
+            logger.error("❌ CRITICAL ERROR: UDS3 Backend Setup Failed")
+            logger.error("=" * 80)
+            logger.error(f"Error: {e}")
+            logger.error("")
+            logger.error("� DEBUG INFO:")
+            logger.error(f"   UDS3_AVAILABLE: {UDS3_AVAILABLE}")
+            logger.error(f"   Environment Variables:")
+            logger.error(f"      POSTGRES_HOST: {os.getenv('POSTGRES_HOST', 'not set')}")
+            logger.error(f"      CHROMA_HOST: {os.getenv('CHROMA_HOST', 'not set')}")
+            logger.error("")
+            logger.error("💡 TROUBLESHOOTING:")
+            logger.error("   1. Check UDS3 package: pip install -e ../uds3")
+            logger.error("   2. Verify database servers running (PostgreSQL, ChromaDB)")
+            logger.error("   3. Test network connectivity to 192.168.178.94")
+            logger.error("   4. Check environment variables in .env file")
+            logger.error("=" * 80)
+            import traceback
+            logger.error(traceback.format_exc())
+            postgres_backend = None
+            chromadb_backend = None
+    else:
+        logger.warning("⚠️ UDS3 nicht verfügbar - Backends nicht initialisiert")
+        postgres_backend = None
+        chromadb_backend = None
     
     # Initialize Review Queue (requires PostgreSQL)
-    if REVIEW_QUEUE_AVAILABLE and POSTGRES_AVAILABLE and postgres_backend:
+    if REVIEW_QUEUE_AVAILABLE and postgres_backend:
         try:
             review_queue = ReviewQueue(postgres_backend)
             logger.info("✅ Review Queue (PostgreSQL) initialisiert")
@@ -244,32 +338,12 @@ async def startup_event():
             logger.error(f"❌ Review Queue Fehler: {e}")
     
     # Initialize Compliance Service (requires PostgreSQL)
-    if COMPLIANCE_AVAILABLE and POSTGRES_AVAILABLE and postgres_backend:
+    if COMPLIANCE_AVAILABLE and postgres_backend:
         try:
             compliance_service = get_compliance_service(postgres_backend)
             logger.info("✅ Compliance Service initialisiert")
         except Exception as e:
             logger.error(f"❌ Compliance Service Fehler: {e}")
-    
-    # Initialize ChromaDB Remote Backend
-    if CHROMADB_AVAILABLE:
-        try:
-            config = {
-                'remote': {
-                    'host': os.getenv('CHROMA_HOST', '192.168.178.94'),
-                    'port': int(os.getenv('CHROMA_PORT', '8000')),
-                    'protocol': 'http'
-                },
-                'collection': 'covina_documents',
-                'timeout': 30
-            }
-            chromadb_backend = ChromaRemoteVectorBackend(config)
-            if chromadb_backend.connect():
-                logger.info("✅ ChromaDB Remote Backend verbunden")
-            else:
-                logger.warning("⚠️ ChromaDB Remote Backend Verbindung fehlgeschlagen")
-        except Exception as e:
-            logger.error(f"❌ ChromaDB Remote Backend Fehler: {e}")
     
     # Initialize Embedding Model (Lazy loading for semantic search)
     if SENTENCE_TRANSFORMERS_AVAILABLE:
