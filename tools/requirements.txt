@@ -1,0 +1,12 @@
+# Covina Ingestion GUI Tool Requirements
+# Installation: pip install -r requirements.txt
+
+# Core GUI
+tkinterdnd2>=0.3.0  # Drag & Drop support
+
+# HTTP & WebSocket
+requests>=2.31.0
+websocket-client>=1.6.0
+
+# Optional: Better file dialogs
+# pyfilebrowser>=0.1.0

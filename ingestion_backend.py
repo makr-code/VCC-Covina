@@ -157,6 +157,33 @@ def should_use_saga() -> bool:
 
 
 # ================================================================
+# UDS3 PHASE 2: POSTGRESQL + COUCHDB BATCH OPERATIONS
+# ================================================================
+
+try:
+    from uds3.database.batch_operations import (
+        PostgreSQLBatchInserter,
+        CouchDBBatchInserter,
+        should_use_postgres_batch_insert,
+        should_use_couchdb_batch_insert,
+        get_postgres_batch_size,
+        get_couchdb_batch_size
+    )
+    BATCH_OPERATIONS_AVAILABLE = True
+    logger.info("✅ UDS3 Phase 2 Batch Operations imported")
+    logger.info(f"[CONFIG] PostgreSQL Batch Insert: {'ENABLED' if should_use_postgres_batch_insert() else 'DISABLED'}")
+    if should_use_postgres_batch_insert():
+        logger.info(f"[CONFIG] PostgreSQL Batch Size: {get_postgres_batch_size()}")
+    logger.info(f"[CONFIG] CouchDB Batch Insert: {'ENABLED' if should_use_couchdb_batch_insert() else 'DISABLED'}")
+    if should_use_couchdb_batch_insert():
+        logger.info(f"[CONFIG] CouchDB Batch Size: {get_couchdb_batch_size()}")
+except ImportError as e:
+    BATCH_OPERATIONS_AVAILABLE = False
+    logger.warning(f"⚠️ UDS3 Phase 2 Batch Operations not available: {e}")
+    logger.warning("   Falling back to single-insert mode for PostgreSQL and CouchDB")
+
+
+# ================================================================
 # CHROMADB BATCH INSERTER
 # ================================================================
 
@@ -1425,7 +1452,28 @@ async def process_document_with_uds3(
         db_results = {}
         
         # 1. PostgreSQL (Relational Master Data) - PRIORITY 1
-        if job_manager.uds3_strategy.relational_backend:
+        postgres_batch = getattr(job_manager, 'postgres_batch', None)
+        
+        if postgres_batch:
+            # BATCH MODE: Add to buffer (auto-flush at batch_size)
+            try:
+                await asyncio.to_thread(
+                    postgres_batch.add,
+                    document_id=document_id,
+                    file_path=file_path,
+                    classification=classification,
+                    content_length=len(content),
+                    legal_count=legal_count,
+                    created_at=timestamp,
+                    quality_score=quality_score
+                )
+                db_results["relational"] = "batch_queued"
+                logger.debug(f"[BATCH] PostgreSQL queued: {document_id}")
+            except Exception as e:
+                logger.error(f"[ERROR] PostgreSQL batch add failed: {e}")
+                db_results["relational"] = f"error: {str(e)[:50]}"
+        elif job_manager.uds3_strategy.relational_backend:
+            # SINGLE MODE: Fallback to direct insert
             try:
                 await asyncio.to_thread(
                     job_manager.uds3_strategy.relational_backend.insert_document,
@@ -1444,7 +1492,32 @@ async def process_document_with_uds3(
                 db_results["relational"] = f"error: {str(e)[:50]}"
         
         # 2. CouchDB (Full Document Storage) - PRIORITY 2
-        if hasattr(job_manager.uds3_strategy, 'document_backend') and job_manager.uds3_strategy.document_backend:
+        couchdb_batch = getattr(job_manager, 'couchdb_batch', None)
+        
+        if couchdb_batch:
+            # BATCH MODE: Add to buffer (auto-flush at batch_size)
+            try:
+                doc_data = {
+                    "file_path": file_path,
+                    "content": content,  # Full content!
+                    "classification": classification,
+                    "legal_terms_count": legal_count,
+                    "quality_score": quality_score,
+                    "timestamp": timestamp,
+                    "word_count": word_count
+                }
+                await asyncio.to_thread(
+                    couchdb_batch.add,
+                    doc=doc_data,
+                    doc_id=document_id
+                )
+                db_results["document"] = "batch_queued"
+                logger.debug(f"[BATCH] CouchDB queued: {document_id}")
+            except Exception as e:
+                logger.error(f"[ERROR] CouchDB batch add failed: {e}")
+                db_results["document"] = f"error: {str(e)[:50]}"
+        elif hasattr(job_manager.uds3_strategy, 'document_backend') and job_manager.uds3_strategy.document_backend:
+            # SINGLE MODE: Fallback to direct insert
             try:
                 doc_data = {
                     "file_path": file_path,
@@ -2040,6 +2113,48 @@ async def process_documents_batch(
         
         print(f"[OK] [BATCH] Job status updated!\n", flush=True)
         
+        # ================================================================
+        # PHASE 2: Initialize Batch Inserters (if enabled)
+        # ================================================================
+        postgres_batch = None
+        couchdb_batch = None
+        
+        if BATCH_OPERATIONS_AVAILABLE and should_use_postgres_batch_insert():
+            if jm.uds3_strategy and jm.uds3_strategy.relational_backend:
+                try:
+                    postgres_batch = PostgreSQLBatchInserter(
+                        postgresql_backend=jm.uds3_strategy.relational_backend,
+                        batch_size=get_postgres_batch_size()
+                    )
+                    logger.info("=" * 80)
+                    logger.info(f"✅ PostgreSQL Batch Inserter initialized for Job {job_id}")
+                    logger.info(f"   Batch Size: {get_postgres_batch_size()}")
+                    logger.info(f"   Auto-Flush: Enabled at batch_size")
+                    logger.info("=" * 80)
+                except Exception as e:
+                    logger.warning(f"⚠️ PostgreSQL Batch Inserter initialization failed: {e}")
+                    logger.warning("   Falling back to single-insert mode")
+        
+        if BATCH_OPERATIONS_AVAILABLE and should_use_couchdb_batch_insert():
+            if jm.uds3_strategy and hasattr(jm.uds3_strategy, 'document_backend') and jm.uds3_strategy.document_backend:
+                try:
+                    couchdb_batch = CouchDBBatchInserter(
+                        couchdb_backend=jm.uds3_strategy.document_backend,
+                        batch_size=get_couchdb_batch_size()
+                    )
+                    logger.info("=" * 80)
+                    logger.info(f"✅ CouchDB Batch Inserter initialized for Job {job_id}")
+                    logger.info(f"   Batch Size: {get_couchdb_batch_size()}")
+                    logger.info(f"   Auto-Flush: Enabled at batch_size")
+                    logger.info("=" * 80)
+                except Exception as e:
+                    logger.warning(f"⚠️ CouchDB Batch Inserter initialization failed: {e}")
+                    logger.warning("   Falling back to single-insert mode")
+        
+        # Store batch inserters in job_manager for access in process_document_with_uds3
+        jm.postgres_batch = postgres_batch
+        jm.couchdb_batch = couchdb_batch
+        
         start_time = datetime.now()
         
         print(f"[MEMO] [BATCH] Creating tasks for {len(file_paths)} files...\n", flush=True)
@@ -2104,6 +2219,64 @@ async def process_documents_batch(
         }
         
         jm.set_job_metrics(job_id, total_metrics)
+        
+        # ================================================================
+        # PHASE 2: Flush Batch Inserters & Log Statistics
+        # ================================================================
+        
+        # PostgreSQL Batch Flush
+        if postgres_batch:
+            try:
+                logger.info("=" * 80)
+                logger.info(f"[FLUSH] PostgreSQL Batch - Job {job_id}")
+                logger.info("=" * 80)
+                
+                postgres_batch.flush()
+                stats = postgres_batch.get_stats()
+                
+                logger.info(f"[STATS] PostgreSQL Batch Insert Statistics:")
+                logger.info(f"   Total Batches:           {stats['total_batches']}")
+                logger.info(f"   Total Documents:         {stats['total_documents']}")
+                logger.info(f"   Successful Batches:      {stats['successful_batches']}")
+                logger.info(f"   Failed Batches:          {stats.get('failed_batches', 0)}")
+                logger.info(f"   Fallback Single Inserts: {stats['total_fallbacks']}")
+                if stats['total_batches'] > 0:
+                    logger.info(f"   Success Rate:            {stats['successful_batches']/stats['total_batches']*100:.1f}%")
+                else:
+                    logger.info(f"   Success Rate:            N/A")
+                logger.info("=" * 80)
+                
+            except Exception as e:
+                logger.error(f"[ERROR] PostgreSQL batch flush failed: {e}")
+                logger.error(f"   Some documents may not be persisted!")
+        
+        # CouchDB Batch Flush
+        if couchdb_batch:
+            try:
+                logger.info("=" * 80)
+                logger.info(f"[FLUSH] CouchDB Batch - Job {job_id}")
+                logger.info("=" * 80)
+                
+                couchdb_batch.flush()
+                stats = couchdb_batch.get_stats()
+                
+                logger.info(f"[STATS] CouchDB Batch Insert Statistics:")
+                logger.info(f"   Total Batches:           {stats['total_batches']}")
+                logger.info(f"   Total Documents:         {stats['total_documents']}")
+                logger.info(f"   Successful Batches:      {stats['successful_batches']}")
+                logger.info(f"   Failed Batches:          {stats.get('failed_batches', 0)}")
+                logger.info(f"   Fallback Single Inserts: {stats['total_fallbacks']}")
+                logger.info(f"   Conflicts Handled:       {stats.get('total_conflicts', 0)}")
+                if stats['total_batches'] > 0:
+                    logger.info(f"   Success Rate:            {stats['successful_batches']/stats['total_batches']*100:.1f}%")
+                else:
+                    logger.info(f"   Success Rate:            N/A")
+                logger.info("=" * 80)
+                
+            except Exception as e:
+                logger.error(f"[ERROR] CouchDB batch flush failed: {e}")
+                logger.error(f"   Some documents may not be persisted!")
+        
         jm.update_job_status(job_id, "completed")
         
         logger.info(f"[OK] Batch completed: {successful}/{len(file_paths)} files in {total_metrics['processing_time']:.2f}s")
