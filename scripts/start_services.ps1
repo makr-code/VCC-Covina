@@ -37,7 +37,6 @@ $ingestionBackend = Start-Process -FilePath "python" -ArgumentList "backend\inge
     -WorkingDirectory "C:\VCC\Covina" `
     -NoNewWindow -PassThru -RedirectStandardOutput "logs\ingestion_backend.log" `
     -RedirectStandardError "logs\ingestion_backend_error.log"
-    -RedirectStandardError "logs\ingestion_backend_error.log"
 
 Write-Host "  Waiting for backends to initialize (10s)..." -ForegroundColor Gray
 Start-Sleep -Seconds 10
