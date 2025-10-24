@@ -1,0 +1,31 @@
+# Bandit Configuration File (YAML format)
+# Purpose: Suppress false positives and configure security scanning
+
+# Test IDs to skip globally
+# https://bandit.readthedocs.io/en/latest/plugins/index.html
+
+skips:
+  # B101: assert_used - Normal in test files
+  - B101
+
+# Tests to include (empty = all tests)
+tests: []
+
+# Directories to exclude from scanning
+exclude_dirs:
+  - /tests/
+  - /test/
+  - /__pycache__/
+  - /.venv/
+  - /venv/
+  - /node_modules/
+  - /.git/
+
+# Specific files to exclude
+# exclude: ['*/test_*.py']
+
+# Severity levels to report
+# Options: all, low, medium, high
+# Default: all (we filter via -ll flag in CLI instead)
+# severity: medium
+

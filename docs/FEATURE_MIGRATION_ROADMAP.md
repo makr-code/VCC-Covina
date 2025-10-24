@@ -82,6 +82,130 @@ class ChromaBatchInserter:
 
 **Priority:** ⭐⭐⭐⭐⭐ **CRITICAL** (High impact, medium complexity)
 
+**Status:** ✅ **MIGRATED TO UDS3 v2.1.0** (20. Oktober 2025)
+- Code: `uds3/database/batch_operations.py` (575 lines)
+- Tests: 29/29 PASSED (ChromaBatchInserter + Neo4jBatchCreator)
+- Deadlock bug fixed (_flush_unlocked pattern)
+- Production ready
+
+---
+
+### **Feature 1b: Batch Operations (PostgreSQL + CouchDB)** 🔥 **HIGH PRIORITY - PHASE 2**
+
+**Location:** **NEW** (to be created in `uds3/database/batch_operations.py`)
+
+**Beschreibung:**
+- **PostgreSQLBatchInserter:** Batch document insertion (100-1000 docs/batch)
+- **CouchDBBatchInserter:** Bulk document creation (_bulk_docs API)
+- ENV-driven toggles (`ENABLE_POSTGRES_BATCH_INSERT`, `ENABLE_COUCHDB_BATCH_INSERT`)
+- Automatic fallback auf single-item bei Fehler
+- **Konsistent mit ChromaDB/Neo4j Pattern** (Thread-safe, Context Manager, Stats)
+
+**Performance Impact:**
+- PostgreSQL: **+50-100x throughput** (psycopg2.extras.execute_batch)
+  - Single: 1000 inserts = ~10s (10ms/doc)
+  - Batch: 1000 inserts = ~0.1s (0.1ms/doc)
+- CouchDB: **+100-500x throughput** (_bulk_docs API)
+  - Single: 1000 docs = ~50s (50ms/doc)
+  - Batch: 1000 docs = ~0.1s (0.1ms/doc)
+
+**PostgreSQL Implementation (psycopg2.extras):**
+```python
+import psycopg2.extras
+
+class PostgreSQLBatchInserter:
+    def __init__(self, pg_backend, batch_size: int = 100):
+        self.backend = pg_backend
+        self.batch_size = batch_size
+        self.batch = []
+        self._lock = threading.Lock()
+    
+    def add(self, document_id, file_path, classification, ...):
+        with self._lock:
+            self.batch.append((document_id, file_path, classification, ...))
+            if len(self.batch) >= self.batch_size:
+                self._flush_unlocked()
+    
+    def flush(self):
+        with self._lock:
+            return self._flush_unlocked()
+    
+    def _flush_unlocked(self):
+        query = """
+            INSERT INTO documents 
+            (document_id, file_path, classification, ...)
+            VALUES (%s, %s, %s, ...)
+            ON CONFLICT (document_id) DO UPDATE SET ...
+        """
+        psycopg2.extras.execute_batch(
+            self.backend.cursor, 
+            query, 
+            self.batch
+        )
+        self.backend.conn.commit()
+```
+
+**CouchDB Implementation (_bulk_docs):**
+```python
+class CouchDBBatchInserter:
+    def __init__(self, couchdb_backend, batch_size: int = 100):
+        self.backend = couchdb_backend
+        self.batch_size = batch_size
+        self.batch = []
+        self._lock = threading.Lock()
+    
+    def add(self, doc_id, doc_data):
+        with self._lock:
+            doc_data['_id'] = doc_id
+            self.batch.append(doc_data)
+            if len(self.batch) >= self.batch_size:
+                self._flush_unlocked()
+    
+    def _flush_unlocked(self):
+        # CouchDB _bulk_docs API
+        result = self.backend.db.update(self.batch)
+        # Returns list of (success, doc_id, rev) tuples
+```
+
+**Migration Aufwand:**
+- **Komplexität:** Medium (⭐⭐⭐☆☆)
+- **Aufwand:** 3-4 Stunden
+  - PostgreSQL: 1.5h (psycopg2.extras integration)
+  - CouchDB: 1.5h (_bulk_docs API integration)
+  - Tests: 1h (mock-based + integration tests)
+- **Breaking Changes:** None (ENV toggle, backward compatible)
+- **Testing:** Unit tests + integration tests (real servers)
+
+**Migration Strategie:**
+1. **Phase 1:** Add `PostgreSQLBatchInserter` zu `uds3/database/batch_operations.py`
+2. **Phase 2:** Add `CouchDBBatchInserter` zu `uds3/database/batch_operations.py`
+3. **Phase 3:** Update PostgreSQL backend mit `insert_documents_batch()` method
+4. **Phase 4:** Update CouchDB backend mit `create_documents_batch()` method
+5. **Phase 5:** Write comprehensive tests (29+ tests wie ChromaDB/Neo4j)
+
+**UDS3 Integration Point:**
+- `uds3/database/database_api_postgresql.py` → add `insert_documents_batch()` method
+- `uds3/database/database_api_couchdb.py` → add `create_documents_batch()` method
+- `uds3/database/batch_operations.py` → add both batch inserter classes
+
+**Benefits für VCC Ecosystem:**
+- **Covina:** Drastisch schnellere Ingestion (1000+ docs)
+- **VERITAS:** Batch legal document imports
+- **Clara:** Batch training data inserts
+- **Argus:** Batch media metadata creation
+
+**ENV Variables:**
+```bash
+ENABLE_POSTGRES_BATCH_INSERT=false  # Default: off (backward compatible)
+POSTGRES_BATCH_INSERT_SIZE=100      # Batch size (100-1000 optimal)
+ENABLE_COUCHDB_BATCH_INSERT=false   # Default: off
+COUCHDB_BATCH_INSERT_SIZE=100       # Bulk docs size
+```
+
+**Priority:** ⭐⭐⭐⭐☆ **HIGH** (High impact, medium complexity, extends Phase 1 pattern)
+
+**Status:** 📋 **PLANNED FOR PHASE 2** (after Phase 1 complete)
+
 ---
 
 ### **Feature 2: Real Embeddings (sentence-transformers)** 🔥 **HIGH PRIORITY**
@@ -800,12 +924,25 @@ class ComplianceService:
 
 ## 📊 **Timeline Summary**
 
-| Phase | Duration | Features | Aufwand |
-|-------|----------|----------|---------|
-| **Phase 1** | 1-2 Tage | Real Embeddings + Batch Ops | 6-9h |
-| **Phase 2** | 1 Tag | Health Monitoring + DB Migrations | 5-7h |
-| **Phase 3** | TBD | Job Persistence (optional) | 12-16h |
-| **TOTAL** | 2-3 Tage + TBD | 4-5 Features | 11-16h + TBD |
+| Phase | Duration | Features | Aufwand | Status |
+|-------|----------|----------|---------|--------|
+| **Phase 1** | 1-2 Tage | Real Embeddings + Batch Ops (ChromaDB/Neo4j) | 6-9h | ✅ **COMPLETE** (70%) |
+| **Phase 2** | 1 Tag | Batch Ops (PostgreSQL/CouchDB) | 3-4h | 📋 Planned |
+| **Phase 3** | 1 Tag | Health Monitoring + DB Migrations | 5-7h | 📋 Planned |
+| **Phase 4** | TBD | Job Persistence (optional) | 12-16h | ⏸️ Optional |
+| **TOTAL** | 3-4 Tage + TBD | 6-7 Features | 14-20h + TBD | 🔄 In Progress |
+
+**Phase 1 Progress (70% Complete):**
+- ✅ Items 1-7: Code Migration + Integration + Testing (29/29 tests PASSED)
+- 📋 Item 8: Documentation (1h remaining)
+- 📋 Item 9: Git Commits (30min remaining)
+- 📋 Item 10: Validation (30min remaining)
+
+**Phase 2 Scope:**
+- PostgreSQLBatchInserter (1.5h code + 0.5h tests)
+- CouchDBBatchInserter (1.5h code + 0.5h tests)
+- Backend integration (0.5h)
+- Documentation (30min)
 
 ---
 

@@ -76,7 +76,7 @@ def wait_for_job_completion(job_id: str, timeout: int = 120):
     
     while (time.time() - start_time) < timeout:
         try:
-            response = requests.get(f"{INGESTION_BACKEND_URL}/jobs/{job_id}")
+            response = requests.get(f"{INGESTION_BACKEND_URL}/jobs/{job_id}", timeout=30)
             if response.status_code == 200:
                 job_data = response.json()
                 status = job_data.get('status')
@@ -114,24 +114,25 @@ def verify_databases(document_ids: list):
     for doc_id in document_ids:
         # Check PostgreSQL
         try:
-            response = requests.get(f"{MAIN_BACKEND_URL}/documents/{doc_id}")
+            response = requests.get(f"{MAIN_BACKEND_URL}/documents/{doc_id}", timeout=30)
             if response.status_code == 200:
                 results['postgresql'] += 1
-        except:
-            pass
+        except Exception as e:
+            print(f"[WARN] PostgreSQL check failed for {doc_id}: {e}")
         
         # Check ChromaDB (via semantic search)
         try:
             response = requests.post(
                 f"{MAIN_BACKEND_URL}/search/semantic",
-                json={"query": "test document", "top_k": 10}
+                json={"query": "test document", "top_k": 10},
+                timeout=30
             )
             if response.status_code == 200:
                 data = response.json()
                 if any(doc['document_id'] == doc_id for doc in data.get('results', [])):
                     results['chromadb'] += 1
-        except:
-            pass
+        except Exception as e:
+            print(f"[WARN] ChromaDB check failed: {e}")
         
         # Note: Direct Neo4j/CouchDB verification would need specific endpoints
         # For now, we assume they're written if PostgreSQL write succeeded

@@ -1,0 +1,7 @@
+; pgBouncer userlist (md5 passwords)
+; Format: "username" "md5<md5(password+username)>"
+; Example for user 'postgres' with password 'postgres':
+;   "postgres" "md5md5hashhere"
+; Generate with: echo -n "<password><username>" | md5sum
+
+"postgres" "md5REPLACE_WITH_REAL_HASH"

@@ -1,0 +1,32 @@
+fix(api): Graph Golden Dataset API PostgreSQL Integration
+
+Fixed PostgreSQL Backend Integration Issues (8 fixes):
+1. GET /graph-golden-dataset: cursor.execute → execute_query ✅
+2. GET /graph-golden-dataset: row[0] → row['id'] (dict access) ✅
+3. GET /graph-golden-dataset: COUNT query with alias ✅
+4. POST /graph-golden-dataset: cursor → conn.cursor() context manager ✅
+5. POST /graph-golden-dataset: pattern_id → pattern_id_db (variable fix) ✅
+6. POST /graph-golden-dataset: rollback error handling (try/except) ✅
+7. POST /graph-golden-dataset: async def → def (sync) ✅
+8. GET /{pattern_id}: cursor → execute_query + row dict access + UPDATE context manager ✅
+
+Testing Results:
+- tests/test_graph_pattern_api.py: 3/3 tests PASS ✅
+  - Test 1: LIST /graph-golden-dataset → 200 OK (15 patterns retrieved)
+  - Test 2: CREATE /graph-golden-dataset → 200 OK (pattern_id: 16 created)
+  - Test 3: Verify creation → Pattern found in database
+
+Debugging Journey:
+- Initial issue: Response returned 500 but data persisted correctly
+- Root cause: PowerShell stop_services.ps1 didn't kill backend properly
+- Solution: Force restart with Stop-Process -Force
+- Result: 100% success rate (3/3 tests PASSED)
+
+Files Changed:
+- main_backend.py: 8 fixes applied across 3 endpoints
+- tests/test_graph_pattern_api.py: Integration test (NEW, 125 lines)
+- fix_graph_golden_api.py: Auto-fix script for cursor calls (NEW, 180 lines)
+- check_graph_table_schema.py: Database validation (NEW, 80 lines)
+
+Status: ✅ Graph Golden Dataset API OPERATIONAL
+Success Rate: 100% (3/3 API tests PASSED) ⭐⭐⭐⭐⭐

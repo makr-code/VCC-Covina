@@ -1,0 +1,14 @@
+{
+  "pattern_id": "TEST_CURL_SIMPLE",
+  "name": "Test Curl Simple",
+  "description": "Simple test pattern",
+  "category": "workflow",
+  "nodes_definition": [
+    {
+      "id": "node1",
+      "label": "Document"
+    }
+  ],
+  "relationships_definition": [],
+  "status": "active"
+}

@@ -3,7 +3,7 @@ import time
 
 time.sleep(1)  # Quick wait
 
-r = requests.get('http://127.0.0.1:45679/jobs')
+r = requests.get('http://127.0.0.1:45679/jobs', timeout=30)
 jobs = r.json()
 
 if not jobs:

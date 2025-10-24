@@ -1,0 +1,33 @@
+Starting log monitoring...
+
+Sending POST to http://127.0.0.1:45678/graph-golden-dataset
+Pattern ID: TEST_DETAILED_1760721922
+
+Status Code: 500
+Response Text: Internal Server Error
+Response Headers: {'date': 'Fri, 17 Oct 2025 17:25:22 GMT', 'server': 'uvicorn', 'content-length': '21', 'content-type': 'text/plain; charset=utf-8'}
+
+Couldn't parse as JSON
+
+============================================================
+Checking database...
+============================================================
+Traceback (most recent call last):
+  File "C:\VCC\Covina\test_detailed_error.py", line 75, in <module>
+    print(f"\u2705 Pattern found in database!")
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python313\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 0: character maps to <undefined>
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\VCC\Covina\test_detailed_error.py", line 87, in <module>
+    print(f"\u274c DB Error: {e}")
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python313\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u274c' in position 0: character maps to <undefined>
