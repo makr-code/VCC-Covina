@@ -2884,7 +2884,7 @@ async def search_handelsregister(
 if __name__ == "__main__":
     # Development Server (Port 45678 - Main Backend)
     uvicorn.run(
-        "main_backend:app",
+        "backend.main:app",
         host="127.0.0.1",
         port=45678,
         reload=True,

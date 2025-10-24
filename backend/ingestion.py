@@ -3782,7 +3782,7 @@ if __name__ == "__main__":
     logger.info(f"   Log Level: {args.log_level}")
     
     uvicorn.run(
-        "ingestion_backend:app",
+        "backend.ingestion:app",
         host=args.host,
         port=args.port,
         reload=args.reload,
@@ -3819,7 +3819,7 @@ if __name__ == "__main__":
     
     # Start uvicorn server
     uvicorn.run(
-        "ingestion_backend:app",
+        "backend.ingestion:app",
         host=args.host,
         port=args.port,
         reload=args.reload,
