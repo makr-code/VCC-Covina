@@ -35,3 +35,27 @@ data/
 data/*
 !data/.gitkeep
 
+# Secrets (sensitive configuration)
+data/secrets/
+config/secrets/
+.env
+.env.production
+.env.local
+
+# Temporary files (uploads, processing)
+data/uploads/
+data/temp/
+data/cache/
+
+# Test artifacts
+.pytest_cache/
+tests/reports/
+htmlcov/
+.coverage
+*.cover
+
+# Backend runtime
+backend/*.pid
+backend/*.sock
+*.pid
+*.sock
