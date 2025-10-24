@@ -140,6 +140,7 @@ try:
     logger.info("✅ Gap Detection Module geladen")
 except Exception as e:
     logger.warning(f"⚠️ Gap Detection nicht verfügbar: {e}")
+    KnowledgeGapDB = None  # Define as None if import fails
 
 try:
     from uds3 import UDS3PolyglotManager
@@ -169,6 +170,8 @@ try:
     logger.info("✅ Review Queue Module geladen")
 except Exception as e:
     logger.warning(f"⚠️ Review Queue nicht verfügbar: {e}")
+    REVIEW_QUEUE_AVAILABLE = False
+    ReviewQueue = None  # Define as None if import fails
 
 try:
     from compliance_service import ComplianceService, get_compliance_service
@@ -177,6 +180,7 @@ try:
 except Exception as e:
     logger.warning(f"⚠️ Compliance Service nicht verfügbar: {e}")
     COMPLIANCE_AVAILABLE = False
+    ComplianceService = None  # Define as None if import fails
 
 # ChromaDB availability will be checked via UDS3 Strategy
 CHROMADB_AVAILABLE = False  # Will be set after UDS3 initialization
@@ -188,6 +192,7 @@ try:
 except Exception as e:
     logger.warning(f"⚠️ sentence-transformers nicht verfügbar: {e}")
     SENTENCE_TRANSFORMERS_AVAILABLE = False
+    SentenceTransformer = None  # Define as None if import fails
 
 # Rate Limiting Setup (slowapi)
 from slowapi import Limiter, _rate_limit_exceeded_handler
