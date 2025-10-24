@@ -25,7 +25,7 @@ Start-Sleep -Seconds 2
 # Step 3: Validate code (both backends)
 Write-Host ""
 Write-Host "3️⃣  Validating code..." -ForegroundColor Yellow
-python -m py_compile main_backend.py 2>$null
+python -m py_compile backend\main.py 2>$null
 if ($LASTEXITCODE -eq 0) {
     Write-Host "   ✅ Main Backend validation passed" -ForegroundColor Green
 } else {
@@ -33,7 +33,7 @@ if ($LASTEXITCODE -eq 0) {
     exit 1
 }
 
-python -m py_compile ingestion_backend.py 2>$null
+python -m py_compile backend\ingestion.py 2>$null
 if ($LASTEXITCODE -eq 0) {
     Write-Host "   ✅ Ingestion Backend validation passed" -ForegroundColor Green
 } else {
@@ -59,12 +59,12 @@ Write-Host ""
 Write-Host "5️⃣  Starting Backends..." -ForegroundColor Yellow
 Write-Host "   🔄 Starting Main Backend (Port 45678)..." -NoNewline
 
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "python main_backend.py" -WindowStyle Minimized
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "python backend\main.py" -WindowStyle Minimized
 Start-Sleep -Seconds 2
 Write-Host " ✅" -ForegroundColor Green
 
 Write-Host "   🔄 Starting Ingestion Backend (Port 45679)..." -NoNewline
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "python ingestion_backend.py" -WindowStyle Minimized
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "python backend\ingestion.py" -WindowStyle Minimized
 Start-Sleep -Seconds 3
 
 Write-Host " ✅" -ForegroundColor Green
