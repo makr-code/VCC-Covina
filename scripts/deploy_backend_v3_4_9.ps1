@@ -59,12 +59,13 @@ Write-Host ""
 Write-Host "5️⃣  Starting Backends..." -ForegroundColor Yellow
 Write-Host "   🔄 Starting Main Backend (Port 45678)..." -NoNewline
 
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "python backend\main.py" -WindowStyle Minimized
+# Start from root directory to preserve module paths
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd C:\VCC\Covina; python backend\main.py" -WindowStyle Minimized
 Start-Sleep -Seconds 2
 Write-Host " ✅" -ForegroundColor Green
 
 Write-Host "   🔄 Starting Ingestion Backend (Port 45679)..." -NoNewline
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "python backend\ingestion.py" -WindowStyle Minimized
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd C:\VCC\Covina; python backend\ingestion.py" -WindowStyle Minimized
 Start-Sleep -Seconds 3
 
 Write-Host " ✅" -ForegroundColor Green
