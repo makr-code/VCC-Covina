@@ -20,8 +20,14 @@ Autor: Covina System
 Datum: 17. Oktober 2025
 """
 
-import logging
+# KRITISCH: Füge Covina Root zum Python Path hinzu BEVOR irgendwelche Imports!
 import os
+import sys
+covina_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if covina_root not in sys.path:
+    sys.path.insert(0, covina_root)
+
+import logging
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 
@@ -143,7 +149,7 @@ except Exception as e:
     KnowledgeGapDB = None  # Define as None if import fails
 
 try:
-    from uds3 import UDS3PolyglotManager
+    from uds3.core.polyglot_manager import UDS3PolyglotManager
     UDS3_AVAILABLE = True
     logger.info("✅ UDS3 PolyglotManager Module geladen")
 except Exception as e:
@@ -431,115 +437,40 @@ async def startup_event():
     logger.info("📌 Port: 45678 (Main Backend)")
     logger.info("📌 Ingestion Backend: Port 45679")
     
-    # Initialize Gap Detection
-    if GAP_DETECTION_AVAILABLE:
-        try:
-            gap_db = KnowledgeGapDB()
-            logger.info("✅ Gap Detection Database initialisiert")
-        except Exception as e:
-            logger.error(f"❌ Gap Detection Fehler: {e}")
-    
-    # Initialize UDS3 Polyglot Manager (Manual Backend Pattern)
+    # Initialize UDS3 Polyglot Manager FIRST (needed by KnowledgeGapDB!)
     if UDS3_AVAILABLE:
         try:
             logger.info("=" * 80)
-            logger.info("🔧 UDS3 v2.0.0 MANUAL BACKEND INITIALIZATION")
+            logger.info("🔧 UDS3 v2.0.0 AUTO-CONFIG (Main)")
             logger.info("=" * 80)
-            logger.info("Pattern: UDS3PolyglotManager + Manual Backend Setup (like ingestion_backend.py)")
+            logger.info("Pattern: Backend-Typen angeben → UDS3 konfiguriert automatisch")
             logger.info("")
             
-            # Step 1: Create UDS3 Strategy (empty backends)
+            # Nur Backend-TYPEN angeben - UDS3 Database Manager übernimmt Rest!
             backend_config = {
-                "vector": {"enabled": True},
-                "relational": {"enabled": True},
-                "graph": {"enabled": False},
-                "file": {"enabled": False}
+                "vector": {"enabled": True},      # ChromaDB
+                "relational": {"enabled": True},  # PostgreSQL
+                "graph": {"enabled": False},      # Neo4j (not needed in main backend)
+                "file": {"enabled": False}        # CouchDB (not needed in main backend)
             }
             
             uds3_strategy = UDS3PolyglotManager(
                 backend_config=backend_config,
                 enable_rag=False
             )
-            logger.info("✅ UDS3 PolyglotManager created (empty strategy)")
+            logger.info("✅ UDS3 PolyglotManager initialisiert (Auto-Config)")
             
-            # Step 2: Manually instantiate PostgreSQL Backend (with ENV variables)
-            try:
-                # Prefer pooled backend if enabled via ENV (POSTGRES_USE_POOL=true, default true)
-                use_pool = os.getenv('POSTGRES_USE_POOL', 'true').lower() in ('1', 'true', 'yes')
-                if use_pool:
-                    from uds3.database.database_api_postgresql_pooled import PostgreSQLRelationalBackend
-                    logger.info("[DB] Using PostgreSQL pooled backend (UDS3)")
-                else:
-                    from uds3.database.database_api_postgresql import PostgreSQLRelationalBackend
-                    logger.info("[DB] Using PostgreSQL single-connection backend (UDS3)")
-
-                pg_config = {
-                    'host': os.getenv('POSTGRES_HOST', '192.168.178.94'),
-                    'port': int(os.getenv('POSTGRES_PORT', '5432')),
-                    'user': os.getenv('POSTGRES_USER', 'postgres'),
-                    'password': os.getenv('POSTGRES_PASSWORD', 'postgres'),
-                    'database': os.getenv('POSTGRES_DB', 'postgres'),
-                    'schema': 'public',
-                    # Pool config (ENV names aligned with .env.production: POSTGRES_POOL_MIN_SIZE / POSTGRES_POOL_MAX_SIZE)
-                    'min_connections': int(os.getenv('POSTGRES_POOL_MIN_SIZE', os.getenv('POSTGRES_POOL_MIN', '5'))),
-                    'max_connections': int(os.getenv('POSTGRES_POOL_MAX_SIZE', os.getenv('POSTGRES_POOL_MAX', '50'))),
-                    # Also provide aliases for single-connection backend with pool support
-                    'pool_min': int(os.getenv('POSTGRES_POOL_MIN_SIZE', os.getenv('POSTGRES_POOL_MIN', '5'))),
-                    'pool_max': int(os.getenv('POSTGRES_POOL_MAX_SIZE', os.getenv('POSTGRES_POOL_MAX', '50'))),
-                }
-                
-                postgres_backend = PostgreSQLRelationalBackend(pg_config)
-                # Some backends return None on connect() (pooled). Treat as success if no exception.
-                postgres_backend.connect()
-                uds3_strategy.relational_backend = postgres_backend
-                POSTGRES_AVAILABLE = True
-                logger.info("✅ PostgreSQL Backend connected and assigned to strategy")
-                logger.info(f"   Host: {pg_config['host']}:{pg_config['port']}")
-                logger.info(f"   Database: {pg_config['database']}")
-                # Optional: Tabellen/Indizes sicherstellen (idempotent)
-                try:
-                    if hasattr(postgres_backend, 'create_tables_if_not_exist'):
-                        postgres_backend.create_tables_if_not_exist()
-                    if hasattr(postgres_backend, 'create_indexes_if_not_exist'):
-                        postgres_backend.create_indexes_if_not_exist()
-                except Exception as mig_e:
-                    logger.warning(f"⚠️ Schema/Index-Validierung übersprungen: {mig_e}")
-            except Exception as e:
-                logger.warning(f"⚠️ PostgreSQL setup failed: {e}")
-                postgres_backend = None
+            # Backend-Status ausgeben (DatabaseManager hat bereits alles konfiguriert!)
+            db_manager = uds3_strategy.db_manager
+            postgres_backend = db_manager.get_relational_backend()
+            chromadb_backend = db_manager.get_vector_backend()
             
-            # Step 3: Manually instantiate ChromaDB Backend (with ENV variables)
-            try:
-                from uds3.database.database_api_chromadb_remote import ChromaRemoteVectorBackend
-                
-                chromadb_config = {
-                    "collection": "covina_documents",
-                    "remote": {
-                        "host": os.getenv('CHROMADB_HOST', '192.168.178.94'),
-                        "port": int(os.getenv('CHROMADB_PORT', '8000')),
-                        "protocol": "http"
-                    },
-                    "tenant": "default_tenant",
-                    "database": "default_database"
-                }
-                
-                chromadb_backend = ChromaRemoteVectorBackend(chromadb_config)
-                if chromadb_backend.connect():
-                    uds3_strategy.vector_backend = chromadb_backend
-                    CHROMADB_AVAILABLE = True
-                    logger.info("✅ ChromaDB Backend connected and assigned to strategy")
-                    logger.info(f"   Host: {chromadb_config['remote']['host']}:{chromadb_config['remote']['port']}")
-                    logger.info(f"   Collection: {chromadb_config['collection']}")
-                else:
-                    logger.warning("⚠️ ChromaDB connection failed")
-                    chromadb_backend = None
-            except Exception as e:
-                logger.warning(f"⚠️ ChromaDB setup failed: {e}")
-                chromadb_backend = None
+            POSTGRES_AVAILABLE = bool(postgres_backend)
+            CHROMADB_AVAILABLE = bool(chromadb_backend)
             
             logger.info("")
             logger.info("=" * 80)
-            logger.info("✅ UDS3 Manual Backend Setup Complete")
+            logger.info("✅ UDS3 AUTO-CONFIG COMPLETE (Main)")
             logger.info("=" * 80)
             logger.info(f"   PostgreSQL: {'✅ Connected' if postgres_backend else '❌ Not available'}")
             logger.info(f"   ChromaDB:   {'✅ Connected' if chromadb_backend else '❌ Not available'}")
@@ -547,7 +478,7 @@ async def startup_event():
             
         except Exception as e:
             logger.error("=" * 80)
-            logger.error("❌ CRITICAL ERROR: UDS3 Backend Setup Failed")
+            logger.error("❌ CRITICAL ERROR: UDS3 Backend Setup Failed (Main)")
             logger.error("=" * 80)
             logger.error(f"Error: {e}")
             logger.error("")
@@ -571,6 +502,14 @@ async def startup_event():
         logger.warning("⚠️ UDS3 nicht verfügbar - Backends nicht initialisiert")
         postgres_backend = None
         chromadb_backend = None
+    
+    # Initialize Gap Detection (requires PostgreSQL from UDS3!)
+    if GAP_DETECTION_AVAILABLE and postgres_backend:
+        try:
+            gap_db = KnowledgeGapDB(postgres_backend)  # Pass UDS3 backend!
+            logger.info("✅ Gap Detection Database initialisiert (UDS3 Backend)")
+        except Exception as e:
+            logger.error(f"❌ Gap Detection Fehler: {e}")
     
     # Initialize Review Queue (requires PostgreSQL)
     if REVIEW_QUEUE_AVAILABLE and postgres_backend:
@@ -2882,9 +2821,9 @@ async def search_handelsregister(
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
-    # Development Server (Port 45678 - Main Backend)
+    # Development Server (Port 45678 - Main Backend)  
     uvicorn.run(
-        "backend.main:app",
+        "main:app",
         host="127.0.0.1",
         port=45678,
         reload=True,

@@ -13,6 +13,7 @@ Lizenz: AGPL-3.0
 import json
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import List, Dict, Optional, Any
 
 logger = logging.getLogger(__name__)
@@ -68,6 +69,10 @@ class KnowledgeGapDB:
                     relation_type TEXT NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (gap_id) REFERENCES knowledge_gaps(id),
+                    FOREIGN KEY (related_gap_id) REFERENCES knowledge_gaps(id)
+                )
+            """)
+            logger.info("✅ gap_relations table created/verified")
                     FOREIGN KEY (related_gap_id) REFERENCES knowledge_gaps(id)
                 )
             """)
@@ -136,7 +141,9 @@ class KnowledgeGapDB:
             return gap_id
         except Exception as e:
             logger.error(f"Failed to add gap: {e}")
-            raise
+            return None
+        finally:
+            cursor.close()
     
     def get_gaps(self, status: Optional[str] = None, gap_type: Optional[str] = None, 
                  severity: Optional[str] = None, limit: Optional[int] = None) -> List[Dict]:
@@ -172,25 +179,29 @@ class KnowledgeGapDB:
         if limit:
             query += f" LIMIT {limit}"
         
+        cursor = self.connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         try:
-            result = self.postgres_backend.execute_query(query, params=params if params else None, fetch=True)
-            return result if result else []
+            cursor.execute(query, params if params else None)
+            result = cursor.fetchall()
+            return [dict(row) for row in result]
         except Exception as e:
             logger.error(f"Failed to get gaps: {e}")
             return []
+        finally:
+            cursor.close()
     
     def get_gap(self, gap_id: int) -> Optional[Dict]:
         """Get a single gap by ID"""
+        cursor = self.connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         try:
-            result = self.postgres_backend.execute_query(
-                "SELECT * FROM knowledge_gaps WHERE id = %s", 
-                params=(gap_id,), 
-                fetch=True
-            )
-            return result[0] if result else None
+            cursor.execute("SELECT * FROM knowledge_gaps WHERE id = %s", (gap_id,))
+            result = cursor.fetchone()
+            return dict(result) if result else None
         except Exception as e:
             logger.error(f"Failed to get gap {gap_id}: {e}")
             return None
+        finally:
+            cursor.close()
     
     def update_gap(self, gap_id: int, **kwargs) -> bool:
         """
@@ -224,16 +235,21 @@ class KnowledgeGapDB:
         values.append(gap_id)
         query = f"UPDATE knowledge_gaps SET {', '.join(updates)} WHERE id = %s"
         
+        cursor = self.connection.cursor()
         try:
-            self.postgres_backend.execute_query(query, params=values)
+            cursor.execute(query, values)
+            self.connection.commit()
             
             # Log history
             self._add_history(gap_id, 'updated', details=f"Updated: {', '.join(kwargs.keys())}")
             logger.info(f"✅ Updated gap {gap_id}")
             return True
         except Exception as e:
+            self.connection.rollback()
             logger.error(f"Failed to update gap {gap_id}: {e}")
             return False
+        finally:
+            cursor.close()
     
     def resolve_gap(self, gap_id: int, resolution: str, user: Optional[str] = None) -> bool:
         """
@@ -247,22 +263,27 @@ class KnowledgeGapDB:
         Returns:
             bool: Success status
         """
+        cursor = self.connection.cursor()
         try:
-            self.postgres_backend.execute_query("""
+            cursor.execute("""
                 UPDATE knowledge_gaps 
                 SET status = 'resolved', 
                     resolution = %s,
                     resolved_at = %s
                 WHERE id = %s
-            """, params=(resolution, datetime.now(), gap_id))
+            """, (resolution, datetime.now(), gap_id))
+            self.connection.commit()
             
             # Log history
             self._add_history(gap_id, 'resolved', user=user, details=resolution)
             logger.info(f"✅ Resolved gap {gap_id}")
             return True
         except Exception as e:
+            self.connection.rollback()
             logger.error(f"Failed to resolve gap {gap_id}: {e}")
             return False
+        finally:
+            cursor.close()
     
     def delete_gap(self, gap_id: int) -> bool:
         """Delete a gap (soft delete by setting status to 'deleted')"""
@@ -271,70 +292,83 @@ class KnowledgeGapDB:
     def _add_history(self, gap_id: int, action: str, user: Optional[str] = None, 
                     details: Optional[str] = None):
         """Add history entry for a gap"""
+        cursor = self.connection.cursor()
         try:
-            self.postgres_backend.execute_query("""
+            cursor.execute("""
                 INSERT INTO gap_history (gap_id, action, username, details)
                 VALUES (%s, %s, %s, %s)
-            """, params=(gap_id, action, user, details))
+            """, (gap_id, action, user, details))
+            self.connection.commit()
         except Exception as e:
+            self.connection.rollback()
             logger.error(f"Failed to add history for gap {gap_id}: {e}")
+        finally:
+            cursor.close()
     
     def get_gap_history(self, gap_id: int) -> List[Dict]:
         """Get history for a specific gap"""
+        cursor = self.connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         try:
-            result = self.postgres_backend.execute_query("""
+            cursor.execute("""
                 SELECT * FROM gap_history 
                 WHERE gap_id = %s
                 ORDER BY timestamp DESC
-            """, params=(gap_id,), fetch=True)
-            return result if result else []
+            """, (gap_id,))
+            result = cursor.fetchall()
+            return [dict(row) for row in result]
         except Exception as e:
             logger.error(f"Failed to get history for gap {gap_id}: {e}")
             return []
+        finally:
+            cursor.close()
     
     def get_statistics(self) -> Dict[str, Any]:
         """Get database statistics"""
         stats = {}
+        cursor = self.connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         try:
             # Total gaps
-            result = self.postgres_backend.execute_query(
-                "SELECT COUNT(*) as total FROM knowledge_gaps WHERE status != 'deleted'",
-                fetch=True
-            )
-            stats['total'] = result[0]['total'] if result else 0
+            cursor.execute("SELECT COUNT(*) as total FROM knowledge_gaps WHERE status != 'deleted'")
+            result = cursor.fetchone()
+            stats['total'] = result['total'] if result else 0
             
             # By status
-            result = self.postgres_backend.execute_query("""
+            cursor.execute("""
                 SELECT status, COUNT(*) as count 
                 FROM knowledge_gaps 
                 WHERE status != 'deleted'
                 GROUP BY status
-            """, fetch=True)
-            stats['by_status'] = {row['status']: row['count'] for row in result} if result else {}
+            """)
+            result = cursor.fetchall()
+            stats['by_status'] = {row['status']: row['count'] for row in result}
             
             # By severity
-            result = self.postgres_backend.execute_query("""
+            cursor.execute("""
                 SELECT severity, COUNT(*) as count 
                 FROM knowledge_gaps 
                 WHERE status != 'deleted'
                 GROUP BY severity
-            """, fetch=True)
-            stats['by_severity'] = {row['severity']: row['count'] for row in result} if result else {}
+            """)
+            result = cursor.fetchall()
+            stats['by_severity'] = {row['severity']: row['count'] for row in result}
             
             # By type
-            result = self.postgres_backend.execute_query("""
+            cursor.execute("""
                 SELECT gap_type, COUNT(*) as count 
                 FROM knowledge_gaps 
                 WHERE status != 'deleted'
                 GROUP BY gap_type
                 ORDER BY count DESC
                 LIMIT 10
-            """, fetch=True)
-            stats['top_types'] = {row['gap_type']: row['count'] for row in result} if result else {}
+            """)
+            result = cursor.fetchall()
+            stats['top_types'] = {row['gap_type']: row['count'] for row in result}
             
         except Exception as e:
             logger.error(f"Failed to get statistics: {e}")
+        finally:
+            cursor.close()
         
         return stats
     
@@ -360,9 +394,16 @@ class KnowledgeGapDB:
         )
     
     def close(self):
-        """Close database connection - No-op for UDS3 backend (managed by UDS3)"""
-        logger.info("KnowledgeGapDB.close() called (connection managed by UDS3)")
+        """Close database connection"""
+        if self.connection:
+            try:
+                self.connection.close()
+                logger.info("Database connection closed")
+            except Exception as e:
+                logger.error(f"Error closing connection: {e}")
+            finally:
+                self.connection = None
     
     def __del__(self):
-        """Cleanup on deletion - No-op for UDS3 backend"""
-        pass
+        """Cleanup on deletion"""
+        self.close()

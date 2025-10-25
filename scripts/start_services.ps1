@@ -24,19 +24,19 @@ if (-not (Test-Path $logsDir)) {
 # Start Main Backend on Port 45678
 Write-Host ""
 Write-Host "Starting Main Backend on Port 45678..." -ForegroundColor Green
-$mainBackend = Start-Process -FilePath "python" -ArgumentList "backend\main.py" `
-    -WorkingDirectory "C:\VCC\Covina" `
-    -NoNewWindow -PassThru -RedirectStandardOutput "logs\main_backend.log" `
-    -RedirectStandardError "logs\main_backend_error.log"
+$mainBackend = Start-Process -FilePath "python" -ArgumentList "main.py" `
+    -WorkingDirectory "C:\VCC\Covina\backend" `
+    -NoNewWindow -PassThru -RedirectStandardOutput "..\logs\main_backend.log" `
+    -RedirectStandardError "..\logs\main_backend_error.log"
 
 Start-Sleep -Seconds 2
 
 # Start Ingestion Backend on Port 45679
 Write-Host "Starting Ingestion Backend on Port 45679..." -ForegroundColor Green
-$ingestionBackend = Start-Process -FilePath "python" -ArgumentList "backend\ingestion.py" `
-    -WorkingDirectory "C:\VCC\Covina" `
-    -NoNewWindow -PassThru -RedirectStandardOutput "logs\ingestion_backend.log" `
-    -RedirectStandardError "logs\ingestion_backend_error.log"
+$ingestionBackend = Start-Process -FilePath "python" -ArgumentList "ingestion.py" `
+    -WorkingDirectory "C:\VCC\Covina\backend" `
+    -NoNewWindow -PassThru -RedirectStandardOutput "..\logs\ingestion_backend.log" `
+    -RedirectStandardError "..\logs\ingestion_backend_error.log"
 
 Write-Host "  Waiting for backends to initialize (10s)..." -ForegroundColor Gray
 Start-Sleep -Seconds 10

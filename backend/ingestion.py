@@ -19,8 +19,19 @@ Autor: Covina System
 Datum: 11. Oktober 2025
 """
 
-# KRITISCH: sitecustomize MUSS zuerst importiert werden
-import sitecustomize  # noqa: F401
+# KRITISCH: sitecustomize MUSS zuerst importiert werden (falls verfügbar)
+try:
+    import sitecustomize  # noqa: F401
+except ImportError:
+    # sitecustomize ist optional - wird oft für globale Python-Konfiguration verwendet
+    pass
+
+import sys
+import os
+# KRITISCH: Füge Covina Root zum Python Path hinzu für ingestion Module
+covina_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if covina_root not in sys.path:
+    sys.path.insert(0, covina_root)
 
 import asyncio
 import logging
@@ -1190,125 +1201,61 @@ class IngestionJobManager:
             logger.error(f"[ERROR] Failed to load incomplete jobs: {e}")
     
     def _setup_uds3(self):
-        """Initialisiere UDS3 Framework (Manual Backend Pattern mit ENV-Variablen)"""
+        """
+        Initialisiere UDS3 Framework mit automatischer Backend-Konfiguration.
+        
+        Separation of Concerns:
+        - Ingestion Backend: Definiert welche DB-Typen benötigt werden
+        - UDS3 Database Manager: Übernimmt komplette Konfiguration (Credentials, Connections, etc.)
+        
+        Keine ENV-Variablen nötig - alles zentral in UDS3!
+        """
         try:
             logger.info("=" * 80)
-            logger.info("🔧 UDS3 v2.0.0 MANUAL BACKEND INITIALIZATION (Ingestion)")
+            logger.info("🔧 UDS3 v2.0.0 AUTO-CONFIG (Ingestion)")
             logger.info("=" * 80)
-            logger.info("Pattern: Consistent with main_backend.py (ENV variables)")
+            logger.info("Pattern: Backend-Typen angeben → UDS3 konfiguriert automatisch")
             logger.info("")
             
-            from uds3.uds3_core import get_optimized_unified_strategy
+            from uds3.core.polyglot_manager import UDS3PolyglotManager
             
-            self.uds3_strategy = get_optimized_unified_strategy()
-            logger.info("✅ UDS3 Strategy created (empty backends)")
+            # Nur Backend-TYPEN angeben - UDS3 übernimmt Rest!
+            backend_config = {
+                "relational": {"enabled": True},  # PostgreSQL
+                "vector": {"enabled": True},      # ChromaDB
+                "graph": {"enabled": True},       # Neo4j
+                "file": {"enabled": True}         # CouchDB
+            }
             
-            # Vector Database (ChromaDB Remote HTTP) - with ENV variables
-            try:
-                from uds3.database.database_api_chromadb_remote import ChromaRemoteVectorBackend
-                
-                chromadb_config = {
-                    "collection": "covina_documents",
-                    "remote": {
-                        "host": os.getenv('CHROMADB_HOST', '192.168.178.94'),
-                        "port": int(os.getenv('CHROMADB_PORT', '8000')),
-                        "protocol": "http"
-                    },
-                    "tenant": "default_tenant",
-                    "database": "default_database"
-                }
-                
-                vector_db = ChromaRemoteVectorBackend(chromadb_config)
-                if vector_db.connect():
-                    self.uds3_strategy.vector_backend = vector_db
-                    logger.info("✅ ChromaDB Remote connected and assigned to strategy")
-                    logger.info(f"   Host: {chromadb_config['remote']['host']}:{chromadb_config['remote']['port']}")
-                else:
-                    logger.warning("⚠️ ChromaDB connection failed")
-            except Exception as e:
-                logger.warning(f"⚠️ ChromaDB setup failed: {e}")
+            self.uds3_strategy = UDS3PolyglotManager(
+                backend_config=backend_config,
+                enable_rag=False
+            )
+            logger.info("✅ UDS3 PolyglotManager initialisiert (Auto-Config)")
             
-            # Graph Database (Neo4j) - with ENV variables
-            try:
-                from uds3.uds3_relations_core import UDS3RelationsCore
-                
-                neo4j_uri = f"neo4j://{os.getenv('NEO4J_HOST', '192.168.178.94')}:{os.getenv('NEO4J_PORT', '7687')}"
-                neo4j_user = os.getenv('NEO4J_USER', 'neo4j')
-                neo4j_password = os.getenv('NEO4J_PASSWORD', 'v3f3b1d7')
-                
-                relations_core = UDS3RelationsCore(
-                    neo4j_uri=neo4j_uri,
-                    neo4j_auth=(neo4j_user, neo4j_password)
-                )
-                
-                self.uds3_strategy.graph_backend = relations_core
-                logger.info("✅ Neo4j connected and assigned to strategy")
-                logger.info(f"   URI: {neo4j_uri}")
-            except Exception as e:
-                logger.warning(f"⚠️ Neo4j setup failed: {e}")
-            
-            # Relational Database (PostgreSQL) - with ENV variables
-            try:
-                from uds3.database.database_api_postgresql import PostgreSQLRelationalBackend
-                
-                pg_config = {
-                    'host': os.getenv('POSTGRES_HOST', '192.168.178.94'),
-                    'port': int(os.getenv('POSTGRES_PORT', '5432')),
-                    'user': os.getenv('POSTGRES_USER', 'postgres'),
-                    'password': os.getenv('POSTGRES_PASSWORD', 'postgres'),
-                    'database': os.getenv('POSTGRES_DB', 'postgres'),
-                    'schema': 'public'
-                }
-                
-                pg_backend = PostgreSQLRelationalBackend(pg_config)
-                if pg_backend.connect():
-                    self.uds3_strategy.relational_backend = pg_backend
-                    logger.info("✅ PostgreSQL connected and assigned to strategy")
-                    logger.info(f"   Host: {pg_config['host']}:{pg_config['port']}")
-                    logger.info(f"   Database: {pg_config['database']}")
-                else:
-                    logger.warning("⚠️ PostgreSQL connection failed")
-            except Exception as e:
-                logger.warning(f"⚠️ PostgreSQL setup failed: {e}")
-            
-            # Document Database (CouchDB) - with ENV variables
-            try:
-                from uds3.database.database_api_couchdb import CouchDBAdapter
-                
-                couchdb_config = {
-                    "host": os.getenv('COUCHDB_HOST', '192.168.178.94'),
-                    "port": int(os.getenv('COUCHDB_PORT', '32931')),
-                    "database": "covina_documents",
-                    "username": os.getenv('COUCHDB_USER', 'couchdb'),
-                    "password": os.getenv('COUCHDB_PASSWORD', 'couchdb')
-                }
-                
-                couchdb = CouchDBAdapter(couchdb_config)
-                couchdb.connect()
-                
-                if couchdb.is_available():
-                    self.uds3_strategy.document_backend = couchdb
-                    logger.info("✅ CouchDB connected and assigned to strategy")
-                    logger.info(f"   Host: {couchdb_config['host']}:{couchdb_config['port']}")
-                    logger.info(f"   Database: {couchdb_config['database']}")
-                else:
-                    logger.warning("⚠️ CouchDB connection failed")
-            except Exception as e:
-                logger.warning(f"⚠️ CouchDB setup failed: {e}")
-            
+            # Backend-Status ausgeben (DatabaseManager hat bereits alles konfiguriert!)
             self.uds3_ready = True
             logger.info("")
             logger.info("=" * 80)
-            logger.info("✅ UDS3 Manual Backend Setup Complete (Ingestion)")
+            logger.info("✅ UDS3 AUTO-CONFIG COMPLETE (Ingestion)")
             logger.info("=" * 80)
-            logger.info(f"   PostgreSQL: {'✅ Connected' if hasattr(self.uds3_strategy, 'relational_backend') and self.uds3_strategy.relational_backend else '❌ Not available'}")
-            logger.info(f"   ChromaDB:   {'✅ Connected' if hasattr(self.uds3_strategy, 'vector_backend') and self.uds3_strategy.vector_backend else '❌ Not available'}")
-            logger.info(f"   Neo4j:      {'✅ Connected' if hasattr(self.uds3_strategy, 'graph_backend') and self.uds3_strategy.graph_backend else '❌ Not available'}")
-            logger.info(f"   CouchDB:    {'✅ Connected' if hasattr(self.uds3_strategy, 'document_backend') and self.uds3_strategy.document_backend else '❌ Not available'}")
+            
+            db_manager = self.uds3_strategy.db_manager
+            postgres_backend = db_manager.get_relational_backend()
+            chroma_backend = db_manager.get_vector_backend()
+            neo4j_backend = db_manager.get_graph_backend()
+            file_backend = getattr(db_manager, 'file_backend', None)
+            
+            logger.info(f"   PostgreSQL: {'✅ Connected' if postgres_backend else '❌ Not available'}")
+            logger.info(f"   ChromaDB:   {'✅ Connected' if chroma_backend else '❌ Not available'}")
+            logger.info(f"   Neo4j:      {'✅ Connected' if neo4j_backend else '❌ Not available'}")
+            logger.info(f"   CouchDB:    {'✅ Connected' if file_backend else '❌ Not available'}")
+            logger.info("")
+            logger.info("🔌 UDS3 Status: [OK] Ready")
             logger.info("=" * 80)
-            logger.info("[START] UDS3 Framework ready")
             
         except Exception as e:
+            self.uds3_ready = False
             logger.error("=" * 80)
             logger.error("❌ CRITICAL ERROR: UDS3 Setup Failed (Ingestion)")
             logger.error("=" * 80)
@@ -3762,37 +3709,6 @@ async def websocket_upload_endpoint(websocket: WebSocket):
 # ================================================================
 # MAIN
 # ================================================================
-
-if __name__ == "__main__":
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="Covina Ingestion Backend - Multi-Worker Support")
-    parser.add_argument("--host", default="0.0.0.0", help="Host to bind to")  # nosec B104
-    parser.add_argument("--port", type=int, default=45679, help="Port to bind to")
-    parser.add_argument("--reload", action="store_true", help="Enable auto-reload")
-    parser.add_argument("--workers", type=int, default=1, help="Number of worker processes (default: 1)")
-    parser.add_argument("--log-level", default="info", help="Log level (default: info)")
-    
-    args = parser.parse_args()
-    
-    logger.info(f"[START] Starting Ingestion Backend...")
-    logger.info(f"   Host: {args.host}")
-    logger.info(f"   Port: {args.port}")
-    logger.info(f"   Workers: {args.workers}")
-    logger.info(f"   Log Level: {args.log_level}")
-    
-    uvicorn.run(
-        "backend.ingestion:app",
-        host=args.host,
-        port=args.port,
-        reload=args.reload,
-        workers=args.workers if not args.reload else 1,  # Reload only with 1 worker
-        log_level=args.log_level
-    )
-
-
-
-# ================================================================
 # MAIN ENTRY POINT
 # ================================================================
 
@@ -3817,11 +3733,16 @@ if __name__ == "__main__":
     logger.info(f"  Worker Pool: {IO_WORKERS} I/O + {CPU_WORKERS} CPU")
     logger.info("=" * 60)
     
-    # Start uvicorn server
-    uvicorn.run(
-        "backend.ingestion:app",
+    # Start uvicorn server with explicit config to avoid module loading issues
+    # (ingestion package exists, so "ingestion:app" string would load wrong module)
+    import uvicorn
+    config = uvicorn.Config(
+        app=app,  # Pass app object directly
         host=args.host,
         port=args.port,
-        reload=args.reload,
-        log_level=args.log_level
+        log_level=args.log_level,
+        access_log=True
     )
+    server = uvicorn.Server(config)
+    import asyncio
+    asyncio.run(server.serve())
