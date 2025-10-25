@@ -1,4 +1,4 @@
-# Polyglot Admin Tool v2.0
+# Polyglot Admin Tool v3.1
 
 **Universal Document Inspector & Database Viewer for Polyglot Persistence Systems**
 
@@ -10,6 +10,7 @@ The Polyglot Admin Tool provides a unified interface to inspect and manage data 
 - **ChromaDB Vector Store** - Similarity search, embedding inspection, metadata viewer
 - **PostgreSQL Relational DB** - Document management, metadata queries, full-text search
 - **UDS3 SAGA Orchestrator** - Transaction monitoring, step tracking, failure analysis
+- **🆕 Hybrid Search** - Semantic + Keyword + Regex unified search
 
 ## 🚀 Quick Start
 
@@ -30,6 +31,36 @@ python tools\polyglot_admin.py
   - Neo4j (port 7687)
 
 ## 📊 Features
+
+### 🔍 Universal Search (Sidebar) - **NEW v3.1!**
+
+**Search Modes:**
+- **🤖 Auto-Detect** - Automatically selects best mode based on query
+- **🧠 Semantic** - ChromaDB embeddings + similarity search (questions, natural language)
+- **🔤 Keyword** - Traditional text matching (PostgreSQL ILIKE)
+- **🔍 Regex** - Pattern matching (PostgreSQL regex operator `~`)
+
+**How It Works:**
+```
+Semantic:  "How do I process invoices?"  → ChromaDB embeddings
+Keyword:   "contract document"           → PostgreSQL ILIKE
+Regex:     "^[A-Z].*invoice"             → PostgreSQL ~ operator
+Auto:      Detects mode from query       → Best match
+```
+
+**Hybrid Ranking:**
+- Results from all 3 backends (PostgreSQL + ChromaDB + Neo4j)
+- Weighted relevance scoring:
+  - Vector (ChromaDB): 50% weight (highest)
+  - Relational (PostgreSQL): 30% weight
+  - Graph (Neo4j): 20% weight
+- Merged + sorted by final score
+
+**Example Queries:**
+- Semantic: "What documents discuss payment workflows?"
+- Keyword: "invoice contract"
+- Regex: "^DOC-[0-9]{4}$" (matches DOC-1234)
+- Auto: Automatically picks best mode
 
 ### 1. Graph View (Neo4j) - Top-Left
 **Cypher Console** ✅

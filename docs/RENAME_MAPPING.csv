@@ -1,0 +1,70 @@
+old_path,new_path,category,git_mv_command,reason,priority
+main_backend.py,backend/main.py,Backend,git mv main_backend.py backend/main.py,Main Backend Entry Point,HIGH
+ingestion_backend.py,backend/ingestion.py,Backend,git mv ingestion_backend.py backend/ingestion.py,Ingestion Backend Entry Point,HIGH
+openapi.json,backend/main_openapi.json,Backend,git mv openapi.json backend/main_openapi.json,Main Backend API Spec,HIGH
+ingestion_openapi.json,backend/ingestion_openapi.json,Backend,git mv ingestion_openapi.json backend/ingestion_openapi.json,Ingestion Backend API Spec,HIGH
+polyglot_integration.py,backend/core/polyglot.py,Backend,git mv polyglot_integration.py backend/core/polyglot.py,Core Polyglot Integration,HIGH
+covina_logging.py,backend/core/logging.py,Backend,git mv covina_logging.py backend/core/logging.py,Logging Configuration,HIGH
+compliance_api.py,backend/services/compliance_api.py,Backend,git mv compliance_api.py backend/services/compliance_api.py,Compliance REST API,HIGH
+compliance_service.py,backend/services/compliance.py,Backend,git mv compliance_service.py backend/services/compliance.py,Compliance Service Logic,HIGH
+mail_service.py,backend/services/mail.py,Backend,git mv mail_service.py backend/services/mail.py,Mail Service,HIGH
+config.py,config/app.py,Config,git mv config.py config/app.py,Global App Configuration,HIGH
+automation.yaml,config/automation.yaml,Config,git mv automation.yaml config/automation.yaml,Automation Configuration,MEDIUM
+covina_app_phase4.py,DELETE,Frontend,DELETE (integrated in frontend/main.py),Phase4 suffix - duplicate frontend entry,HIGH
+analyze_database_apis.py,scripts/debug/analyze_db_apis.py,Scripts,git mv analyze_database_apis.py scripts/debug/analyze_db_apis.py,Analyze Database APIs (max 30 chars),MEDIUM
+check_golden_dataset_table.py,scripts/debug/check_golden_table.py,Scripts,git mv check_golden_dataset_table.py scripts/debug/check_golden_table.py,Check Golden Dataset Table (max 30 chars),MEDIUM
+check_graph_table_schema.py,scripts/debug/check_graph_schema.py,Scripts,git mv check_graph_table_schema.py scripts/debug/check_graph_schema.py,Check Graph Schema (max 30 chars),MEDIUM
+check_jobs.py,scripts/debug/check_jobs.py,Scripts,git mv check_jobs.py scripts/debug/check_jobs.py,Check Job Status,MEDIUM
+check_last_jobs.py,scripts/debug/check_last_jobs.py,Scripts,git mv check_last_jobs.py scripts/debug/check_last_jobs.py,Check Last Jobs,MEDIUM
+debug_graph_post.py,scripts/debug/graph_post.py,Scripts,git mv debug_graph_post.py scripts/debug/graph_post.py,Remove debug_ prefix,MEDIUM
+debug_ui_layout.py,scripts/debug/ui_layout.py,Scripts,git mv debug_ui_layout.py scripts/debug/ui_layout.py,Remove debug_ prefix,MEDIUM
+fix_governance_policy_api.py,scripts/fix/governance_api.py,Scripts,git mv fix_governance_policy_api.py scripts/fix/governance_api.py,Remove fix_ prefix (max 30 chars),MEDIUM
+fix_graph_golden_api.py,scripts/fix/graph_api.py,Scripts,git mv fix_graph_golden_api.py scripts/fix/graph_api.py,Remove fix_ prefix,MEDIUM
+fix_postgres_connects.py,scripts/fix/postgres_conn.py,Scripts,git mv fix_postgres_connects.py scripts/fix/postgres_conn.py,Remove fix_ prefix,MEDIUM
+fix_startup_errors.py,scripts/fix/startup_errors.py,Scripts,git mv fix_startup_errors.py scripts/fix/startup_errors.py,Remove fix_ prefix,MEDIUM
+run_integration_tests.py,scripts/test/run_integration.py,Scripts,git mv run_integration_tests.py scripts/test/run_integration.py,Integration Test Runner,MEDIUM
+start_ui_test.py,scripts/test/start_ui_test.py,Scripts,git mv start_ui_test.py scripts/test/start_ui_test.py,UI Test Starter,MEDIUM
+monitor_gpu.py,scripts/monitoring/monitor_gpu.py,Scripts,git mv monitor_gpu.py scripts/monitoring/monitor_gpu.py,GPU Monitoring,LOW
+test_db_schema.py,tests/unit/test_db_schema.py,Tests,git mv test_db_schema.py tests/unit/test_db_schema.py,Unit Test - Database Schema,MEDIUM
+test_detailed_error.py,tests/unit/test_errors.py,Tests,git mv test_detailed_error.py tests/unit/test_errors.py,Unit Test - Error Handling (shorter name),MEDIUM
+test_json_serialization.py,tests/unit/test_json_serial.py,Tests,git mv test_json_serialization.py tests/unit/test_json_serial.py,Unit Test - JSON Serialization (max 30 chars),MEDIUM
+test_simple_endpoint.py,tests/unit/test_endpoint.py,Tests,git mv test_simple_endpoint.py tests/unit/test_endpoint.py,Unit Test - Endpoint (shorter name),MEDIUM
+test_batch_api.py,tests/integration/test_batch_api.py,Tests,git mv test_batch_api.py tests/integration/test_batch_api.py,Integration Test - Batch API,MEDIUM
+test_gap_db_connection.py,tests/integration/test_gap_db.py,Tests,git mv test_gap_db_connection.py tests/integration/test_gap_db.py,Integration Test - Gap DB (max 30 chars),MEDIUM
+test_uds3_imports.py,tests/integration/test_uds3.py,Tests,git mv test_uds3_imports.py tests/integration/test_uds3.py,Integration Test - UDS3 Imports (shorter),MEDIUM
+test_doc.txt,tests/fixtures/test_doc.txt,Tests,git mv test_doc.txt tests/fixtures/test_doc.txt,Test Fixture - Document,LOW
+test_pattern.json,tests/fixtures/test_pattern.json,Tests,git mv test_pattern.json tests/fixtures/test_pattern.json,Test Fixture - Pattern,LOW
+test_error_output.txt,tests/fixtures/error_output.txt,Tests,git mv test_error_output.txt tests/fixtures/error_output.txt,Test Fixture - Error Output (shorter),LOW
+e2e_test_report.json,tests/reports/e2e_report.json,Tests,git mv e2e_test_report.json tests/reports/e2e_report.json,E2E Test Report (shorter),LOW
+CONTRIBUTING.md,docs/guides/contributing.md,Docs,git mv CONTRIBUTING.md docs/guides/contributing.md,Contribution Guide (lowercase),MEDIUM
+DEVELOPMENT.md,docs/guides/development.md,Docs,git mv DEVELOPMENT.md docs/guides/development.md,Development Guide (lowercase),MEDIUM
+SYSTEM_OVERVIEW.md,docs/architecture/overview.md,Docs,git mv SYSTEM_OVERVIEW.md docs/architecture/overview.md,System Overview (shorter + lowercase),MEDIUM
+BACKEND_ANALYSIS.md,docs/architecture/backend_analysis.md,Docs,git mv BACKEND_ANALYSIS.md docs/architecture/backend_analysis.md,Backend Analysis (lowercase),MEDIUM
+BACKEND_CLARIFICATION.md,docs/architecture/backend_clarify.md,Docs,git mv BACKEND_CLARIFICATION.md docs/architecture/backend_clarify.md,Backend Clarification (shorter + lowercase),MEDIUM
+BACKEND_REFACTORING_COMPLETE.md,docs/reports/backend_refactoring.md,Docs,git mv BACKEND_REFACTORING_COMPLETE.md docs/reports/backend_refactoring.md,Backend Refactoring Report (shorter + lowercase),MEDIUM
+FRONTEND_MODERNIZATION_README.md,docs/frontend/modernization.md,Docs,git mv FRONTEND_MODERNIZATION_README.md docs/frontend/modernization.md,Frontend Modernization (shorter + lowercase),MEDIUM
+compliance_api_demo.py,docs/examples/compliance_demo.py,Docs,git mv compliance_api_demo.py docs/examples/compliance_demo.py,Compliance API Demo,LOW
+management_core_extensions_demo.py,docs/examples/mgmt_core_demo.py,Docs,git mv management_core_extensions_demo.py docs/examples/mgmt_core_demo.py,Management Core Demo (max 30 chars: 19),LOW
+covina_architecture.py,tools/architecture_viewer.py,Tools,git mv covina_architecture.py tools/architecture_viewer.py,Architecture Viewer (remove prefix),MEDIUM
+curation_template_manager.py,tools/template_manager.py,Tools,git mv curation_template_manager.py tools/template_manager.py,Template Manager (shorter: 16 chars),MEDIUM
+backend_monolith_backup.py,archive/backend_monolith.py,Archive,git mv backend_monolith_backup.py archive/backend_monolith.py,Legacy Monolith Backend,LOW
+_backend_main_block.py,archive/snippets/backend_main.py,Archive,git mv _backend_main_block.py archive/snippets/backend_main.py,Backend Main Block Snippet,LOW
+_ingestion_main_block.py,archive/snippets/ingestion_main.py,Archive,git mv _ingestion_main_block.py archive/snippets/ingestion_main.py,Ingestion Main Block Snippet,LOW
+covina_gui.py,archive/gui_legacy.py,Archive,git mv covina_gui.py archive/gui_legacy.py,Legacy GUI,LOW
+commit_message.txt,DELETE,Git Artifacts,DELETE (git artifact),Git commit message - already in history,HIGH
+commit_message_final.txt,DELETE,Git Artifacts,DELETE (git artifact),Git commit message - already in history,HIGH
+commit_message_governance.txt,DELETE,Git Artifacts,DELETE (git artifact),Git commit message - already in history,HIGH
+FRONTEND_MODERNIZATION_README_0.md,DELETE,Duplicates,DELETE (duplicate),Duplicate of FRONTEND_MODERNIZATION_README.md,HIGH
+frontend/core/event_bus_0.py,DELETE,Duplicates,DELETE (duplicate),Duplicate of event_bus.py,HIGH
+frontend/core/task_executor_0.py,DELETE,Duplicates,DELETE (duplicate),Duplicate of task_executor.py,HIGH
+frontend/core/view_manager_0.py,DELETE,Duplicates,DELETE (duplicate),Duplicate of view_manager.py,HIGH
+frontend/services/api_client_0.py,DELETE,Duplicates,DELETE (duplicate),Duplicate of api_client.py,HIGH
+frontend/views/__init___0.py,DELETE,Duplicates,DELETE (duplicate),Duplicate of __init__.py,HIGH
+frontend/views/base_view_0.py,DELETE,Duplicates,DELETE (duplicate),Duplicate of base_view.py,HIGH
+frontend/views/home_view_0.py,DELETE,Duplicates,DELETE (duplicate),Duplicate of home_view.py,HIGH
+frontend/views/ingestion_view_migrated_0.py,DELETE,Duplicates,DELETE (duplicate),Duplicate of ingestion_view.py,HIGH
+frontend/views/system_status_view_migrated_0.py,DELETE,Duplicates,DELETE (duplicate),Duplicate of system_status_view.py,HIGH
+frontend/views/uds3_view_0.py,DELETE,Duplicates,DELETE (duplicate),Duplicate of uds3_view.py,HIGH
+frontend/widgets/top_toolbar_0.py,DELETE,Duplicates,DELETE (duplicate),Duplicate of top_toolbar.py,HIGH
+gap_detection/gap_database_old.py,archive/old_backups/gap_database_old.py,Archive,git mv gap_detection/gap_database_old.py archive/old_backups/gap_database_old.py,Old Gap Database backup,LOW
+frontend/views/home_dashboard_view_BACKUP.py,archive/old_backups/home_dashboard_BACKUP.py,Archive,git mv frontend/views/home_dashboard_view_BACKUP.py archive/old_backups/home_dashboard_BACKUP.py,Home Dashboard backup,LOW

@@ -49,7 +49,17 @@ class SAGAController:
         """Check if PostgreSQL Backend is connected."""
         if not self.backend:
             return False
-        return hasattr(self.backend, 'pool') and self.backend.pool is not None
+        
+        # Check if pool exists and is usable
+        if not hasattr(self.backend, 'pool') or self.backend.pool is None:
+            return False
+        
+        # Try a quick connection test
+        try:
+            with self.backend.pool.connection() as conn:
+                return not conn.closed
+        except Exception:
+            return False
     
     def _execute_query(self, query: str, params: tuple = ()) -> List[Dict[str, Any]]:
         """
@@ -67,21 +77,25 @@ class SAGAController:
             return []
         
         try:
-            # Ensure connection exists
-            if not self.backend.conn or self.backend.conn.closed:
-                self.backend.connect()
-            
-            # Execute query
-            self.backend.cursor.execute(query, params)
-            
-            # Fetch results
-            results = self.backend.cursor.fetchall()
-            
-            # Convert RealDictRow to regular dicts
-            return [dict(row) for row in results]
+            # Use connection pool context manager
+            with self.backend.pool.connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, params)
+                
+                # Fetch results
+                results = cursor.fetchall()
+                
+                # Convert rows to dicts (access by index)
+                if results:
+                    columns = [desc[0] for desc in cursor.description]
+                    return [dict(zip(columns, row)) for row in results]
+                else:
+                    return []
             
         except Exception as e:
             print(f"[ERROR] SAGA Query failed: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return []
     
     def get_saga_status(self, saga_id: str) -> Optional[Dict[str, Any]]:

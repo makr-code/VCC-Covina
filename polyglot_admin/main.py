@@ -137,7 +137,7 @@ class PolyglotAdminApp:
                 neo4j_config = {
                     'uri': os.getenv('NEO4J_URI', 'bolt://192.168.178.94:7687'),
                     'user': os.getenv('NEO4J_USER', 'neo4j'),
-                    'password': os.getenv('NEO4J_PASSWORD', 'neo4j')
+                    'password': os.getenv('NEO4J_PASSWORD', 'v3f3b1d7')
                 }
                 
                 neo4j_backend = Neo4jGraphBackend(neo4j_config)
@@ -383,6 +383,28 @@ class PolyglotAdminApp:
         self.search_entry = ttk.Entry(search_input_frame, width=30)
         self.search_entry.pack(fill=tk.X, pady=(5, 0))
         self.search_entry.bind('<Return>', lambda e: self._execute_search())
+        
+        # Search Mode Selection (NEW!)
+        mode_frame = ttk.LabelFrame(search_input_frame, text="Search Mode", padding=5)
+        mode_frame.pack(fill=tk.X, pady=(5, 0))
+        
+        self.search_mode = tk.StringVar(value="auto")
+        
+        modes = [
+            ("auto", "🤖 Auto-Detect"),
+            ("semantic", "🧠 Semantic"),
+            ("keyword", "🔤 Keyword"),
+            ("regex", "🔍 Regex")
+        ]
+        
+        for mode_val, mode_label in modes:
+            ttk.Radiobutton(
+                mode_frame,
+                text=mode_label,
+                variable=self.search_mode,
+                value=mode_val,
+                style='Covina.TRadiobutton'
+            ).pack(anchor=tk.W, pady=1)
         
         # Search Button
         ttk.Button(
@@ -1886,46 +1908,75 @@ class PolyglotAdminApp:
     # ====================
     
     def _execute_search(self):
-        """Execute Universal Search via SearchController."""
+        """Execute Universal Search via SearchController with hybrid/semantic/regex modes."""
         query = self.search_entry.get().strip()
         
         if not query:
             messagebox.showwarning("Input Required", "Please enter a search term")
             return
         
-        self.statusbar.set_status(f"Searching for: {query}...", "info")
+        # Get selected search mode
+        mode = self.search_mode.get()
+        
+        self.statusbar.set_status(f"Searching ({mode}): {query}...", "info")
         
         # Clear previous results
         for item in self.results_tree.get_children():
             self.results_tree.delete(item)
         
-        # Real Search via SearchController
+        # Real Search via SearchController with hybrid mode
         try:
-            # Get filters from UI
-            filters = {}
-            type_filter = self.type_filter.get()
-            if type_filter != "All Types":
-                filters['doc_type'] = type_filter
+            # Execute hybrid search (auto-detects mode or uses selected)
+            results = self.search_controller.hybrid_search(
+                query=query, 
+                limit=50,
+                mode=mode
+            )
             
-            # Execute search (parallel: PostgreSQL + ChromaDB + Neo4j)
-            results = self.search_controller.search(query, filters=filters, max_results=50)
+            # Merge and rank results from all backends
+            merged_results = self.search_controller.merge_and_rank_results(results)
             
-            # Populate Treeview with aggregated results
-            self.search_results = results.get('aggregated', [])
+            # Populate Treeview with ranked results
+            self.search_results = merged_results
             
-            for result in self.search_results:
+            for result in self.search_results[:30]:  # Top 30 results
+                # Extract title/content preview
+                title = (
+                    result.get('title', '') or 
+                    result.get('content', '')[:50] or 
+                    result.get('properties', {}).get('title', 'Untitled')
+                )
+                
+                source = result.get('source', 'Unknown')
+                relevance = result.get('final_score', 0.0)
+                doc_id = result.get('document_id', result.get('id', 'N/A'))
+                
                 self.results_tree.insert(
                     "",
                     "end",
-                    text=result.get('title', 'Untitled'),
-                    values=(result.get('type', 'unknown'), result.get('id', 'N/A'))
+                    text=title[:80],
+                    values=(
+                        source,
+                        f"{relevance:.2f}",
+                        str(doc_id)[:30]
+                    )
                 )
             
-            self.statusbar.set_status(f"Found {len(self.search_results)} results", "success")
+            # Update status with search mode and backend distribution
+            rel_count = len(results.get('relational', []))
+            vec_count = len(results.get('vector', []))
+            graph_count = len(results.get('graph', []))
+            
+            status_msg = f"Found {len(self.search_results)} results ({mode}) | "
+            status_msg += f"PG: {rel_count}, ChromaDB: {vec_count}, Neo4j: {graph_count}"
+            
+            self.statusbar.set_status(status_msg, "success")
         
         except Exception as e:
-            self.statusbar.set_status(f"Search failed: {str(e)}", "error")
+            self.statusbar.set_status(f"Search failed: {str(e)[:80]}", "error")
             print(f"[ERROR] Search execution failed: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _populate_demo_results(self, query):
         """Populate Treeview with demo search results."""
