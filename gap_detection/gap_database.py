@@ -125,7 +125,12 @@ class KnowledgeGapDB:
         query = f"INSERT INTO knowledge_gaps ({columns}) VALUES ({placeholders}) RETURNING id"
         
         try:
-            result = self.postgres_backend.execute_query(query, params=list(fields.values()), fetch=True)
+            result = self.postgres_backend.execute_query(
+                query, 
+                params=list(fields.values()), 
+                fetch=True,
+                commit=True  # ✅ FIX: Commit INSERT before adding history
+            )
             gap_id = result[0]['id'] if result else None
             
             if gap_id:

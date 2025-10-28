@@ -70,6 +70,13 @@ class PersistentJobStorage:
                     scan_job_id TEXT
                 )
             """)
+
+            # Migration: Add correlation_id column if missing (idempotent)
+            try:
+                cursor.execute("ALTER TABLE jobs ADD COLUMN correlation_id TEXT")
+            except Exception:
+                # Column likely exists; ignore
+                pass
             
             # Scan jobs table
             cursor.execute("""
@@ -146,8 +153,8 @@ class PersistentJobStorage:
                 cursor.execute("""
                     INSERT OR REPLACE INTO jobs 
                     (job_id, status, created_at, updated_at, file_count, 
-                     processed_files, error_message, metrics, temp_directory, scan_job_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     processed_files, error_message, metrics, temp_directory, scan_job_id, correlation_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     job_data.get("job_id"),
                     job_data.get("status"),
@@ -158,7 +165,8 @@ class PersistentJobStorage:
                     job_data.get("error_message"),
                     json.dumps(job_data.get("metrics", {})),
                     job_data.get("temp_directory"),
-                    job_data.get("scan_job_id")
+                    job_data.get("scan_job_id"),
+                    job_data.get("correlation_id")
                 ))
                 
                 conn.commit()
@@ -186,7 +194,7 @@ class PersistentJobStorage:
                 
                 cursor.execute("""
                     SELECT job_id, status, created_at, updated_at, file_count,
-                           processed_files, error_message, metrics, temp_directory, scan_job_id
+                           processed_files, error_message, metrics, temp_directory, scan_job_id, correlation_id
                     FROM jobs WHERE job_id = ?
                 """, (job_id,))
                 
@@ -204,7 +212,8 @@ class PersistentJobStorage:
                         "error_message": row[6],
                         "metrics": json.loads(row[7]) if row[7] else {},
                         "temp_directory": row[8],
-                        "scan_job_id": row[9]
+                        "scan_job_id": row[9],
+                        "correlation_id": row[10] if len(row) > 10 else None
                     }
                 return None
                 
@@ -231,7 +240,7 @@ class PersistentJobStorage:
                 if status:
                     cursor.execute("""
                         SELECT job_id, status, created_at, updated_at, file_count,
-                               processed_files, error_message, metrics, temp_directory, scan_job_id
+                               processed_files, error_message, metrics, temp_directory, scan_job_id, correlation_id
                         FROM jobs WHERE status = ?
                         ORDER BY created_at DESC
                         LIMIT ?
@@ -239,7 +248,7 @@ class PersistentJobStorage:
                 else:
                     cursor.execute("""
                         SELECT job_id, status, created_at, updated_at, file_count,
-                               processed_files, error_message, metrics, temp_directory, scan_job_id
+                               processed_files, error_message, metrics, temp_directory, scan_job_id, correlation_id
                         FROM jobs
                         ORDER BY created_at DESC
                         LIMIT ?
@@ -260,7 +269,8 @@ class PersistentJobStorage:
                         "error_message": row[6],
                         "metrics": json.loads(row[7]) if row[7] else {},
                         "temp_directory": row[8],
-                        "scan_job_id": row[9]
+                        "scan_job_id": row[9],
+                        "correlation_id": row[10] if len(row) > 10 else None
                     })
                 
                 return jobs

@@ -28,6 +28,7 @@ Date: 2025-01-17
 """
 
 import logging
+import os
 import sys
 from contextvars import ContextVar
 from typing import Optional
@@ -190,8 +191,34 @@ def setup_json_logging(
     
     # Add handler to root logger
     root_logger.addHandler(console_handler)
+
+    # Optional: Also log to file if environment variables are set
+    # Use COVINA_LOG_FILE for all logs and COVINA_ERR_FILE for errors only
+    log_file = os.getenv("COVINA_LOG_FILE")
+    err_file = os.getenv("COVINA_ERR_FILE")
     
-    # Log setup confirmation
+    if log_file:
+        try:
+            file_handler = logging.FileHandler(log_file, encoding="utf-8")
+            file_handler.setLevel(level)
+            file_handler.setFormatter(formatter)
+            file_handler.addFilter(correlation_filter)
+            root_logger.addHandler(file_handler)
+        except Exception as e:
+            # Fall back silently to console-only if file cannot be opened
+            logging.getLogger(__name__).warning(f"Could not attach file logger '{log_file}': {e}")
+    
+    if err_file:
+        try:
+            err_handler = logging.FileHandler(err_file, encoding="utf-8")
+            err_handler.setLevel(logging.ERROR)
+            err_handler.setFormatter(formatter)
+            err_handler.addFilter(correlation_filter)
+            root_logger.addHandler(err_handler)
+        except Exception as e:
+            logging.getLogger(__name__).warning(f"Could not attach error file logger '{err_file}': {e}")
+    
+    # Log setup confirmation (console + optional files)
     logging.info(f"JSON structured logging initialized for {service_name}")
 
 

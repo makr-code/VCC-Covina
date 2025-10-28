@@ -1,5 +1,6 @@
 # Recommended runtime dependencies for database adapters
 requests>=2.28.0
+requests-toolbelt>=1.0.0  # Streaming multipart uploads for large files
 pg8000>=1.29.2
 # Optional: binary psycopg2 (may require wheel/binaries on Windows)
 psycopg2-binary>=2.9.7

@@ -28,6 +28,7 @@ if covina_root not in sys.path:
     sys.path.insert(0, covina_root)
 
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 
@@ -131,7 +132,7 @@ try:
     logger.info("✅ Security module loaded (OAuth2/JWT + RBAC)")
 except Exception as e:
     AUTH_AVAILABLE = False
-    logger.warning(f"⚠️ Security module not available: {e}")
+    logger.debug(f"Security module not available (optional): {e}")  # Changed to DEBUG level
 
 # Logging already initialized above
 
@@ -207,13 +208,225 @@ from slowapi.errors import RateLimitExceeded
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["500/minute"])
 
-# FastAPI App Initialisierung
+# ================================================================
+# HELPER FUNCTIONS
+# ================================================================
+
+def get_postgres_batch_size() -> int:
+    """
+    Get PostgreSQL batch size from environment or default.
+    
+    Returns:
+        Batch size (default: 100, recommended: 50-200)
+    """
+    import os
+    return int(os.getenv("POSTGRES_BATCH_SIZE", "100"))
+
+# ================================================================
+# LIFESPAN CONTEXT MANAGER (replaces deprecated @app.on_event)
+# ================================================================
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Lifespan context manager for startup and shutdown events.
+    Replaces deprecated @app.on_event("startup") and @app.on_event("shutdown").
+    """
+    # ============================================================
+    # STARTUP
+    # ============================================================
+    global gap_db, uds3_strategy, postgres_backend, review_queue, compliance_service, chromadb_backend, embedding_model
+    global POSTGRES_AVAILABLE, CHROMADB_AVAILABLE
+    
+    # Assign a synthetic correlation ID for startup logs
+    try:
+        from utils.json_logging import set_correlation_id
+        set_correlation_id("startup:main")
+    except Exception:
+        pass
+    logger.info("🚀 Covina Main Backend startet...")
+    logger.info("📌 Port: 45678 (Main Backend)")
+    logger.info("📌 Ingestion Backend: Port 45679")
+    
+    # Initialize UDS3 Polyglot Manager FIRST (needed by KnowledgeGapDB!)
+    if UDS3_AVAILABLE:
+        try:
+            logger.info("=" * 80)
+            logger.info("🔧 UDS3 v2.0.0 AUTO-CONFIG (Main)")
+            logger.info("=" * 80)
+            logger.info("Pattern: Backend-Typen angeben → UDS3 konfiguriert automatisch")
+            logger.info("")
+            
+            # Nur Backend-TYPEN angeben - UDS3 Database Manager übernimmt Rest!
+            backend_config = {
+                "relational": {"enabled": True},  # PostgreSQL
+                "vector": {"enabled": True}       # ChromaDB
+            }
+            
+            uds3_strategy = UDS3PolyglotManager(
+                backend_config=backend_config,
+                enable_rag=False
+            )
+            logger.info("✅ UDS3 PolyglotManager initialisiert (Auto-Config)")
+            
+            # Get backends from UDS3
+            postgres_backend = uds3_strategy.db_manager.get_relational_backend()
+            chromadb_backend = uds3_strategy.db_manager.get_vector_backend()
+            
+            POSTGRES_AVAILABLE = postgres_backend is not None
+            CHROMADB_AVAILABLE = chromadb_backend is not None
+            
+            logger.info("")
+            logger.info("=" * 80)
+            logger.info("✅ UDS3 AUTO-CONFIG COMPLETE (Main)")
+            logger.info("=" * 80)
+            logger.info(f"   PostgreSQL: {'✅ Connected' if POSTGRES_AVAILABLE else '❌ Not available'}")
+            logger.info(f"   ChromaDB:   {'✅ Connected' if CHROMADB_AVAILABLE else '❌ Not available'}")
+            logger.info("=" * 80)
+            
+        except Exception as e:
+            logger.error("=" * 80)
+            logger.error("❌ CRITICAL ERROR: UDS3 Setup Failed (Main)")
+            logger.error("=" * 80)
+            logger.error(f"Error: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            uds3_strategy = None
+            postgres_backend = None
+            chromadb_backend = None
+            POSTGRES_AVAILABLE = False
+            CHROMADB_AVAILABLE = False
+    
+    # Initialize Gap Detection Database (uses UDS3 PostgreSQL backend)
+    if GAP_DETECTION_AVAILABLE and POSTGRES_AVAILABLE and postgres_backend:
+        try:
+            logger.info("Initializing Knowledge Gap Database with UDS3 Relational Backend")
+            gap_db = KnowledgeGapDB(postgres_backend=postgres_backend)
+            logger.info("✅ Gap Detection Database initialisiert (UDS3 Backend)")
+        except Exception as e:
+            logger.error(f"❌ Gap Detection Initialization Fehler: {e}")
+            gap_db = None
+    
+    # Initialize Review Queue (PostgreSQL)
+    if REVIEW_QUEUE_AVAILABLE and POSTGRES_AVAILABLE and postgres_backend:
+        try:
+            review_queue = ReviewQueue(postgres_backend=postgres_backend)
+            logger.info("✅ Review Queue (PostgreSQL) initialisiert")
+        except Exception as e:
+            logger.error(f"❌ Review Queue Initialization Fehler: {e}")
+            review_queue = None
+    
+    # Initialize Compliance Service (requires PostgreSQL)
+    if COMPLIANCE_AVAILABLE and POSTGRES_AVAILABLE and postgres_backend:
+        try:
+            compliance_service = get_compliance_service(postgres_backend)
+            logger.info("✅ Compliance Service initialisiert")
+        except Exception as e:
+            logger.error(f"❌ Compliance Service Initialization Fehler: {e}")
+            compliance_service = None
+    
+    # Lazy load sentence-transformers (optional)
+    if SENTENCE_TRANSFORMERS_AVAILABLE:
+        logger.info("📦 sentence-transformers bereit (Lazy Loading bei erster Suche)")
+    
+    # Phase 4 Batch Operations Status
+    logger.info("✅ Batch WRITE Operations (Phase 4) - Ready (Adapter Methods)")
+    
+    # Phase 3 Batch Operations Initialization
+    if BATCH_OPERATIONS_AVAILABLE and uds3_strategy:
+        try:
+            logger.info("=" * 80)
+            logger.info("🚀 PHASE 3: BATCH OPERATIONS INITIALIZATION")
+            logger.info("=" * 80)
+            
+            # PostgreSQL Batch Reader
+            postgres_batch_reader = PostgreSQLBatchReader(
+                postgresql_backend=postgres_backend
+            )
+            logger.info("✅ PostgreSQL Batch Reader initialisiert")
+            logger.info("   Endpoints: /api/v1/batch/get, /api/v1/batch/exists")
+            
+            # Parallel Batch Reader
+            # Note: ParallelBatchReader takes individual readers, not a backends dict
+            parallel_batch_reader = ParallelBatchReader(
+                postgres_reader=postgres_batch_reader,
+                chromadb_reader=None,  # TODO: Create ChromaDBBatchReader if needed
+                couchdb_reader=None,   # TODO: Create CouchDBBatchReader if needed
+                neo4j_reader=None      # TODO: Create Neo4jBatchReader if needed
+            )
+            active_readers = sum(1 for r in [postgres_batch_reader] if r is not None)
+            logger.info(f"✅ Parallel Batch Reader initialisiert ({active_readers} readers)")
+            logger.info("   Endpoints: /api/v1/batch/search (multi-database)")
+            
+            logger.info("=" * 80)
+            logger.info("✅ Phase 3 Batch Operations Ready")
+            logger.info("   Expected Performance: 8-97x speedup vs sequential")
+            logger.info("   Batch Size Recommendation: 50-200 documents")
+            logger.info("=" * 80)
+            
+        except Exception as e:
+            logger.error(f"❌ Batch Operations Initialization Fehler: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+    
+    logger.info("✅ Main Backend bereit für Queries, DSGVO, Review Queue, Compliance, Semantic Search, Governance, Batch Operations")
+    # Minimal sichtbare Konsolen-Ausgabe (unabhängig vom JSON-Logger)
+    try:
+        ready_line = (
+            f"[READY] Main Backend :45678 | "
+            f"Postgres: {'OK' if POSTGRES_AVAILABLE and postgres_backend else 'NO'} | "
+            f"Chroma: {'OK' if CHROMADB_AVAILABLE and chromadb_backend and not FLAGS.get('KILL_SWITCH_CHROMADB', False) else 'NO'} | "
+            f"Docs: /docs | Health: /health"
+        )
+        print(ready_line, flush=True)
+    except Exception:
+        pass
+    
+    # ============================================================
+    # YIELD (Application runs here)
+    # ============================================================
+    yield
+    
+    # ============================================================
+    # SHUTDOWN
+    # ============================================================
+    logger.info("🛑 Covina Main Backend wird heruntergefahren...")
+    
+    # Cleanup Gap Detection
+    if gap_db:
+        try:
+            gap_db.close()
+            logger.info("✅ Gap Detection geschlossen")
+        except Exception as e:
+            logger.error(f"❌ Gap Detection Cleanup Fehler: {e}")
+    
+    # Cleanup Review Queue (uses PostgreSQL connection)
+    if review_queue:
+        try:
+            # Review Queue wird über postgres_backend cleanup geschlossen
+            logger.info("✅ Review Queue geschlossen")
+        except Exception as e:
+            logger.error(f"❌ Review Queue Cleanup Fehler: {e}")
+    
+    # Cleanup PostgreSQL
+    if postgres_backend:
+        try:
+            postgres_backend.disconnect()
+            logger.info("✅ PostgreSQL Backend getrennt")
+        except Exception as e:
+            logger.error(f"❌ PostgreSQL Cleanup Fehler: {e}")
+    
+    logger.info("👋 Covina Main Backend heruntergefahren")
+
+
+# FastAPI App Initialisierung mit Lifespan
 app = FastAPI(
     title="Covina Main Backend API",
     description="Main Backend für Queries, DSGVO, Review Queue (Ingestion läuft auf Port 45679)",
     version="1.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    lifespan=lifespan  # ✅ NEW: Modern lifespan event handler
 )
 
 # Register Rate Limiter
@@ -426,195 +639,7 @@ class BatchUpsertRequest(BaseModel):
     conflict_resolution: str = Field("update", description="Conflict resolution: 'update' or 'skip'")
     databases: Optional[List[str]] = Field(None, description="Target databases (default: all)")
 
-# Startup/Shutdown Events
-@app.on_event("startup")
-async def startup_event():
-    """Initialize services on startup"""
-    global gap_db, uds3_strategy, postgres_backend, review_queue, compliance_service, chromadb_backend, embedding_model
-    global POSTGRES_AVAILABLE, CHROMADB_AVAILABLE
-    
-    logger.info("🚀 Covina Main Backend startet...")
-    logger.info("📌 Port: 45678 (Main Backend)")
-    logger.info("📌 Ingestion Backend: Port 45679")
-    
-    # Initialize UDS3 Polyglot Manager FIRST (needed by KnowledgeGapDB!)
-    if UDS3_AVAILABLE:
-        try:
-            logger.info("=" * 80)
-            logger.info("🔧 UDS3 v2.0.0 AUTO-CONFIG (Main)")
-            logger.info("=" * 80)
-            logger.info("Pattern: Backend-Typen angeben → UDS3 konfiguriert automatisch")
-            logger.info("")
-            
-            # Nur Backend-TYPEN angeben - UDS3 Database Manager übernimmt Rest!
-            backend_config = {
-                "vector": {"enabled": True},      # ChromaDB
-                "relational": {"enabled": True},  # PostgreSQL
-                "graph": {"enabled": False},      # Neo4j (not needed in main backend)
-                "file": {"enabled": False}        # CouchDB (not needed in main backend)
-            }
-            
-            uds3_strategy = UDS3PolyglotManager(
-                backend_config=backend_config,
-                enable_rag=False
-            )
-            logger.info("✅ UDS3 PolyglotManager initialisiert (Auto-Config)")
-            
-            # Backend-Status ausgeben (DatabaseManager hat bereits alles konfiguriert!)
-            db_manager = uds3_strategy.db_manager
-            postgres_backend = db_manager.get_relational_backend()
-            chromadb_backend = db_manager.get_vector_backend()
-            
-            POSTGRES_AVAILABLE = bool(postgres_backend)
-            CHROMADB_AVAILABLE = bool(chromadb_backend)
-            
-            logger.info("")
-            logger.info("=" * 80)
-            logger.info("✅ UDS3 AUTO-CONFIG COMPLETE (Main)")
-            logger.info("=" * 80)
-            logger.info(f"   PostgreSQL: {'✅ Connected' if postgres_backend else '❌ Not available'}")
-            logger.info(f"   ChromaDB:   {'✅ Connected' if chromadb_backend else '❌ Not available'}")
-            logger.info("=" * 80)
-            
-        except Exception as e:
-            logger.error("=" * 80)
-            logger.error("❌ CRITICAL ERROR: UDS3 Backend Setup Failed (Main)")
-            logger.error("=" * 80)
-            logger.error(f"Error: {e}")
-            logger.error("")
-            logger.error("� DEBUG INFO:")
-            logger.error(f"   UDS3_AVAILABLE: {UDS3_AVAILABLE}")
-            logger.error(f"   Environment Variables:")
-            logger.error(f"      POSTGRES_HOST: {os.getenv('POSTGRES_HOST', 'not set')}")
-            logger.error(f"      CHROMA_HOST: {os.getenv('CHROMA_HOST', 'not set')}")
-            logger.error("")
-            logger.error("💡 TROUBLESHOOTING:")
-            logger.error("   1. Check UDS3 package: pip install -e ../uds3")
-            logger.error("   2. Verify database servers running (PostgreSQL, ChromaDB)")
-            logger.error("   3. Test network connectivity to 192.168.178.94")
-            logger.error("   4. Check environment variables in .env file")
-            logger.error("=" * 80)
-            import traceback
-            logger.error(traceback.format_exc())
-            postgres_backend = None
-            chromadb_backend = None
-    else:
-        logger.warning("⚠️ UDS3 nicht verfügbar - Backends nicht initialisiert")
-        postgres_backend = None
-        chromadb_backend = None
-    
-    # Initialize Gap Detection (requires PostgreSQL from UDS3!)
-    if GAP_DETECTION_AVAILABLE and postgres_backend:
-        try:
-            gap_db = KnowledgeGapDB(postgres_backend)  # Pass UDS3 backend!
-            logger.info("✅ Gap Detection Database initialisiert (UDS3 Backend)")
-        except Exception as e:
-            logger.error(f"❌ Gap Detection Fehler: {e}")
-    
-    # Initialize Review Queue (requires PostgreSQL)
-    if REVIEW_QUEUE_AVAILABLE and postgres_backend:
-        try:
-            review_queue = ReviewQueue(postgres_backend)
-            logger.info("✅ Review Queue (PostgreSQL) initialisiert")
-        except Exception as e:
-            logger.error(f"❌ Review Queue Fehler: {e}")
-    
-    # Initialize Compliance Service (requires PostgreSQL)
-    if COMPLIANCE_AVAILABLE and postgres_backend:
-        try:
-            compliance_service = get_compliance_service(postgres_backend)
-            logger.info("✅ Compliance Service initialisiert")
-        except Exception as e:
-            logger.error(f"❌ Compliance Service Fehler: {e}")
-    
-    # Initialize Embedding Model (Lazy loading for semantic search)
-    if SENTENCE_TRANSFORMERS_AVAILABLE:
-        try:
-            logger.info("📦 sentence-transformers bereit (Lazy Loading bei erster Suche)")
-            # Model wird bei erster Verwendung geladen (Lazy Loading)
-        except Exception as e:
-            logger.error(f"❌ sentence-transformers Fehler: {e}")
-    
-    # NOTE: Batch WRITE Operations (Phase 4) now use adapter methods directly
-    # No separate executor initialization needed - backends have batch methods built-in
-    logger.info("✅ Batch WRITE Operations (Phase 4) - Ready (Adapter Methods)")
-    
-    # Initialize Batch Operations (Phase 3)
-    global postgres_batch_reader, parallel_batch_reader
-    
-    if BATCH_OPERATIONS_AVAILABLE:
-        try:
-            logger.info("=" * 80)
-            logger.info("🚀 PHASE 3: BATCH OPERATIONS INITIALIZATION")
-            logger.info("=" * 80)
-            
-            # PostgreSQL Batch Reader
-            if postgres_backend:
-                postgres_batch_reader = PostgreSQLBatchReader(postgres_backend)
-                logger.info("✅ PostgreSQL Batch Reader initialisiert")
-                logger.info("   Endpoints: /api/v1/batch/get, /api/v1/batch/exists")
-            else:
-                logger.warning("⚠️ PostgreSQL Batch Reader nicht verfügbar (Backend fehlt)")
-            
-            # Parallel Batch Reader (Multi-Database)
-            backend_dict = {}
-            if postgres_backend:
-                backend_dict['relational'] = postgres_backend
-            if chromadb_backend:
-                backend_dict['vector'] = chromadb_backend
-            
-            if backend_dict:
-                parallel_batch_reader = ParallelBatchReader(backend_dict)
-                logger.info(f"✅ Parallel Batch Reader initialisiert ({len(backend_dict)} backends)")
-                logger.info("   Endpoints: /api/v1/batch/search (multi-database)")
-            else:
-                logger.warning("⚠️ Parallel Batch Reader nicht verfügbar (keine Backends)")
-            
-            logger.info("=" * 80)
-            logger.info("✅ Phase 3 Batch Operations Ready")
-            logger.info(f"   Expected Performance: 8-97x speedup vs sequential")
-            logger.info(f"   Batch Size Recommendation: 50-200 documents")
-            logger.info("=" * 80)
-            
-        except Exception as e:
-            logger.error(f"❌ Batch Operations Initialization Fehler: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-    
-    logger.info("✅ Main Backend bereit für Queries, DSGVO, Review Queue, Compliance, Semantic Search, Governance, Batch Operations")
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown"""
-    global gap_db, postgres_backend, review_queue
-    
-    logger.info("🛑 Covina Main Backend wird heruntergefahren...")
-    
-    # Cleanup Gap Detection
-    if gap_db:
-        try:
-            gap_db.close()
-            logger.info("✅ Gap Detection geschlossen")
-        except Exception as e:
-            logger.error(f"❌ Gap Detection Cleanup Fehler: {e}")
-    
-    # Cleanup Review Queue (uses PostgreSQL connection)
-    if review_queue:
-        try:
-            # Review Queue wird über postgres_backend cleanup geschlossen
-            logger.info("✅ Review Queue geschlossen")
-        except Exception as e:
-            logger.error(f"❌ Review Queue Cleanup Fehler: {e}")
-    
-    # Cleanup PostgreSQL
-    if postgres_backend:
-        try:
-            postgres_backend.disconnect()
-            logger.info("✅ PostgreSQL Backend getrennt")
-        except Exception as e:
-            logger.error(f"❌ PostgreSQL Cleanup Fehler: {e}")
-    
-    logger.info("👋 Covina Main Backend heruntergefahren")
+# Startup/Shutdown via Lifespan (deprecated on_event handlers removed)
 
 # API Endpoints
 @app.get("/")
@@ -2821,11 +2846,17 @@ async def search_handelsregister(
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
-    # Development Server (Port 45678 - Main Backend)  
+    # Development Server (Port 45678 - Main Backend)
+    # Reload and access logs are controlled via environment for minimal console noise
+    reload_flag = os.getenv("COVINA_RELOAD", "false").lower() == "true"
+    access_log_flag = os.getenv("UVICORN_ACCESS_LOG", "false").lower() == "true"
+    uvicorn_log_level = os.getenv("UVICORN_LOG_LEVEL", "warning")  # default reduced noise
+
     uvicorn.run(
         "main:app",
         host="127.0.0.1",
         port=45678,
-        reload=True,
-        log_level="info"
+        reload=reload_flag,
+        log_level=uvicorn_log_level,
+        access_log=access_log_flag
     )

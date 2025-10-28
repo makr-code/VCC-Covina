@@ -20,6 +20,16 @@ Datum: 11. Oktober 2025
 """
 
 # KRITISCH: sitecustomize MUSS zuerst importiert werden (falls verfügbar)
+# Füge das Covina Root Directory zum Path hinzu, damit sitecustomize gefunden wird
+import sys
+from pathlib import Path
+
+# IMMER den Path setzen (unabhängig davon, ob als Skript oder via uvicorn gestartet)
+backend_dir = Path(__file__).parent
+covina_root = backend_dir.parent
+if str(covina_root) not in sys.path:
+    sys.path.insert(0, str(covina_root))
+
 try:
     import sitecustomize  # noqa: F401
 except ImportError:
@@ -48,9 +58,24 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import unquote
 
+# [NEW] Production Hardening Modules (28.10.2025)
+from ingestion.exceptions import (
+    CovinaException, ErrorCode, ErrorSeverity,
+    FileNotFoundException, FileProcessingException,
+    DatabaseConnectionException, DatabaseWriteException,
+    WorkerCrashException, WorkerOOMException, WorkerTimeoutException,
+    MemoryLimitExceededException, CircuitBreakerException,
+    wrap_exception
+)
+from ingestion.worker_pool import initialize_pool_manager, get_pool_manager, shutdown_pool_manager
+from ingestion.memory_manager import initialize_memory_manager, get_memory_manager, shutdown_memory_manager
+from ingestion.circuit_breaker import get_breaker_manager
+from ingestion.prometheus_exporter import get_prometheus_exporter
+
 import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 # [OK] Load ENV Configuration BEFORE anything else
@@ -69,6 +94,7 @@ logger_temp.info("[OK] Modular ingestion architecture imported successfully")
 # Initialize JSON Structured Logging
 try:
     from utils.json_logging import setup_json_logging
+    from utils.json_logging import get_correlation_id, set_correlation_id
     setup_json_logging(
         service_name="ingestion_backend",
         level=logging.INFO,
@@ -77,6 +103,11 @@ try:
     )
     logger = logging.getLogger("ingestion_backend")
     logger.info("✅ JSON Structured Logging aktiviert")
+    # Minimal sichtbare Konsolen-Ausgabe (frühe Boot-Meldung)
+    try:
+        print("[BOOT] Ingestion Backend starting on :45679 ...", flush=True)
+    except Exception:
+        pass
 except Exception as e:
     # Fallback to basic config
     logging.basicConfig(
@@ -153,7 +184,7 @@ try:
     logger.info("✅ Security module loaded (OAuth2/JWT + RBAC)")
 except Exception as e:
     AUTH_AVAILABLE = False
-    logger.warning(f"⚠️ Security module not available: {e}")
+    logger.debug(f"Security module not available (optional): {e}")  # Changed to DEBUG level
 
 # [OK] Initialize Modular Ingestion Architecture
 logger.info("[BUILD] Initializing modular ingestion architecture...")
@@ -365,7 +396,7 @@ class ChromaBatchInserter:
                 for doc_id, vector, metadata in self.batch:
                     try:
                         if hasattr(self.backend, 'add_vector'):
-                            ok = self.backend.add_vector(vector, metadata, doc_id)
+                            ok = self.backend.add_vector(doc_id, vector, metadata)  # Correct order: vector_id, vector, metadata
                         else:
                             ok = False
                         if ok:
@@ -483,6 +514,7 @@ class HealthResponse(BaseModel):
     timestamp: str
     components: Dict[str, str]
     worker_pool: Dict[str, Any]
+    hardening: Optional[Dict[str, Any]] = None  # Production Hardening Metrics
 
 # ================================================================
 # WEBSOCKET MANAGER
@@ -886,6 +918,13 @@ class DirectoryScanJob:
             # Submit to ThreadPool
             def process_chunk_sync(job_id, file_paths_chunk, chunk_idx, temp_dir):
                 """Sync wrapper for background processing"""
+                # Propagate correlation ID from job metadata into this worker thread
+                try:
+                    jmeta = jm.job_storage.get_job(job_id)
+                    if jmeta and jmeta.get("correlation_id"):
+                        set_correlation_id(jmeta.get("correlation_id"))
+                except Exception:
+                    pass
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 try:
@@ -899,17 +938,22 @@ class DirectoryScanJob:
                 finally:
                     loop.close()
             
-            io_executor.submit(
+            # [NEW] Use WorkerPoolManager
+            pool_manager = get_pool_manager()
+            task_id = f"scan_chunk_{self.scan_job_id}_{chunk_idx}_{int(time.time())}"
+            
+            pool_manager.submit_io_task(
                 process_chunk_sync,
                 upload_job_id,
                 chunk,
                 chunk_idx,
-                Path(self.temp_dir)
+                Path(self.temp_dir),
+                task_id=task_id
             )
             
             logger.info(
                 f"[BOX] [SCAN {self.scan_job_id}] Job {chunk_idx+1}/{len(file_chunks)}: "
-                f"{upload_job_id} ({len(chunk)} files)"
+                f"{upload_job_id} ({len(chunk)} files), Task: {task_id}"
             )
     
     def _create_smart_chunks(self, file_paths: List[str]) -> List[List[str]]:
@@ -1125,7 +1169,30 @@ cpu_executor = ProcessPoolExecutor(
 
 # [P1 FIX] Processing Semaphore (21.10.2025)
 # Limits concurrent document processing to prevent DB connection exhaustion
-_processing_semaphore = None  # Initialized on first use (needs event loop)
+# NOTE: Semaphore MUST be created per event loop (asyncio limitation)
+_processing_semaphores = {}  # Dict[event_loop_id, Semaphore]
+
+def get_processing_semaphore() -> asyncio.Semaphore:
+    """
+    Get or create processing semaphore for current event loop.
+    
+    Each event loop needs its own semaphore instance to avoid
+    "bound to different event loop" errors.
+    
+    Returns:
+        Semaphore instance for current event loop
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # No running loop - this should not happen in async context
+        raise RuntimeError("get_processing_semaphore() called outside async context")
+    
+    loop_id = id(loop)
+    if loop_id not in _processing_semaphores:
+        _processing_semaphores[loop_id] = asyncio.Semaphore(MAX_PARALLEL_DOCUMENTS)
+    
+    return _processing_semaphores[loop_id]
 
 # Worker Pool Metrics Tracking
 def update_pool_metrics():
@@ -1277,9 +1344,35 @@ class IngestionJobManager:
             logger.error(traceback.format_exc())
             self.uds3_ready = False
     
-    def create_job(self, file_count: int, temp_directory: str = None, scan_job_id: str = None) -> str:
+    # Helper methods for backend access (UDS3 v2.0 compatibility)
+    def get_relational_backend(self):
+        """Get relational (PostgreSQL) backend from UDS3"""
+        return self.uds3_strategy.db_manager.get_relational_backend() if self.uds3_strategy else None
+    
+    def get_vector_backend(self):
+        """Get vector (ChromaDB) backend from UDS3"""
+        return self.uds3_strategy.db_manager.get_vector_backend() if self.uds3_strategy else None
+    
+    def get_graph_backend(self):
+        """Get graph (Neo4j) backend from UDS3"""
+        return self.uds3_strategy.db_manager.get_graph_backend() if self.uds3_strategy else None
+    
+    def get_document_backend(self):
+        """Get document (CouchDB) backend from UDS3"""
+        if not self.uds3_strategy:
+            return None
+        db_manager = self.uds3_strategy.db_manager
+        return getattr(db_manager, 'get_document_backend', lambda: None)()
+    
+    def create_job(self, file_count: int, temp_directory: str = None, scan_job_id: str = None, correlation_id: str = None) -> str:
         """Erstelle neuen Job mit Persistent Storage"""
         job_id = str(uuid.uuid4())
+        # Capture current request correlation_id if not explicitly provided
+        try:
+            if correlation_id is None:
+                correlation_id = get_correlation_id()
+        except Exception:
+            correlation_id = None
         
         job_data = {
             "job_id": job_id,
@@ -1291,7 +1384,8 @@ class IngestionJobManager:
             "error_message": None,
             "metrics": {},
             "temp_directory": temp_directory,
-            "scan_job_id": scan_job_id
+            "scan_job_id": scan_job_id,
+            "correlation_id": correlation_id
         }
         
         with self._jobs_lock:  # [OK] Thread-safe
@@ -1547,21 +1641,51 @@ async def process_document_with_uds3(
             except Exception as e:
                 logger.error(f"[ERROR] PostgreSQL batch add failed: {e}")
                 db_results["relational"] = f"error: {str(e)[:50]}"
-        elif job_manager.uds3_strategy.relational_backend:
-            # SINGLE MODE: Fallback to direct insert
+        elif job_manager.uds3_strategy.db_manager.get_relational_backend():
+            # SINGLE MODE: Fallback to direct insert (with Circuit Breaker)
             try:
+                # [NEW] Wrap with Circuit Breaker
+                breaker_mgr = get_breaker_manager()
+                postgres_breaker = breaker_mgr.get_or_create("postgresql")
+                
+                relational_backend = job_manager.uds3_strategy.db_manager.get_relational_backend()
+                
+                def _insert_postgresql():
+                    """PostgreSQL insert wrapped for circuit breaker"""
+                    return relational_backend.insert_document(
+                        document_id,
+                        file_path,
+                        classification,
+                        len(content),
+                        legal_count,
+                        timestamp,
+                        quality_score
+                    )
+                
+                # Execute with circuit breaker protection
                 await asyncio.to_thread(
-                    job_manager.uds3_strategy.relational_backend.insert_document,
-                    document_id,
-                    file_path,
-                    classification,
-                    len(content),
-                    legal_count,
-                    timestamp,
-                    quality_score
+                    postgres_breaker.call,
+                    _insert_postgresql
                 )
+                
                 db_results["relational"] = "success"
                 logger.info(f"[OK] PostgreSQL: {document_id}")
+            
+            except CircuitBreakerException as e:
+                # Circuit open - PostgreSQL unavailable
+                error = DatabaseConnectionException(
+                    database_type="postgresql",
+                    operation="insert_document",
+                    context={
+                        "document_id": document_id,
+                        "file_path": file_path,
+                        "circuit_state": str(e)
+                    },
+                    recovery_hint="PostgreSQL circuit breaker is OPEN. Database may be down or overloaded. Wait for auto-recovery."
+                )
+                logger.error(error.to_dict())
+                db_results["relational"] = "circuit_open"
+            
             except Exception as e:
                 logger.error(f"[ERROR] PostgreSQL insert failed: {e}")
                 db_results["relational"] = f"error: {str(e)[:50]}"
@@ -1591,7 +1715,7 @@ async def process_document_with_uds3(
             except Exception as e:
                 logger.error(f"[ERROR] CouchDB batch add failed: {e}")
                 db_results["document"] = f"error: {str(e)[:50]}"
-        elif hasattr(job_manager.uds3_strategy, 'document_backend') and job_manager.uds3_strategy.document_backend:
+        elif job_manager.get_document_backend():
             # SINGLE MODE: Fallback to direct insert
             try:
                 doc_data = {
@@ -1604,7 +1728,7 @@ async def process_document_with_uds3(
                     "word_count": word_count
                 }
                 await asyncio.to_thread(
-                    job_manager.uds3_strategy.document_backend.create_document,
+                    job_manager.get_document_backend().create_document,
                     doc_data,
                     document_id  # doc_id parameter
                 )
@@ -1618,7 +1742,7 @@ async def process_document_with_uds3(
         if FLAGS.get("KILL_SWITCH_CHROMADB", False):
             logger.warning("[KILL] ChromaDB Kill-Switch aktiv – überspringe Vektoreinfügen")
             db_results["vector"] = "skipped (kill-switch)"
-        elif job_manager.uds3_strategy.vector_backend:
+        elif job_manager.get_vector_backend():
             try:
                 # Chunk content for better semantic search
                 chunks = [content[i:i+500] for i in range(0, len(content), 500)][:10]  # Max 10 chunks
@@ -1668,7 +1792,7 @@ async def process_document_with_uds3(
                                 
                                 # Create Batch Inserter; we will flush explicitly to ensure stats reflect writes
                                 with ChromaBatchInserter(
-                                    chromadb_backend=job_manager.uds3_strategy.vector_backend,
+                                    chromadb_backend=job_manager.get_vector_backend(),
                                     batch_size=get_batch_insert_size(),
                                     auto_flush=False
                                 ) as batch_inserter:
@@ -1704,6 +1828,10 @@ async def process_document_with_uds3(
                             # SINGLE INSERT MODE (Legacy - individual API calls)
                             logger.info(f"[DEBUG] Using Single Insert Mode (chunks={len(chunks)})")
                             
+                            # [NEW] Get Circuit Breaker
+                            breaker_mgr = get_breaker_manager()
+                            chromadb_breaker = breaker_mgr.get_or_create("chromadb")
+                            
                             for idx, (chunk, vector) in enumerate(zip(chunks, embeddings)):
                                 chunk_id = f"{document_id}_chunk_{idx}"
                                 metadata = {
@@ -1716,16 +1844,27 @@ async def process_document_with_uds3(
                                     "batch_insert": False
                                 }
                                 
-                                # ChromaDB API: add_vector() (single)
-                                success = await asyncio.to_thread(
-                                    job_manager.uds3_strategy.vector_backend.add_vector,
-                                    vector,
-                                    metadata,
-                                    chunk_id
-                                )
+                                # [NEW] ChromaDB API: add_vector() with Circuit Breaker
+                                def _add_vector():
+                                    return job_manager.get_vector_backend().add_vector(
+                                        chunk_id,  # vector_id (first parameter)
+                                        vector,     # vector embedding (second parameter)
+                                        metadata   # metadata dict (third parameter)
+                                    )
                                 
-                                if success:
-                                    chunk_count += 1
+                                try:
+                                    success = await asyncio.to_thread(
+                                        chromadb_breaker.call,
+                                        _add_vector
+                                    )
+                                    
+                                    if success:
+                                        chunk_count += 1
+                                
+                                except CircuitBreakerException:
+                                    # Circuit open - skip this chunk
+                                    logger.warning(f"[CIRCUIT] ChromaDB circuit open - skipping chunk {idx}")
+                                    continue
                         
                         logger.info(f"[OK] ChromaDB Batch: {document_id} ({chunk_count} chunks)")
                         
@@ -1770,32 +1909,79 @@ async def process_document_with_uds3(
                             "batch_processed": False
                         }
                         
-                        # ChromaDB API: add_vector()
-                        success = await asyncio.to_thread(
-                            job_manager.uds3_strategy.vector_backend.add_vector,
-                            vector,
-                            metadata,
-                            chunk_id
-                        )
+                        # [NEW] ChromaDB API: add_vector() with Circuit Breaker
+                        breaker_mgr = get_breaker_manager()
+                        chromadb_breaker = breaker_mgr.get_or_create("chromadb")
                         
-                        if success:
-                            chunk_count += 1
+                        def _add_vector():
+                            """ChromaDB add_vector wrapped for circuit breaker"""
+                            return job_manager.get_vector_backend().add_vector(
+                                chunk_id,  # vector_id (first parameter)
+                                vector,     # vector embedding (second parameter)
+                                metadata   # metadata dict (third parameter)
+                            )
+                        
+                        try:
+                            success = await asyncio.to_thread(
+                                chromadb_breaker.call,
+                                _add_vector
+                            )
+                            
+                            if success:
+                                chunk_count += 1
+                        
+                        except CircuitBreakerException:
+                            # Circuit open - skip this chunk, continue processing
+                            logger.warning(f"[CIRCUIT] ChromaDB circuit open - skipping chunk {idx}")
+                            continue
                     
                     logger.info(f"[OK] ChromaDB Single: {document_id} ({chunk_count} chunks)")
                 
                 db_results["vector"] = f"success ({chunk_count} chunks)"
                 logger.info(f"[OK] ChromaDB: {document_id} ({chunk_count} chunks)")
+            
+            except ConnectionError as e:
+                # ChromaDB connection failed
+                error = DatabaseConnectionException(
+                    database_type="chromadb",
+                    operation="add_vector",
+                    context={
+                        "document_id": document_id,
+                        "file_path": file_path,
+                        "chunks_count": len(chunks),
+                        "error": str(e)
+                    },
+                    recovery_hint="Verify ChromaDB server is running on configured port. Check CHROMA_HOST/CHROMA_PORT in .env"
+                )
+                logger.error(error.to_dict())
+                db_results["vector"] = f"error: connection failed"
+            
             except Exception as e:
-                logger.error(f"[ERROR] ChromaDB insert failed: {e}")
+                # Wrap unexpected ChromaDB errors
+                error = DatabaseWriteException(
+                    database_type="chromadb",
+                    operation="add_vector",
+                    context={
+                        "document_id": document_id,
+                        "file_path": file_path,
+                        "chunks_count": len(chunks),
+                        "error": str(e)
+                    },
+                    recovery_hint="Check ChromaDB logs for details. Document processing will continue without vectors."
+                )
+                logger.error(error.to_dict())
                 db_results["vector"] = f"error: {str(e)[:50]}"
         
         # 4. Neo4j (Graph Relationships) - PRIORITY 4
-        if job_manager.uds3_strategy.graph_backend:
+        if job_manager.get_graph_backend():
             try:
                 # UDS3RelationsCore hat driver - nutze session für Cypher
-                relations_core = job_manager.uds3_strategy.graph_backend
+                relations_core = job_manager.get_graph_backend()
                 
-                if hasattr(relations_core, 'driver') and relations_core.driver:
+                # Neo4j Backend speichert Driver in _driver (private attribute)
+                neo4j_driver = getattr(relations_core, '_driver', None) or getattr(relations_core, 'driver', None)
+                
+                if neo4j_driver:
                     # Check if Neo4j Batch Mode is enabled
                     neo4j_batch = getattr(job_manager, 'neo4j_batch', None)
                     
@@ -1829,18 +2015,24 @@ async def process_document_with_uds3(
                             "timestamp": timestamp
                         }
                         
-                        # Execute via driver.session() (sync execution in thread)
+                        # [NEW] Execute via driver.session() with Circuit Breaker
+                        breaker_mgr = get_breaker_manager()
+                        neo4j_breaker = breaker_mgr.get_or_create("neo4j")
+                        
                         def execute_cypher():
-                            with relations_core.driver.session() as session:
+                            with neo4j_driver.session() as session:
                                 result = session.run(create_node_query, params)
                                 return result.single()
                         
-                        result = await asyncio.to_thread(execute_cypher)
+                        result = await asyncio.to_thread(
+                            neo4j_breaker.call,
+                            execute_cypher
+                        )
                         
                         db_results["graph"] = "success (batch mode)"
                         logger.info(f"[OK] Neo4j Batch: {document_id} (node created, relationships batched)")
                     else:
-                        # SINGLE MODE: Direct insert (original behavior)
+                        # SINGLE MODE: Direct insert (original behavior) with Circuit Breaker
                         create_node_query = """
                         MERGE (d:Document {id: $doc_id})
                         SET d.file_path = $file_path,
@@ -1860,21 +2052,69 @@ async def process_document_with_uds3(
                             "timestamp": timestamp
                         }
                         
-                        # Execute via driver.session() (sync execution in thread)
+                        # [NEW] Execute via driver.session() with Circuit Breaker
+                        breaker_mgr = get_breaker_manager()
+                        neo4j_breaker = breaker_mgr.get_or_create("neo4j")
+                        
                         def execute_cypher():
-                            with relations_core.driver.session() as session:
+                            with neo4j_driver.session() as session:
                                 result = session.run(create_node_query, params)
                                 return result.single()
                         
-                        result = await asyncio.to_thread(execute_cypher)
+                        result = await asyncio.to_thread(
+                            neo4j_breaker.call,
+                            execute_cypher
+                        )
                         
                         db_results["graph"] = "success"
                         logger.info(f"[OK] Neo4j Single: {document_id}")
                 else:
                     db_results["graph"] = "skipped (driver not available)"
                     logger.warning("[WARNING] Neo4j driver not available")
+            
+            except CircuitBreakerException as e:
+                # Circuit open - Neo4j unavailable
+                error = DatabaseConnectionException(
+                    database_type="neo4j",
+                    operation="create_node",
+                    context={
+                        "document_id": document_id,
+                        "file_path": file_path,
+                        "circuit_state": str(e)
+                    },
+                    recovery_hint="Neo4j circuit breaker is OPEN. Database may be down or overloaded. Wait for auto-recovery."
+                )
+                logger.error(error.to_dict())
+                db_results["graph"] = "circuit_open"
+            
+            except ConnectionError as e:
+                # Neo4j connection failed
+                error = DatabaseConnectionException(
+                    database_type="neo4j",
+                    operation="create_node",
+                    context={
+                        "document_id": document_id,
+                        "file_path": file_path,
+                        "error": str(e)
+                    },
+                    recovery_hint="Verify Neo4j server is running. Check NEO4J_URI in .env. Test with: cypher-shell"
+                )
+                logger.error(error.to_dict())
+                db_results["graph"] = "error: connection failed"
+            
             except Exception as e:
-                logger.error(f"[ERROR] Neo4j insert failed: {e}")
+                # Wrap unexpected Neo4j errors
+                error = DatabaseWriteException(
+                    database_type="neo4j",
+                    operation="create_node",
+                    context={
+                        "document_id": document_id,
+                        "file_path": file_path,
+                        "error": str(e)
+                    },
+                    recovery_hint="Check Neo4j logs and Cypher syntax. Document processing will continue without graph data."
+                )
+                logger.error(error.to_dict())
                 db_results["graph"] = f"error: {str(e)[:50]}"
         
         # ═══════════════════════════════════════════════════════════
@@ -1895,9 +2135,70 @@ async def process_document_with_uds3(
             "document_id": document_id,
             "processing_mode": "UDS3_FULL_POLYGLOT"  # All 4 databases!
         }
+    
+    except FileNotFoundError as e:
+        # File disappeared during processing
+        error = FileNotFoundException(
+            file_path=file_path,
+            context={
+                "operation": "process_document_with_uds3",
+                "error": str(e)
+            },
+            recovery_hint="File was deleted or moved during processing. Check if file still exists."
+        )
+        logger.error(error.to_dict())
         
+        if METRICS_AVAILABLE and documents_processed:
+            documents_processed.inc(labels={"status": "failed"})
+        
+        return {
+            "content_extracted_chars": len(content),
+            "ai_entities_found": 0,
+            "metadata_completeness": 0.0,
+            "classification": "ERROR",
+            "error": str(error),
+            "processing_mode": "UDS3_FAILED"
+        }
+    
+    except MemoryError as e:
+        # Out of memory during processing
+        error = MemoryLimitExceededException(
+            operation="process_document_with_uds3",
+            current_mb=0,  # Would need memory_manager integration
+            limit_mb=0,
+            context={
+                "file_path": file_path,
+                "content_size": len(content),
+                "error": str(e)
+            },
+            recovery_hint="Document too large. Consider splitting into smaller chunks or increasing memory limits."
+        )
+        logger.error(error.to_dict())
+        
+        if METRICS_AVAILABLE and documents_processed:
+            documents_processed.inc(labels={"status": "failed"})
+        
+        return {
+            "content_extracted_chars": len(content),
+            "ai_entities_found": 0,
+            "metadata_completeness": 0.0,
+            "classification": "ERROR",
+            "error": str(error),
+            "processing_mode": "UDS3_FAILED"
+        }
+    
     except Exception as e:
-        logger.error(f"[ERROR] UDS3 processing failed for {file_path}: {e}")
+        # [SAFETY NET] Catch-all for unexpected errors
+        error = wrap_exception(
+            e,
+            context={
+                "operation": "process_document_with_uds3",
+                "file_path": file_path,
+                "content_size": len(content)
+            },
+            recovery_hint="Check logs for detailed error trace. Document may require manual investigation."
+        )
+        logger.error(error.to_dict())
         import traceback
         traceback.print_exc()
         
@@ -1913,7 +2214,7 @@ async def process_document_with_uds3(
             "ai_entities_found": 0,
             "metadata_completeness": 0.0,
             "classification": "ERROR",
-            "error": str(e),
+            "error": str(error),
             "processing_mode": "UDS3_FAILED"
         }
 
@@ -1965,11 +2266,16 @@ async def process_document_with_saga(
         from saga.saga_orchestrator_production import SagaOrchestrator
         
         # Get all available backends
+        relational_backend = job_manager.uds3_strategy.db_manager.get_relational_backend()
+        vector_backend = job_manager.uds3_strategy.db_manager.get_vector_backend()
+        graph_backend = job_manager.uds3_strategy.db_manager.get_graph_backend()
+        document_backend = job_manager.uds3_strategy.db_manager.get_document_backend() if hasattr(job_manager.uds3_strategy.db_manager, 'get_document_backend') else None
+        
         db_backends = {
-            'relational': job_manager.uds3_strategy.relational_backend,
-            'document': getattr(job_manager.uds3_strategy, 'document_backend', None),
-            'vector': job_manager.uds3_strategy.vector_backend,
-            'graph': job_manager.uds3_strategy.graph_backend
+            'relational': relational_backend,
+            'document': document_backend,
+            'vector': vector_backend,
+            'graph': graph_backend
         }
         
         # Filter out None backends
@@ -1978,7 +2284,7 @@ async def process_document_with_saga(
         # Create SAGA Orchestrator with PostgreSQL state backend
         orchestrator = SagaOrchestrator(
             backends=db_backends,
-            relational_backend=job_manager.uds3_strategy.relational_backend
+            relational_backend=relational_backend
         )
         
         # [OK] STEP 3: Create SAGA with UDS3's native format
@@ -2165,11 +2471,10 @@ async def process_single_document(
         Verarbeitungs-Metriken
     """
     # [P1 FIX] Semaphore for Connection Pool Protection (21.10.2025)
-    global _processing_semaphore
-    if _processing_semaphore is None:
-        _processing_semaphore = asyncio.Semaphore(MAX_PARALLEL_DOCUMENTS)
+    # Get semaphore for current event loop (fixes "bound to different event loop" error)
+    semaphore = get_processing_semaphore()
     
-    async with _processing_semaphore:
+    async with semaphore:
         # Original processing logic wrapped in semaphore
         try:
             # [OK] NEW: Track file start in database
@@ -2251,6 +2556,14 @@ async def process_documents_batch(
     print(f"\n\n[BOX][BOX][BOX] [BATCH] ENTERED! job_id={job_id}, files={len(file_paths)}\n\n", flush=True)
     
     jm = get_job_manager()
+    # Set correlation_id from job context for all logs in this background task
+    try:
+        job_meta = jm.job_storage.get_job(job_id)
+        job_corr = (job_meta or {}).get("correlation_id")
+        if job_corr:
+            set_correlation_id(job_corr)
+    except Exception:
+        pass
     
     print(f"[OK] [BATCH] Got job_manager: {jm}\n", flush=True)
     
@@ -2271,10 +2584,11 @@ async def process_documents_batch(
         neo4j_batch = None
         
         if BATCH_OPERATIONS_AVAILABLE and should_use_postgres_batch_insert():
-            if jm.uds3_strategy and jm.uds3_strategy.relational_backend:
+            relational_backend = jm.uds3_strategy.db_manager.get_relational_backend() if jm.uds3_strategy else None
+            if relational_backend:
                 try:
                     postgres_batch = PostgreSQLBatchInserter(
-                        postgresql_backend=jm.uds3_strategy.relational_backend,
+                        postgresql_backend=relational_backend,
                         batch_size=get_postgres_batch_size()
                     )
                     logger.info("=" * 80)
@@ -2287,10 +2601,10 @@ async def process_documents_batch(
                     logger.warning("   Falling back to single-insert mode")
         
         if BATCH_OPERATIONS_AVAILABLE and should_use_couchdb_batch_insert():
-            if jm.uds3_strategy and hasattr(jm.uds3_strategy, 'document_backend') and jm.uds3_strategy.document_backend:
+            if jm.uds3_strategy and hasattr(jm.uds3_strategy, 'document_backend') and jm.get_document_backend():
                 try:
                     couchdb_batch = CouchDBBatchInserter(
-                        couchdb_backend=jm.uds3_strategy.document_backend,
+                        couchdb_backend=jm.get_document_backend(),
                         batch_size=get_couchdb_batch_size()
                     )
                     logger.info("=" * 80)
@@ -2303,10 +2617,10 @@ async def process_documents_batch(
                     logger.warning("   Falling back to single-insert mode")
         
         if BATCH_OPERATIONS_AVAILABLE and should_use_neo4j_batching():
-            if jm.uds3_strategy and hasattr(jm.uds3_strategy, 'graph_backend') and jm.uds3_strategy.graph_backend:
+            if jm.uds3_strategy and hasattr(jm.uds3_strategy, 'graph_backend') and jm.get_graph_backend():
                 try:
                     neo4j_batch = Neo4jBatchCreator(
-                        neo4j_backend=jm.uds3_strategy.graph_backend,
+                        neo4j_backend=jm.get_graph_backend(),
                         batch_size=get_neo4j_batch_size()
                     )
                     logger.info("=" * 80)
@@ -2530,11 +2844,79 @@ async def lifespan(app: FastAPI):
     """
     Lifespan context manager for FastAPI startup and shutdown.
     Replaces deprecated @app.on_event("startup") and @app.on_event("shutdown").
+    
+    NEW (28.10.2025): Production Hardening Integration
+    - WorkerPoolManager for health monitoring
+    - MemoryManager for leak detection and limits
+    - CircuitBreakers for database fault tolerance
     """
     # STARTUP
+    # Set a synthetic correlation ID for startup logs (outside any request context)
+    try:
+        set_correlation_id("startup:ingestion")
+    except Exception:
+        pass
     logger.info("=" * 60)
     logger.info("[START] Covina Ingestion Backend Starting")
     logger.info("=" * 60)
+    
+    # [NEW] Initialize Production Hardening Systems
+    logger.info("[HARDENING] Initializing production systems...")
+    
+    # 1. Worker Pool Manager (health monitoring, crash detection)
+    # Note: WorkerPoolManager creates its own executors
+    pool_manager = initialize_pool_manager(
+        io_workers=IO_WORKERS,
+        cpu_workers=CPU_WORKERS,
+        health_check_interval=30,  # Check every 30s
+        worker_timeout=300,        # 5min worker timeout
+        task_timeout=600,          # 10min task timeout
+        enable_auto_recovery=False # Manual recovery for safety
+    )
+    logger.info(f"✅ WorkerPoolManager initialized ({IO_WORKERS} I/O + {CPU_WORKERS} CPU workers)")
+    
+    # 2. Memory Manager (limits, GC, leak detection)
+    memory_manager = initialize_memory_manager(
+        soft_limit_mb=4096,       # 4 GB warning limit
+        hard_limit_mb=6144,       # 6 GB hard limit
+        gc_threshold_mb=3072,     # Auto-GC at 3 GB
+        check_interval=30,        # Monitor every 30s
+        leak_threshold_mb=512,    # 512 MB growth = leak
+        leak_detection_window=300 # 5 minutes (in seconds)
+    )
+    logger.info(f"✅ MemoryManager initialized (soft: 4GB, hard: 6GB)")
+    
+    # 3. Circuit Breakers (database fault tolerance)
+    breaker_mgr = get_breaker_manager()
+    
+    # PostgreSQL Circuit Breaker
+    postgres_breaker = breaker_mgr.get_or_create(
+        "postgresql",
+        failure_threshold=5,      # Open after 5 failures
+        recovery_timeout=60,      # Try recovery after 60s
+        success_threshold=2       # Close after 2 successes
+    )
+    logger.info("✅ PostgreSQL circuit breaker created")
+    
+    # ChromaDB Circuit Breaker (more sensitive - embedding service)
+    chromadb_breaker = breaker_mgr.get_or_create(
+        "chromadb",
+        failure_threshold=3,      # Open after 3 failures
+        recovery_timeout=30,      # Try recovery after 30s
+        success_threshold=2       # Close after 2 successes
+    )
+    logger.info("✅ ChromaDB circuit breaker created")
+    
+    # Neo4j Circuit Breaker
+    neo4j_breaker = breaker_mgr.get_or_create(
+        "neo4j",
+        failure_threshold=5,      # Open after 5 failures
+        recovery_timeout=60,      # Try recovery after 60s
+        success_threshold=2       # Close after 2 successes
+    )
+    logger.info("✅ Neo4j circuit breaker created")
+    
+    logger.info("[HARDENING] Production systems initialized ✅")
     
     # Initialize Job Manager (triggers UDS3 setup)
     jm = get_job_manager()
@@ -2561,9 +2943,35 @@ async def lifespan(app: FastAPI):
     # SHUTDOWN
     logger.info("[STOP] Covina Ingestion Backend Shutting Down")
     
-    # Shutdown Executors
-    io_executor.shutdown(wait=True)
-    cpu_executor.shutdown(wait=True)
+    # [NEW] Graceful shutdown of production systems
+    logger.info("[HARDENING] Shutting down production systems...")
+    
+    # 1. Stop accepting new tasks
+    logger.info("[SHUTDOWN] Stopping new task submissions...")
+    
+    # 2. Shutdown Worker Pool Manager (waits for tasks, max 30s)
+    # Note: WorkerPoolManager handles its own executor shutdown
+    shutdown_pool_manager(timeout=30)
+    logger.info("✅ WorkerPoolManager shutdown complete (includes executors)")
+    
+    # 3. Shutdown Memory Manager
+    shutdown_memory_manager()
+    logger.info("✅ MemoryManager shutdown complete")
+    
+    # 4. Shutdown original executors (if they still exist and weren't replaced)
+    if io_executor is not None:
+        try:
+            io_executor.shutdown(wait=False)
+            logger.info("✅ Original io_executor shutdown")
+        except:
+            pass
+    
+    if cpu_executor is not None:
+        try:
+            cpu_executor.shutdown(wait=False)
+            logger.info("✅ Original cpu_executor shutdown")
+        except:
+            pass
     
     logger.info("[OK] Clean shutdown completed")
 
@@ -2635,6 +3043,86 @@ async def health_check(delay: int = 0):
     # FIXED (17.10.2025, 00:05 Uhr): Removed get_job_manager() call
     # Reason: Triggers UDS3 initialization on first request, causes DB timeout crashes
     
+    # Collect Production Hardening Metrics
+    hardening_metrics = {}
+    
+    try:
+        # Worker Pool Metrics
+        pool_manager = get_pool_manager()
+        if pool_manager:
+            io_metrics = pool_manager.get_io_metrics()
+            cpu_metrics = pool_manager.get_cpu_metrics()
+            
+            hardening_metrics["worker_pool"] = {
+                "io_workers": {
+                    "total": pool_manager.io_workers,
+                    "active": io_metrics.active_workers,
+                    "tasks_completed": io_metrics.tasks_completed,
+                    "tasks_failed": io_metrics.tasks_failed,
+                    "success_rate": round(io_metrics.success_rate * 100, 1) if io_metrics.success_rate else 0,
+                },
+                "cpu_workers": {
+                    "total": pool_manager.cpu_workers,
+                    "active": cpu_metrics.active_workers,
+                    "tasks_completed": cpu_metrics.tasks_completed,
+                    "tasks_failed": cpu_metrics.tasks_failed,
+                    "success_rate": round(cpu_metrics.success_rate * 100, 1) if cpu_metrics.success_rate else 0,
+                },
+                "health_checks_enabled": True,
+                "heartbeat_interval": 30,
+                "worker_timeout": 300,
+            }
+    except Exception as e:
+        hardening_metrics["worker_pool"] = {"error": str(e), "status": "not_initialized"}
+    
+    try:
+        # Memory Manager Metrics
+        memory_manager = get_memory_manager()
+        if memory_manager:
+            snapshot = memory_manager.get_current_snapshot()
+            
+            hardening_metrics["memory"] = {
+                "current_mb": round(snapshot.current_mb, 1),
+                "soft_limit_mb": memory_manager.soft_limit_mb,
+                "hard_limit_mb": memory_manager.hard_limit_mb,
+                "usage_percent": round((snapshot.current_mb / memory_manager.hard_limit_mb) * 100, 1),
+                "gc_threshold_mb": memory_manager.gc_threshold_mb,
+                "leak_detection": {
+                    "enabled": True,
+                    "window_seconds": memory_manager.leak_detection_window,
+                    "threshold_mb": memory_manager.leak_threshold_mb,
+                },
+                "status": "healthy" if snapshot.current_mb < memory_manager.soft_limit_mb else "warning",
+            }
+    except Exception as e:
+        hardening_metrics["memory"] = {"error": str(e), "status": "not_initialized"}
+    
+    try:
+        # Circuit Breaker Metrics
+        breaker_mgr = get_breaker_manager()
+        if breaker_mgr:
+            circuit_status = {}
+            for service_name in ["postgresql", "chromadb", "neo4j"]:
+                breaker = breaker_mgr.get_or_create(service_name, failure_threshold=5)
+                metrics = breaker.get_metrics()
+                
+                circuit_status[service_name] = {
+                    "state": breaker.state.value,
+                    "failure_count": metrics.get("failure_count", 0),
+                    "success_count": metrics.get("success_count", 0),
+                    "total_calls": metrics.get("total_calls", 0),
+                    "last_failure": metrics.get("last_failure_time"),
+                    "next_retry": metrics.get("next_retry_time"),
+                }
+            
+            hardening_metrics["circuit_breakers"] = {
+                "services": circuit_status,
+                "total_services": len(circuit_status),
+                "open_circuits": sum(1 for s in circuit_status.values() if s["state"] == "OPEN"),
+            }
+    except Exception as e:
+        hardening_metrics["circuit_breakers"] = {"error": str(e), "status": "not_initialized"}
+    
     return HealthResponse(
         status="healthy",
         timestamp=datetime.now().isoformat(),
@@ -2649,7 +3137,8 @@ async def health_check(delay: int = 0):
             "io_workers": IO_WORKERS,
             "cpu_workers": CPU_WORKERS,
             "total_cpus": CPU_COUNT
-        }
+        },
+        hardening=hardening_metrics if hardening_metrics else None
     )
 
 @app.get("/live")
@@ -2676,6 +3165,113 @@ async def metrics_endpoint():
     
     return metrics_registry.export_dict()
 
+@app.get("/prometheus", response_class=PlainTextResponse)
+async def prometheus_endpoint():
+    """
+    Prometheus Metrics Endpoint - Exposes production hardening metrics.
+    
+    Returns metrics in Prometheus exposition format for scraping by
+    Prometheus server or compatible monitoring tools.
+    
+    Metrics exposed:
+    - Worker pool: tasks, success rates, active workers
+    - Memory: usage, limits, GC stats, leak detection
+    - Circuit breakers: states, calls, failures per service
+    
+    Example:
+        curl http://127.0.0.1:45679/prometheus
+    """
+    try:
+        # Collect hardening metrics (same as /health endpoint)
+        hardening_metrics = {}
+        
+        # Worker Pool Metrics
+        try:
+            pool_manager = get_pool_manager()
+            if pool_manager:
+                io_metrics = pool_manager.get_io_metrics()
+                cpu_metrics = pool_manager.get_cpu_metrics()
+                
+                hardening_metrics["worker_pool"] = {
+                    "io_workers": {
+                        "total": pool_manager.io_workers,
+                        "active": io_metrics.active_workers,
+                        "tasks_completed": io_metrics.tasks_completed,
+                        "tasks_failed": io_metrics.tasks_failed,
+                        "success_rate": round(io_metrics.success_rate * 100, 1) if io_metrics.success_rate else 0,
+                    },
+                    "cpu_workers": {
+                        "total": pool_manager.cpu_workers,
+                        "active": cpu_metrics.active_workers,
+                        "tasks_completed": cpu_metrics.tasks_completed,
+                        "tasks_failed": cpu_metrics.tasks_failed,
+                        "success_rate": round(cpu_metrics.success_rate * 100, 1) if cpu_metrics.success_rate else 0,
+                    },
+                    "health_checks_enabled": True,
+                    "heartbeat_interval": 30,
+                    "worker_timeout": 300,
+                }
+        except Exception as e:
+            hardening_metrics["worker_pool"] = {"error": str(e), "status": "not_initialized"}
+        
+        # Memory Metrics
+        try:
+            memory_manager = get_memory_manager()
+            if memory_manager:
+                snapshot = memory_manager.get_current_snapshot()
+                
+                hardening_metrics["memory"] = {
+                    "current_mb": round(snapshot.current_mb, 1),
+                    "soft_limit_mb": memory_manager.soft_limit_mb,
+                    "hard_limit_mb": memory_manager.hard_limit_mb,
+                    "usage_percent": round((snapshot.current_mb / memory_manager.hard_limit_mb) * 100, 1),
+                    "gc_threshold_mb": memory_manager.gc_threshold_mb,
+                    "leak_detection": {
+                        "enabled": True,
+                        "window_seconds": memory_manager.leak_detection_window,
+                        "threshold_mb": memory_manager.leak_threshold_mb,
+                    },
+                    "status": "healthy" if snapshot.current_mb < memory_manager.soft_limit_mb else "warning",
+                }
+        except Exception as e:
+            hardening_metrics["memory"] = {"error": str(e), "status": "not_initialized"}
+        
+        # Circuit Breaker Metrics
+        try:
+            breaker_mgr = get_breaker_manager()
+            if breaker_mgr:
+                circuit_status = {}
+                for service_name in ["postgresql", "chromadb", "neo4j"]:
+                    breaker = breaker_mgr.get_or_create(service_name, failure_threshold=5)
+                    metrics = breaker.get_metrics()
+                    
+                    circuit_status[service_name] = {
+                        "state": breaker.state.value,
+                        "failure_count": metrics.get("failure_count", 0),
+                        "success_count": metrics.get("success_count", 0),
+                        "total_calls": metrics.get("total_calls", 0),
+                        "last_failure": metrics.get("last_failure_time"),
+                        "next_retry": metrics.get("next_retry_time"),
+                    }
+                
+                hardening_metrics["circuit_breakers"] = {
+                    "services": circuit_status,
+                    "total_services": len(circuit_status),
+                    "open_circuits": sum(1 for s in circuit_status.values() if s["state"] == "OPEN"),
+                }
+        except Exception as e:
+            hardening_metrics["circuit_breakers"] = {"error": str(e), "status": "not_initialized"}
+        
+        # Export to Prometheus format
+        prometheus_exporter = get_prometheus_exporter(namespace="covina_ingestion")
+        prometheus_text = prometheus_exporter.export_metrics(hardening_metrics)
+        
+        return prometheus_text
+        
+    except Exception as e:
+        logger.error(f"[PROMETHEUS] Export failed: {e}", exc_info=True)
+        return f"# Error exporting metrics: {e}\n"
+
 @app.get("/ready")
 async def readiness_probe():
     """Readiness-Probe: konservativ 'ready', da Upload-Service modular ist.
@@ -2683,6 +3279,66 @@ async def readiness_probe():
     (z. B. Filesystem-Zugriff, Worker-Initialisierung) geprüft werden.
     """
     return {"ready": True, "notes": "basic readiness (no hard dependencies checked)"}
+
+# ------------------------------------------------
+# Capabilities: Supported file types for upload
+# ------------------------------------------------
+@app.get("/capabilities/supported-filetypes")
+async def get_supported_filetypes():
+    """Return supported file extensions per category and as a flat list.
+
+    Data source:
+    - ingestion.scanner suffix sets (TEXT/OFFICE/IMAGE/GEO/CODE/ARCHIVE)
+    - filtered by categories that have a registered handler
+    """
+    try:
+        # Import suffix sets locally to avoid hard dependency at module import time
+        from ingestion.scanner import (
+            _TEXT_SUFFIXES,
+            _OFFICE_SUFFIXES,
+            _IMAGE_SUFFIXES,
+            _GEO_SUFFIXES,
+            _CODE_SUFFIXES,
+            _ARCHIVE_SUFFIXES,
+        )
+
+        categories_map = {
+            FileCategory.TEXT.value: sorted(_TEXT_SUFFIXES),
+            FileCategory.OFFICE.value: sorted(_OFFICE_SUFFIXES),
+            FileCategory.IMAGE.value: sorted(_IMAGE_SUFFIXES),
+            FileCategory.GEO.value: sorted(_GEO_SUFFIXES),
+            FileCategory.CODE.value: sorted(_CODE_SUFFIXES),
+            FileCategory.ARCHIVE.value: sorted(_ARCHIVE_SUFFIXES),
+        }
+
+        # Only include categories that actually have a handler registered
+        registered = {cat.value for cat in HANDLER_FACTORY.registry.snapshot().keys()}
+        filtered = {k: v for k, v in categories_map.items() if k in registered}
+
+        all_ext = sorted({ext for exts in filtered.values() for ext in exts})
+
+        return {
+            "categories": filtered,
+            "all_extensions": all_ext,
+            "registered_categories": sorted(registered),
+            "version": "1.0",
+            "timestamp": datetime.now().isoformat(),
+        }
+    except Exception as e:
+        logger.error(f"[CAPABILITIES] failed to enumerate supported filetypes: {e}")
+        # Fallback: minimal safe default
+        fallback = [
+            ".pdf", ".txt", ".docx", ".doc", ".xlsx", ".xls",
+            ".csv", ".json", ".xml", ".html", ".md", ".rtf",
+        ]
+        return {
+            "categories": {"text": fallback},
+            "all_extensions": sorted(set(fallback)),
+            "registered_categories": [],
+            "version": "1.0",
+            "timestamp": datetime.now().isoformat(),
+            "error": str(e),
+        }
 
 # Admin: Flags/Kill-Switches
 class FlagUpdate(BaseModel):
@@ -2761,6 +3417,13 @@ async def upload_files(
         def run_batch_in_new_loop():
             """Run batch processing in new event loop (thread-safe!)"""
             logger.info(f"[START] [BACKGROUND THREAD] Starting batch job {job_id} in new event loop")
+            # Propagate correlation ID from job meta for this thread's context
+            try:
+                jmeta = jm.job_storage.get_job(job_id)
+                if jmeta and jmeta.get("correlation_id"):
+                    set_correlation_id(jmeta.get("correlation_id"))
+            except Exception:
+                pass
             
             # Create NEW event loop for this thread
             new_loop = asyncio.new_event_loop()
@@ -2786,9 +3449,16 @@ async def upload_files(
             finally:
                 new_loop.close()
         
-        io_executor.submit(run_batch_in_new_loop)
+        # [NEW] Use WorkerPoolManager instead of direct executor
+        pool_manager = get_pool_manager()
+        task_id = f"upload_batch_{job_id}_{int(time.time())}"
         
-        logger.info(f"[OUTBOX] Upload successful: Job {job_id}, {len(files)} files")
+        pool_manager.submit_io_task(
+            run_batch_in_new_loop,
+            task_id=task_id
+        )
+        
+        logger.info(f"[OUTBOX] Upload successful: Job {job_id}, {len(files)} files, Task: {task_id}")
         
         return UploadResponse(
             message=f"Upload erfolgreich. {len(files)} Dateien werden verarbeitet.",
@@ -2796,15 +3466,73 @@ async def upload_files(
             file_count=len(files),
             estimated_processing_time=f"{len(files) * 2}s"
         )
-        
+    
+    except FileNotFoundError as e:
+        # File disappeared during upload
+        error = FileNotFoundException(
+            file_path=str(e),
+            context={
+                "operation": "upload_files",
+                "job_id": job_id,
+                "temp_dir": str(temp_dir),
+                "files_count": len(files)
+            },
+            recovery_hint="Verify file still exists and has not been moved/deleted during upload"
+        )
+        logger.error(error.to_dict())
+        jm.update_job_status(job_id, "failed", str(error))
+        raise HTTPException(status_code=404, detail=str(error))
+    
+    except PermissionError as e:
+        # Permission denied on temp directory or file
+        error = FileProcessingException(
+            message=f"Permission denied: {e}",
+            file_path=str(temp_dir),
+            context={
+                "operation": "upload_files",
+                "job_id": job_id,
+                "temp_dir": str(temp_dir),
+                "error": str(e)
+            },
+            recovery_hint="Check file/directory permissions. Backend needs write access to data/uploads/"
+        )
+        logger.error(error.to_dict())
+        jm.update_job_status(job_id, "failed", str(error))
+        raise HTTPException(status_code=403, detail=str(error))
+    
+    except OSError as e:
+        # Disk full, I/O error, etc.
+        error = FileProcessingException(
+            message=f"I/O error during upload: {e}",
+            file_path=str(temp_dir),
+            context={
+                "operation": "upload_files",
+                "job_id": job_id,
+                "temp_dir": str(temp_dir),
+                "files_count": len(files),
+                "error": str(e)
+            },
+            recovery_hint="Check disk space and filesystem health. Files kept at: " + str(temp_dir)
+        )
+        logger.error(error.to_dict())
+        jm.update_job_status(job_id, "failed", str(error))
+        raise HTTPException(status_code=507, detail=str(error))  # 507 = Insufficient Storage
+    
     except Exception as e:
-        # [OK] FIX: Keep temp files on error for crash recovery!
-        # Do NOT delete temp_dir - files remain in data/uploads/job_*/ for manual recovery
-        logger.error(f"[ERROR] Upload failed for job {job_id}, temp files kept at: {temp_dir}")
-        logger.error(f"   To recover: Re-process files from {temp_dir}")
-        
-        jm.update_job_status(job_id, "failed", str(e))
-        raise HTTPException(status_code=500, detail=f"Upload fehlgeschlagen: {e}")
+        # [SAFETY NET] Catch-all for unexpected errors (wrapped with context)
+        error = wrap_exception(
+            e,
+            context={
+                "operation": "upload_files",
+                "job_id": job_id,
+                "temp_dir": str(temp_dir),
+                "files_count": len(files)
+            },
+            recovery_hint=f"Files kept for recovery at: {temp_dir}"
+        )
+        logger.error(error.to_dict())
+        jm.update_job_status(job_id, "failed", str(error))
+        raise HTTPException(status_code=500, detail=str(error))
 
 @app.post("/upload/directory", response_model=DirectoryScanResponse)
 @limiter.limit("5/minute")  # Max 5 directory scans pro Minute pro IP
@@ -2910,11 +3638,19 @@ async def upload_directory(
             new_loop.close()
             print(f"\n\n🔒 [BACKGROUND THREAD] Event loop closed\n\n", flush=True)
     
-    # [OK] Submit to ThreadPool
-    print(f"\n\n[TARGET] [API] Submitting scan job {scan_job_id} to io_executor...\n\n", flush=True)
-    logger.info(f"[TARGET] [API] Submitting scan job {scan_job_id} to io_executor...")
-    io_executor.submit(run_scan_in_new_loop)
-    print(f"\n\n[OK] [API] Scan job {scan_job_id} submitted successfully\n\n", flush=True)
+    # [NEW] Use WorkerPoolManager instead of direct executor
+    print(f"\n\n[TARGET] [API] Submitting scan job {scan_job_id} to pool_manager...\n\n", flush=True)
+    logger.info(f"[TARGET] [API] Submitting scan job {scan_job_id} to pool_manager...")
+    
+    pool_manager = get_pool_manager()
+    task_id = f"directory_scan_{scan_job_id}_{int(time.time())}"
+    
+    pool_manager.submit_io_task(
+        run_scan_in_new_loop,
+        task_id=task_id
+    )
+    
+    print(f"\n\n[OK] [API] Scan job {scan_job_id} submitted successfully (Task: {task_id})\n\n", flush=True)
     
     logger.info(f"[OK] [API] Directory scan started: {scan_job_id} (response time: <50ms)")
     
@@ -3143,7 +3879,14 @@ async def recover_job(job_id: str):
         finally:
             new_loop.close()
     
-    io_executor.submit(run_recovery_in_new_loop)
+    # [NEW] Use WorkerPoolManager
+    pool_manager = get_pool_manager()
+    task_id = f"recovery_{new_job_id}_{int(time.time())}"
+    
+    pool_manager.submit_io_task(
+        run_recovery_in_new_loop,
+        task_id=task_id
+    )
     
     # Update old job status
     jm.update_job_status(job_id, "recovered", f"Recovered as job {new_job_id}")
@@ -3323,7 +4066,14 @@ async def recover_failed_files(
         finally:
             new_loop.close()
     
-    io_executor.submit(run_recovery_in_new_loop)
+    # [NEW] Use WorkerPoolManager
+    pool_manager = get_pool_manager()
+    task_id = f"failed_recovery_{new_job_id}_{int(time.time())}"
+    
+    pool_manager.submit_io_task(
+        run_recovery_in_new_loop,
+        task_id=task_id
+    )
     
     return {
         "message": "Failed files recovery started",
@@ -3539,6 +4289,11 @@ async def auto_resume_pending_jobs(jm):
                 # Submit for background processing
                 def run_resume_in_new_loop():
                     """Background resume processing"""
+                    # Use synthetic correlation id for auto-resume per job
+                    try:
+                        set_correlation_id(f"auto-resume:{job_id}")
+                    except Exception:
+                        pass
                     logger.info(f"[START] [AUTO-RESUME] Starting job {job_id} in new event loop")
                     
                     new_loop = asyncio.new_event_loop()
@@ -3552,7 +4307,15 @@ async def auto_resume_pending_jobs(jm):
                     finally:
                         new_loop.close()
                 
-                io_executor.submit(run_resume_in_new_loop)
+                # [NEW] Use WorkerPoolManager
+                pool_manager = get_pool_manager()
+                task_id = f"auto_resume_{job_id}_{int(time.time())}"
+                
+                pool_manager.submit_io_task(
+                    run_resume_in_new_loop,
+                    task_id=task_id
+                )
+                
                 resumed_count += 1
                 
             except Exception as e:
