@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://covina.local/schemas/extraction_rules.schema.json",
+  "title": "Extraction Rules",
+  "type": "object",
+  "properties": {
+    "entities": {
+      "type": "object",
+      "patternProperties": {
+        ".*": {
+          "type": "object",
+          "properties": {
+            "patterns": { "type": "array", "items": {"type": "string"}},
+            "context_window": { "type": "integer", "minimum": 0 },
+            "normalize": { "type": "string" }
+          },
+          "required": ["patterns"],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "laws": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "norms": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  },
+  "additionalProperties": true
+}

@@ -286,6 +286,14 @@ def should_use_saga() -> bool:
     return os.getenv('ENABLE_SAGA', 'false').lower() == 'true'
 
 
+def should_use_legal_graph_nlp() -> bool:
+    """Check if Legal Graph NLP extraction is enabled via ENV (ENABLE_LEGAL_GRAPH_NLP=true)."""
+    return os.getenv('ENABLE_LEGAL_GRAPH_NLP', 'false').lower() == 'true'
+
+
+logger.info(f"[CONFIG] Legal Graph NLP: {'ENABLED' if should_use_legal_graph_nlp() else 'DISABLED'}")
+
+
 # ================================================================
 # UDS3 PHASE 2: POSTGRESQL + COUCHDB BATCH OPERATIONS
 # ================================================================
@@ -2118,6 +2126,92 @@ async def process_document_with_uds3(
                 db_results["graph"] = f"error: {str(e)[:50]}"
         
         # ═══════════════════════════════════════════════════════════
+        # LEGAL GRAPH NLP: Extract legal entities and persist to graph
+        # ═══════════════════════════════════════════════════════════
+        legal_nlp_results = {}
+        if should_use_legal_graph_nlp():
+            try:
+                from ingestion.nlp.legal_entity_extractor import LegalEntityExtractor
+                from ingestion.graph.entity_graph_writer import EntityGraphWriter
+                from collections import Counter
+                
+                # Extract legal entities (Tier 1 - Regex)
+                extractor = LegalEntityExtractor()
+                entities = extractor.extract(content)
+                
+                # Persist to Neo4j via UDS3
+                writer = EntityGraphWriter()  # Uses UDS3Gateway internally
+                
+                # Process extracted entities
+                entity_stats = Counter()
+                for entity in entities:
+                    if entity.kind == "norm":
+                        # Upsert LegalNorm node
+                        norm_id = entity.value.lower().replace(" ", "_")
+                        writer.upsert_legal_norm(
+                            norm_id=norm_id,
+                            norm_text=entity.value,
+                            law_abbreviation=entity.meta.get("law"),
+                            paragraph=entity.meta.get("paragraph"),
+                        )
+                        # Link document to norm
+                        writer.link_cites_norm(
+                            document_id=document_id,
+                            norm_id=norm_id,
+                            count=1,
+                            context=entity.meta.get("context_window"),
+                        )
+                        entity_stats["norms"] += 1
+                    
+                    elif entity.kind == "aktenzeichen":
+                        # Upsert LegalConcept node (Az. as concept)
+                        concept_id = f"az_{entity.value.lower().replace(' ', '_')}"
+                        writer.upsert_legal_concept(
+                            concept_id=concept_id,
+                            name=f"Aktenzeichen: {entity.value}",
+                            tier=1,
+                            context_window=entity.meta.get("context_window"),
+                        )
+                        writer.link_mentions_concept(
+                            document_id=document_id,
+                            concept_id=concept_id,
+                            count=1,
+                        )
+                        entity_stats["aktenzeichen"] += 1
+                    
+                    elif entity.kind == "ecli":
+                        # Upsert LegalConcept node (ECLI as concept)
+                        concept_id = entity.value.lower()
+                        writer.upsert_legal_concept(
+                            concept_id=concept_id,
+                            name=f"ECLI: {entity.value}",
+                            tier=1,
+                            context_window=entity.meta.get("context_window"),
+                        )
+                        writer.link_mentions_concept(
+                            document_id=document_id,
+                            concept_id=concept_id,
+                            count=1,
+                        )
+                        entity_stats["ecli"] += 1
+                
+                legal_nlp_results = {
+                    "entities_extracted": len(entities),
+                    "entities_by_kind": dict(entity_stats),
+                    "extraction_tier": 1,  # Regex
+                }
+                logger.info(f"[LEGAL_NLP] Extracted {len(entities)} entities from {document_id}: {dict(entity_stats)}")
+            
+            except Exception as e:
+                logger.error(f"[LEGAL_NLP] Extraction failed for {document_id}: {e}")
+                legal_nlp_results = {
+                    "error": str(e)[:100],
+                    "entities_extracted": 0,
+                }
+        else:
+            legal_nlp_results = {"status": "disabled"}
+        
+        # ═══════════════════════════════════════════════════════════
         # METRICS: Record document processing success
         # ═══════════════════════════════════════════════════════════
         if METRICS_AVAILABLE and documents_processed:
@@ -2132,6 +2226,7 @@ async def process_document_with_uds3(
             "legal_terms_count": legal_count,
             "quality_score": quality_score,
             "database_writes": db_results,
+            "legal_nlp": legal_nlp_results,  # NEW: Legal NLP results
             "document_id": document_id,
             "processing_mode": "UDS3_FULL_POLYGLOT"  # All 4 databases!
         }
@@ -3005,6 +3100,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ------------------------------------------------
+# Phase A - Feature Flag: Neuer Ingestion-Router
+# ------------------------------------------------
+import os
+
+INGEST_NEW_ROUTER = os.environ.get("INGEST_NEW_ROUTER", "false").lower() in {"1","true","yes","y","on"}
+
+if INGEST_NEW_ROUTER:
+    try:
+        from ingestionV2.api_v2 import build_v2_router
+        app.include_router(build_v2_router())
+        logger.info("✅ Neuer Ingestion-Router (v2) aktiviert und eingebunden")
+    except Exception as e:
+        logger.error(f"❌ Neuer Ingestion-Router konnte nicht aktiviert werden: {e}")
+else:
+    logger.info("ℹ️ Neuer Ingestion-Router deaktiviert (INGEST_NEW_ROUTER=false)")
 
 # Correlation ID Middleware for request tracing
 try:

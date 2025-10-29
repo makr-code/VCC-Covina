@@ -39,3 +39,12 @@ for path in EXTRA_PATHS:
     path_str = str(path)
     if path.exists() and path_str not in sys.path:
         sys.path.insert(0, path_str)
+
+# Preload critical local packages so later sys.path changes won't break imports
+try:
+    import security  # noqa: F401
+    import security.auth  # noqa: F401
+    import security.secrets  # noqa: F401
+except Exception:
+    # Do not fail startup if optional modules are missing in certain contexts
+    pass

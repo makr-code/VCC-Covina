@@ -39,6 +39,17 @@ from pydantic import BaseModel, Field
 import uvicorn
 from fastapi.security import OAuth2PasswordRequestForm
 
+# Routers (Queries)
+try:
+    from backend.queries import legal_graph_router
+    from backend.queries.legal_analytics_queries import router as legal_analytics_router
+    QUERIES_AVAILABLE = True
+except Exception as e:
+    QUERIES_AVAILABLE = False
+    legal_graph_router = None
+    legal_analytics_router = None
+    # Will log later during app setup
+
 # Initialize JSON Structured Logging EARLY (before any logger usage)
 try:
     from utils.json_logging import setup_json_logging
@@ -506,6 +517,28 @@ def update_pool_metrics():
             
     except Exception as e:
         logger.debug(f"Failed to update pool metrics: {e}")
+
+# ============================================================================
+# ROUTERS REGISTRATION (Feature-Flag gesteuert)
+# ============================================================================
+try:
+    import os as _os
+    enable_legal_graph = _os.getenv("ENABLE_LEGAL_GRAPH_QUERIES", "true").lower() == "true"
+    enable_legal_analytics = _os.getenv("ENABLE_LEGAL_ANALYTICS_QUERIES", "true").lower() == "true"
+
+    if QUERIES_AVAILABLE and legal_graph_router and enable_legal_graph:
+        app.include_router(legal_graph_router, prefix="/")
+        logger.info("✅ Legal Graph Query Router registriert (/legal-graph)")
+    else:
+        logger.info("ℹ️ Legal Graph Query Router nicht aktiviert oder nicht verfügbar")
+
+    if QUERIES_AVAILABLE and legal_analytics_router and enable_legal_analytics:
+        app.include_router(legal_analytics_router, prefix="/")
+        logger.info("✅ Legal Analytics Query Router registriert (/legal-analytics)")
+    else:
+        logger.info("ℹ️ Legal Analytics Query Router nicht aktiviert oder nicht verfügbar")
+except Exception as e:
+    logger.warning(f"⚠️ Router-Registrierung fehlgeschlagen: {e}")
 
 # Pydantic Models für API
 class SystemHealth(BaseModel):

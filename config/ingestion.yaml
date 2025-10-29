@@ -1,0 +1,23 @@
+# Ingestion Pipeline Konfiguration (Phase A)
+# Hinweis: Werte können via ENV überschrieben werden, z.B. ${ENV_VAR:default}
+
+backends:
+  relational:
+    enabled: ${RELATIONAL_ENABLED:true}
+  vector:
+    enabled: ${VECTOR_ENABLED:true}
+  graph:
+    enabled: ${GRAPH_ENABLED:true}
+  file:
+    enabled: ${FILE_ENABLED:true}
+
+router:
+  strategy: simple
+  fail_fast: ${ROUTER_FAIL_FAST:false}
+
+writer:
+  type: uds3
+  # Weitere writer-spezifische Optionen können hier ergänzt werden
+
+feature_flags:
+  ingest_new_router: ${INGEST_NEW_ROUTER:false}

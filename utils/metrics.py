@@ -260,6 +260,45 @@ class MetricsRegistry:
             }
 
 
+def _format_labels(labels: Dict[str, str]) -> str:
+    if not labels:
+        return ""
+    parts = [f"{k}={json.dumps(v)}" for k, v in labels.items()]
+    return "{" + ",".join(parts) + "}"
+
+
+def export_prometheus_text(registry: MetricsRegistry = None) -> str:
+    """Export metrics in a Prometheus-like text format.
+
+    Note: Histogram is exported as _count and _sum only (no buckets).
+    """
+    reg = registry or metrics_registry
+    data = reg.export_dict()
+    lines = []
+    for m in data.get("metrics", []):
+        name = m.get("name")
+        mtype = m.get("type")
+        # HELP / TYPE headers (optional)
+        lines.append(f"# TYPE {name} {mtype}")
+        # Samples
+        samples = m.get("samples", [])
+        if mtype in ("counter", "gauge"):
+            for s in samples:
+                labels = s.get("labels") or {}
+                value = s.get("value", 0)
+                lines.append(f"{name}{_format_labels(labels)} {value}")
+        elif mtype == "histogram":
+            # Export as summary-like: _count and _sum
+            for s in samples:
+                labels = s.get("labels") or {}
+                stats = s.get("stats") or {}
+                count = stats.get("count", 0)
+                _sum = stats.get("sum", 0.0)
+                lines.append(f"{name}_count{_format_labels(labels)} {count}")
+                lines.append(f"{name}_sum{_format_labels(labels)} {_sum}")
+    return "\n".join(lines) + "\n"
+
+
 # Global registry instance
 metrics_registry = MetricsRegistry()
 

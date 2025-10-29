@@ -1,12 +1,239 @@
 # Covina Project - Copilot Todo List
 
-**Letzte Aktualisierung:** 28. Oktober 2025  
+**Letzte Aktualisierung:** 29. Oktober 2025  
 **Projekt:** Covina Document Management System  
-**Status:** Production Hardening Implementation
+**Status:** Legal Knowledge Graph Enhancement
 
 ---
 
-## 🎯 Aktuelle Priorität: Production Hardening (24/7-Fähigkeit)
+## 🧩 Optionale Schritte (Nice-to-have)
+
+Diese Schritte sind nicht kritisch für die Kernfunktionalität, erhöhen aber Developer Experience, Sicherheit und Observability.
+
+- Dependency Injection / Composition Root
+  - Leichter DI-Ansatz (Factory/Wiring), klare Boundaries zwischen Layers
+- Konfigurations-Loader (pydantic-settings)
+  - Typisierte Settings, .env/.yaml Support, Validierung; optional Hot-Reload
+- Middlewares
+  - CORS, GZip, Rate Limiting, Request ID, Structured Logging (JSON)
+- Observability
+  - Prometheus-Instrumentierung (fastapi-instrumentator), Tracing-Hooks, Request/Latency-Histogramme
+- Security
+  - JWT-Middleware (siehe `user/shared/jwt-middleware`), Scope-Checks für Endpunkte
+- Robustheit
+  - Request Size Limits, Server-/DB-Timeouts, Retries mit Backoff
+- Background Processing
+  - Optional: Task-Queue (RQ/Celery) für schwere Jobs, dedizierte Worker
+- Packaging & Deployment
+  - Dockerfile für ingestion_server, docker-compose Service, Healthchecks
+- CI/CD
+  - Lint/Typecheck/Test Pipelines, Contract Tests (API + Konfig-Schemas)
+- API UX
+  - Versionierte Routen (/v1), erweiterte OpenAPI-Docs, Beispiel-Payloads
+
+---
+
+## 🎯 Neue Priorität: Legal Domain Knowledge Graph (Neo4j Schema Enhancement)
+
+### Problem Analysis (29.10.2025)
+**Aktuelle Neo4j Struktur (161k Nodes, 19k Rels):**
+- ✅ Generische Struktur: Document, DocumentChunk, Classification
+- ❌ **Fehlende Domänen-Ontologie:** Keine Rechtsgebiets-Hierarchie
+- ❌ **Fehlende Legal Entities:** Immissionsschutz, Bau, Wasser, Bildung als Properties statt Nodes
+- ❌ **Flache Taxonomie:** Keine semantische Rechtsgebiet-Taxonomie (Öffentliches Recht → Baurecht → BImSchG)
+- ❌ **Fehlende Jurisdictions:** Keine Bund/Land/Kommune Trennung
+
+**Best Practice (aus Recherche):**
+- ✅ **Legal Concept Nodes:** Rechtsgebiete, Rechtsbegriffe, Normen als First-Class Entities
+- ✅ **Jurisdiktions-Hierarchie:** Bund → Land → Kreis → Kommune
+- ✅ **Legal Domain Taxonomy:** Öffentliches Recht → Verwaltungsrecht → Baurecht → BImSchG
+- ✅ **Authority Nodes:** Behörden mit Zuständigkeiten (Bauamt, Wasserbehörde, Bildungsamt)
+- ✅ **Semantic Relationships:** REGULATES, SUPERVISED_BY, REQUIRES_PERMIT, APPLIES_TO
+
+### Ziel: Production-Grade Legal Knowledge Graph
+**Rating:** Aktuell 2.5/5 → Ziel 5.0/5 ⭐⭐⭐⭐⭐
+
+---
+
+## 🚧 Konkrete Schritte: Legal KG + NLP/LLM Extraction (aligned mit docs/ Philosophie)
+
+Leitplanken (aus unseren docs/):
+- UDS3 verwaltet DB-Verbindungen und Credentials; Ingestion spezifiziert nur aktivierte Backends und liefert pro-Backend Resultate zurück.
+- Graph-first für fachliche Semantik; keine unkontrollierte Erweiterung des relationalen Schemas mit domänenspezifischen Feldern. Für Analytics nutzen wir eine schlanke, normalisierte Fakt/Dimensons-Schicht in PostgreSQL (siehe Hybrid-Analytics unten).
+- Feature Flags nutzen für schrittweise Aktivierung (Default: aus), sichere Fallbacks ohne LLM-Abhängigkeit.
+- Batch- und Streaming-Patterns beibehalten; Idempotenz und Upserts wo möglich.
+- Polyglot-Persistenz: 
+  - Relational (PostgreSQL) = Aggregationen/Analytics (Facts/Dimensions)
+  - Graph (Neo4j) = Semantik/Beziehungen/Multi-Hop-Fragen
+  - Vektor (ChromaDB) = semantische Suche/Ähnlichkeit
+  - Dokument (CouchDB) = Vollinhalte/Provenienz
+- Multi-Hop-Reasoning first-class: Abfragen/Inference über Pfade (z.B. Document→Concept→Norm→Authority→Jurisdiction) mit Erklärbarkeit (Pfad-Trace) und Caching.
+
+### Phase L1 – Foundations & Seeding (Woche 1)
+- [ ] ingestion/graph/legal_domain_taxonomy.py
+  - Aufgabe: `ingestion/data/legal_domains_seed.json` einlesen und `(:LegalDomain {id})` upserten; `(:LegalDomain)-[:SUBDOMAIN_OF]->(:LegalDomain)` erzeugen.
+  - Akzeptanzkriterien:
+    - Seed erzeugt exakt die im JSON definierte Anzahl Nodes/Edges (siehe metadata.total_domains).
+    - Idempotent: Mehrfachausführung ändert Counts nicht.
+  - Tests: `tests/graph/test_legal_domain_taxonomy.py` (Counts, Parent-Chain, Idempotenz).
+
+- [ ] Graph-Indices anlegen
+  - Datei: `ingestion/graph/setup_indices.py` (oder `scripts/neo4j_setup_legal_graph.ps1`)
+  - Indizes: `LegalDomain(id,tier)`, `LegalConcept(id)`, `Jurisdiction(id,ags)`, `Authority(id)`, Fulltext für `LegalConcept(name,definition,keywords)`.
+  - Tests: `tests/graph/test_indices_exist.py` (Cypher SHOW-Validierung).
+
+### Phase L2 – Extraction Tier 1 (Regex) + Graph Writer (Woche 1)
+- [ ] ingestion/nlp/legal_entity_extractor.py
+  - Aufgabe: TIER-1 Regex-Extraktion für Aktenzeichen, ECLI, §-Normen, Datumsangaben, Gesetzesabkürzungen.
+  - Akzeptanzkriterien: 20+ Unit-Tests in `tests/nlp/test_legal_entity_extractor.py`; Präzision >= 95% bei Mustern.
+  - Flags: `ENABLE_SPACY_NER=false` standardmäßig, nur Regex aktiv.
+
+- [ ] ingestion/graph/entity_graph_writer.py
+  - Aufgabe: Upserts für `(:LegalConcept|:Authority|:Jurisdiction|:LegalNorm)` und Kanten `MENTIONS_CONCEPT`, `CITES_NORM`, `ISSUED_BY`, `APPLIES_TO`.
+  - Integration: Neo4j via UDS3 (Driver/Wrapper), keine Direkt-Creds im Ingestion-Code.
+  - Tests: `tests/graph/test_entity_graph_writer.py` (Upsert, Edge-Erstellung, Idempotenz).
+
+- [ ] Pipeline-Wiring (Feature Flag)
+  - Ort: `backend/ingestion.py` → `process_document_with_uds3()`
+  - Flag: `ENABLE_LEGAL_GRAPH_NLP` (Default: false). Bei true: Text → Extractor → GraphWriter; sonst NOOP.
+  - Akzeptanz: Smoke-Test `tests/ingestion/test_pipeline_legal_graph.py` (Flag an/aus, keine Exceptions, Graph-Write gezählt).
+
+### Phase LA – Relationale Analytics (Hybrid, parallel zu L2/L3)
+- [ ] Analytics-Spezifikation (Hybrid)
+  - Ziel: Schnelle Zähl-/Trendabfragen ohne harte Fach-Felder im Kernschema.
+  - Schema (PostgreSQL):
+    - Fakten: `legal_stats_daily(document_count, law_count, norm_count, concept_count, domain_id, concept_id, jurisdiction_id, authority_id, date_bucket)`
+    - Snapshots: `legal_stats_snapshot(...)` für Stichtage.
+    - Dimensionen: `dim_domain(id,name,tier)`, `dim_concept(id,name,category)`, `dim_jurisdiction(id,ags,name,level)`, `dim_authority(id,name,level,type)`, `dim_law(id,code,name)` / `dim_norm(id,law_id,paragraph)`.
+  - Quelle: Neo4j (Graph) → Aggregation → Postgres Upsert.
+  - DoD: ER-Diagramm, Migrationsskript, Indizes definiert.
+
+- [ ] Graph→Relational Sync Job
+  - Datei: `ingestion/analytics/graph_to_relational_sync.py`
+  - Funktion: Führt definierte Neo4j-Queries aus (z.B. „Normen pro Jurisdiktion/Domain“), schreibt Aggregationen idempotent in Fakten-Tabellen (UPSERT, Partitions/Date-Buckets).
+  - Flag: `ENABLE_GRAPH_ANALYTICS_SYNC` (Default: false). Planbar (Cron/Task Scheduler), manueller Trigger per CLI.
+  - Tests: Mini-Graph-Seeds → Counts in Postgres entsprechen Neo4j-Queries.
+
+- [ ] Materialized Views & Indizes
+  - MV: `mv_laws_per_domain`, `mv_norms_per_jurisdiction`, `mv_docs_per_concept` + passende Indizes.
+  - Refresh-Strategie: on-demand + nightly; Skript `scripts/refresh_analytics.ps1`.
+  - Tests: Abfragen performant (<100ms bei Testdaten), Aktualität nach Refresh.
+
+### Phase L3 – spaCy NER (optional, Woche 2)
+- [ ] spaCy in Extractor integrieren
+  - Flag: `ENABLE_SPACY_NER` (Default: false). Modell lazy laden; wenn Modell fehlt → graceful fallback.
+  - Tests: Markierte Tests mit `@pytest.mark.spacy` und Skip, wenn Modell nicht vorhanden.
+  - Performance: P95 < 300ms gesamt (Regex + spaCy) bei 2k Zeichen.
+
+### Phase L4 – LLM Concept Extractor (optional, Woche 2)
+- [ ] ingestion/nlp/legal_concept_extractor.py (Skeleton)
+  - Provider-Hooks: local (Ollama) und cloud (OpenAI/Anthropic) – per Config.
+  - Flag: `ENABLE_LLM_EXTRACTION` (Default: false). Keine Default-Abhängigkeit in requirements.
+  - Tests: Stub-Response Parsing, Confidence-Thresholding, Whitelist-Validation gegen Seed-Konzeptliste.
+
+### Phase LR – Reasoning & Config-Driven Extraction (laufend)
+- [ ] Konfigurationsgetriebene Extraktion (YAML/JSON)
+  - Dateien:
+    - `ingestion/config/extraction_rules.yaml` (Entitäten, Regex, Kontextfenster, Normalisierung)
+    - `ingestion/config/concept_synonyms.json` (Synonyme/Aliasse/Canonical Names)
+    - `ingestion/config/patterns/*.yaml` (domänenspezifische Muster-Packs)
+  - Validierung: JSON-Schema unter `ingestion/config/schemas/extraction_rules.schema.json`
+  - Hot-Reload: Optionaler Watcher (Flag `ENABLE_CONFIG_HOT_RELOAD`)
+  - Tests: Schema-Validierung, Fallback auf Defaults, Hot-Reload ohne Prozessneustart.
+
+- [ ] Multi-Hop-Reasoner
+  - Datei: `ingestion/reasoning/multi_hop_reasoner.py`
+  - Funktion: Pfadsuche (BFS/Heuristik) über Neo4j mit begrenzter Tiefe, Rückgabe inkl. Pfad-Trace und Scores; Query-Caching.
+  - Query-Templates in YAML: `ingestion/queries/graph_queries.yaml` (z.B. „zuständige Behörde für Konzept X in Jurisdiktion Y“)
+  - Tests: deterministische Pfade auf Seed-Graph, Timeouts, Max-Hops, Caching-Treffer.
+
+- [ ] Automatisierter Feedback-Loop (LLM-gesteuert)
+  - Komponenten:
+    - `ingestion/learning/config_feedback.py` (Collector & Scoring)
+    - `ingestion/learning/llm_config_editor.py` (LLM erzeugt YAML/JSON-Diffs)
+    - `ingestion/learning/policies.yaml` (Guardrails: erlaubte Felder, Change-Budget, Rate-Limits, Confidence-Thresholds)
+  - Ablauf (vollautomatisch, aber abgesichert):
+    1) Unbekannte Muster sammeln → Kandidaten-Set (Top-N, Score-basiert)
+    2) LLM erzeugt minimale Diffs (Add/Update), referenziert Beispiele & Quellenstellen
+    3) Validierung: JSON-Schema, statische Regeln (Policies), Dry-Run-Extraktion auf Sample-Korpus
+    4) Bei Erfolg: Signierter Diff → Auto-Commit nach `ingestion/config/active/` oder PR in „shadow“-Modus
+    5) Hot-Reload (falls aktiviert); Monitoring startet Canary und Drift-Checks
+  - Betriebsmodi: `AUTO_CONFIG_MODE=shadow|enforced` (shadow = nur simulieren & loggen)
+  - Rollback: Automatisch bei Anomalien (Error-Rate, Drift), Versionierung der letzten N Config-Stände.
+  - Tests: End-to-End auf Mini-Korpus (Collector → LLM-Diff → Validierung → Apply → Erfolgskriterien), Negativfälle mit Block durch Policies.
+
+- [ ] Unbekannte-Muster-Collector
+  - Logging von nicht erkannten Paragraph-/Norm-/Konzept-Mentions mit Häufigkeiten; opt-in Sampling, PII-safe.
+  - Export als CSV/JSON für kuratierte Aufnahme in die YAML/JSON.
+
+### Phase L5 – Migration & Backfill (Woche 3)
+- [ ] ingestion/graph/document_migration.py
+  - Aufgabe: Bestehende ~161k Dokumente in Batches (z.B. 1000) re-linken: `Document → LegalDomain/Concept/Jurisdiction/Authority`.
+  - Anforderungen: Resumierbar (Checkpointing), Rate-Limit, Dry-Run, Progress-Logs, Fehler-CSV.
+  - Tests: Batch-Gruppierung, Resume-Logik, Dry-Run ohne Writes.
+
+### Phase L6 – Queries & API (Woche 3)
+- [x] backend/queries/legal_graph_queries.py
+  - Implementiert (Router-Prefix: `/legal-graph`):
+    - GET /legal-graph/documents-by-domain
+    - GET /legal-graph/concepts-by-jurisdiction
+    - GET /legal-graph/authorities
+    - GET /legal-graph/health
+  - Tests: `tests/api/test_legal_graph_queries.py` (20/20 PASS)
+  - Hinweis: Endpunktnamen leicht abweichend von ursprünglichem Plan, funktional identisch (Pagination, Filter, UDS3-Adapter, DI/Mocks)
+
+- [ ] backend/queries/legal_analytics_queries.py
+  - Endpunkte (PostgreSQL basiert):
+    - GET /analytics/laws-per-domain?from=...&to=...
+    - GET /analytics/norms-per-jurisdiction?jurisdiction_id=...
+    - GET /analytics/docs-per-concept?domain_id=...
+  - Anforderungen: Pagination, Datumsfilter, Caching optional.
+  - Tests: Deterministische Counts gegen Seed-Datensatz.
+
+### Phase L7 – Observability & Quality Gates (laufend)
+- [ ] Metriken & Logging (IN PROGRESS)
+  - Ziel: Legal NLP-Pfad instrumentieren (Extraction & Graph Writes)
+  - Metriken:
+    - Counter `legal_nlp_extractions_total{status}` (success|error)
+    - Histogram `legal_nlp_extraction_seconds{stage}` (extract|write)
+    - Counter `legal_entities_extracted_total{kind}` (concept|norm|authority|jurisdiction|ecli|aktenzeichen|date|law)
+    - Counter `legal_graph_upserts_total{type,status}` (node|relation × success|failed)
+  - Endpunkte:
+    - /ingestion/health: aggregierte Kennzahlen (extractions, entities, p95)
+    - /ingestion/metrics: Rohdaten (JSON aus `utils.metrics`)
+  - Logging: JSON-Logs (correlation_id, keine PII, nur Counts & Latenzen)
+  - Quality Gates: Build/Lint/Tests = PASS vor Merge.
+
+  Teilstatus (29.10.2025):
+  - [x] `/ingestion/metrics` implementiert (JSON-Export der Registry)
+  - [x] `/ingestion/health` erweitert (extractions_total/success/error)
+  - [x] JSON-Logging + Correlation-ID Middleware im Ingestion-Server aktiv
+  - [x] Legal NLP Metrikmodul (`ingestion/observability/legal_nlp_metrics.py`) mit Countern/Histogrammen
+  - [x] EntityGraphWriter mit Graph-Write-Metriken instrumentiert (Nodes/Relations: success/failed)
+  - [ ] Graph-Write Counters im produktiven GraphWriter verdrahten (aktuell NoopGraphWriter)
+
+### Konfiguration & Flags (docs/ Philosophie)
+- [ ] config.py + .env.production
+  - `ENABLE_LEGAL_GRAPH_NLP=false`
+  - `ENABLE_SPACY_NER=false`
+  - `ENABLE_LLM_EXTRACTION=false`
+  - `ENABLE_GRAPH_ANALYTICS_SYNC=false`
+  - `ENABLE_CONFIG_HOT_RELOAD=false`
+  - `ENABLE_AUTO_CONFIG_ADAPTATION=false`
+  - `AUTO_CONFIG_MODE=shadow`
+  - `AUTO_CONFIG_MAX_CHANGESET=5`
+  - `AUTO_CONFIG_MIN_CONFIDENCE=0.85`
+  - `AUTO_CONFIG_REQUIRE_TESTS=true`
+  - Neo4j/UDS3: Nutzung bestehender UDS3-Verbindungsverwaltung (keine neuen Secrets hier).
+
+### Akzeptanzkriterien (Definition of Done)
+- Graph-first: Fachliche Semantik im Graphen; Relationale Ebene nur als schlanke Analytics-Schicht (Fakten/Dimensionen) für schnelle Zähl-/Trendabfragen.
+- Feature-Flags: System läuft unverändert mit allen Flags = false; Aktivierung schrittweise möglich.
+- Tests: >= 80% für neue Module; Smoke-Tests für Pipeline; Indizes angelegt.
+- Performance: P95 < 300ms für Tier1+Tier2 (ohne LLM) auf 2k Zeichen; Graph-Upserts idempotent.
+- Auto-Config-Qualität: 0 Policy-Verstöße, 0 Schema-Fehler, Canary ohne Anomalien; automatische Rollbacks funktionieren.
+
+## 🎯 Vorherige Priorität: Production Hardening (24/7-Fähigkeit)
 
 ### Ziel
 Transformation des Ingestion Backends von Development zu Production-Grade System mit strukturierter Fehlerbehandlung, Worker Monitoring, Memory Management und Fault Tolerance.
