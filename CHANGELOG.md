@@ -439,10 +439,10 @@ python debug_ui_layout.py
 
 ---
 
-## [2025-10-14] v4.0.1 - Bug Fixes: HomeDashboard, WebSocket, Fonts
+## [2025-02-14] v4.0.1 - Bug Fixes: HomeDashboard, WebSocket, Fonts
 
 **Version:** 4.0.1  
-**Date:** 14. Oktober 2025, 13:10 Uhr  
+**Date:** 14. Februar 2025, 13:10 Uhr  
 **Status:** Production Ready  
 **Rating:** 4.95/5 ⭐⭐⭐⭐⭐
 
@@ -477,10 +477,10 @@ python debug_ui_layout.py
 
 ---
 
-## [2025-10-14] v4.0.0 - Frontend Modernization COMPLETE! 🚀
+## [2025-01-14] v4.0.0 - Frontend Modernization COMPLETE! 🚀
 
 **Version:** 4.0.0  
-**Date:** 14. Oktober 2025, 12:00 Uhr  
+**Date:** 14. Januar 2025, 12:00 Uhr  
 **Status:** ✅ **PRODUCTION READY**  
 **Rating:** 4.9/5 ⭐⭐⭐⭐⭐
 
@@ -654,12 +654,12 @@ Total: 9,600+ lines
 - Regressionstests (`tests/test_saga_orchestrator.py`) prüfen, dass neue Spalten gefüllt werden; vorhandene Observability-Tests (`tests/test_saga_crud.py`) laufen weiter grün.
 - Management-Kern Roadmap (Kap. 9.1–9.4) veröffentlicht: Zeitplan KW39–46, priorisierte Arbeitspakete, Risiko-Matrix und Reporting-Guidelines in `docs/UDS3_VERWALTUNGSARCHITEKTUR.md` ergänzt.
 
-## [2025-09-28] Governance-taugliche Observability-Fahnen
+## [2025-03-28] Governance-taugliche Observability-Fahnen
 - `SagaDatabaseCRUD` markiert Governance-Verstöße explizit (`governance_blocked`) und schreibt neue Identitäts-Metriken (`*.attempt`, `*.success`, `*.error`, `*.governance_blocked`, `*.duration_ms`).
 - Trace-Status unterscheidet jetzt `success`, `error` und `governance_blocked`, sodass Dashboards Policy-Verletzungen separat auswerten können.
 - Tests (`tests/test_saga_crud.py`) decken Happy Path, Fehlerpfade sowie Governance-Blocks ab und schützen das erweiterte Schema (`administrative_identity_metrics`, `administrative_identity_traces`).
 
-## [2025-09-25] Phase 2 – Metadata & Quality Integration
+## [2025-01-25] Phase 2 – Metadata & Quality Integration
 - Neue Handler `MetadataAggregationHandler` und `QualityVerificationHandler` fassen Chunk-/Datei-Informationen zu Dokumentprofilen zusammen und bewerten deren Qualität.
 - Orchestrator-Payloads, Snapshots und Persistenz speichern Dokumentprofile (`metadata_profiles`) und Quality-Reports (`quality_reports`) inklusive Zeitstempel.
 - JSON-Pipelines (`uds3_core_pipeline.json`, `enhanced_document_processing.json`) um Metadata- und Quality-Stufen erweitert.
