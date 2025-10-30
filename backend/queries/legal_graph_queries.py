@@ -97,6 +97,32 @@ class QueryResult(BaseModel):
     items: List[Any] = Field(..., description="Result items")
 
 
+class DomainSummary(BaseModel):
+    """Legal domain summary"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str = Field(..., description="Domain ID")
+    name: str = Field(..., description="Domain name")
+    tier: int = Field(..., ge=1, le=3, description="Tier level (1..3)")
+    parent_id: Optional[str] = Field(None, description="Parent domain ID")
+
+
+class DomainPath(BaseModel):
+    """Root path for a domain (child -> ... -> root)"""
+
+    nodes: List[DomainSummary] = Field(..., description="Path nodes from child to root")
+
+
+class SearchConceptResult(BaseModel):
+    """Search result for concept search"""
+
+    concept_id: str
+    name: str
+    domain: Optional[str] = None
+    score: float = Field(ge=0)
+
+
 # ============================================================================
 # Query Service (Business Logic)
 # ============================================================================
@@ -120,6 +146,155 @@ class LegalGraphQueryService:
         if self._graph_adapter is None:
             self._graph_adapter = self.gateway.get_graph_adapter()
         return self._graph_adapter
+
+    # ------------------------------------------------------------
+    # Phase L3: Domain listing, hierarchy and search
+    # ------------------------------------------------------------
+    def list_domains_by_tier(self, tier: int) -> List[DomainSummary]:
+        """List legal domains of a given tier."""
+        try:
+            adapter = self._get_graph_adapter()
+            results = adapter.execute_query(
+                """
+                MATCH (d:LegalDomain {tier: $tier})
+                OPTIONAL MATCH (d)-[:SUBDOMAIN_OF]->(p:LegalDomain)
+                RETURN d.id AS id, d.name AS name, d.tier AS tier, p.id AS parent_id
+                ORDER BY name ASC
+                """,
+                {"tier": tier},
+            )
+            return [
+                DomainSummary(
+                    id=r["id"], name=r["name"], tier=r["tier"], parent_id=r.get("parent_id")
+                )
+                for r in results
+            ]
+        except Exception as e:
+            logger.error(f"[ERROR] list_domains_by_tier failed: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to list domains: {str(e)}")
+
+    def get_domain_children(self, domain_id: str) -> List[DomainSummary]:
+        """Get direct child domains for a given domain id."""
+        try:
+            adapter = self._get_graph_adapter()
+            results = adapter.execute_query(
+                """
+                MATCH (p:LegalDomain {id: $id})<-[:SUBDOMAIN_OF]-(c:LegalDomain)
+                RETURN c.id AS id, c.name AS name, c.tier AS tier, p.id AS parent_id
+                ORDER BY name ASC
+                """,
+                {"id": domain_id},
+            )
+            return [
+                DomainSummary(
+                    id=r["id"], name=r["name"], tier=r["tier"], parent_id=r.get("parent_id")
+                )
+                for r in results
+            ]
+        except Exception as e:
+            logger.error(f"[ERROR] get_domain_children failed: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to get children: {str(e)}")
+
+    def get_domain_path(self, domain_id: str) -> DomainPath:
+        """Get path from domain to root (child -> ... -> root)."""
+        try:
+            adapter = self._get_graph_adapter()
+            # Longest path towards a root (node without outgoing SUBDOMAIN_OF)
+            results = adapter.execute_query(
+                """
+                MATCH p = (d:LegalDomain {id: $id})-[:SUBDOMAIN_OF*]->(root:LegalDomain)
+                WHERE NOT (root)-[:SUBDOMAIN_OF]->()
+                WITH p ORDER BY length(p) DESC LIMIT 1
+                RETURN [n IN nodes(p) | {id: n.id, name: n.name, tier: n.tier} ] AS path
+                """,
+                {"id": domain_id},
+            )
+            path_nodes = results[0]["path"] if results else []
+            return DomainPath(
+                nodes=[
+                    DomainSummary(
+                        id=n["id"], name=n["name"], tier=n["tier"], parent_id=None
+                    )
+                    for n in path_nodes
+                ]
+            )
+        except Exception as e:
+            logger.error(f"[ERROR] get_domain_path failed: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to get path: {str(e)}")
+
+    def search_concepts(
+        self, keyword: str, pagination: PaginationParams
+    ) -> QueryResult:
+        """Fulltext search for legal concepts using index if available."""
+        try:
+            adapter = self._get_graph_adapter()
+
+            # Try fulltext index first
+            data_query_fulltext = """
+            CALL db.index.fulltext.queryNodes('legal_concept_search', $q)
+            YIELD node, score
+            RETURN node.concept_id AS concept_id, node.name AS name, node.domain AS domain, score
+            ORDER BY score DESC
+            SKIP $skip
+            LIMIT $limit
+            """
+            count_query_fulltext = """
+            CALL db.index.fulltext.queryNodes('legal_concept_search', $q)
+            YIELD node, score
+            RETURN count(node) AS total
+            """
+            params = {"q": keyword, "skip": pagination.skip, "limit": pagination.limit}
+
+            try:
+                count_res = adapter.execute_query(count_query_fulltext, params)
+                total_count = count_res[0]["total"] if count_res else 0
+                data_res = adapter.execute_query(data_query_fulltext, params)
+            except Exception:
+                # Fallback: simple CONTAINS search
+                count_res = adapter.execute_query(
+                    """
+                    MATCH (c:LegalConcept)
+                    WHERE toLower(c.name) CONTAINS toLower($q)
+                       OR toLower(c.definition) CONTAINS toLower($q)
+                       OR any(k IN c.keywords WHERE toLower(k) CONTAINS toLower($q))
+                    RETURN count(c) AS total
+                    """,
+                    params,
+                )
+                total_count = count_res[0]["total"] if count_res else 0
+
+                data_res = adapter.execute_query(
+                    """
+                    MATCH (c:LegalConcept)
+                    WHERE toLower(c.name) CONTAINS toLower($q)
+                       OR toLower(c.definition) CONTAINS toLower($q)
+                       OR any(k IN c.keywords WHERE toLower(k) CONTAINS toLower($q))
+                    RETURN c.concept_id AS concept_id, c.name AS name, c.domain AS domain, 1.0 AS score
+                    ORDER BY name ASC
+                    SKIP $skip
+                    LIMIT $limit
+                    """,
+                    params,
+                )
+
+            items = [
+                SearchConceptResult(
+                    concept_id=r["concept_id"], name=r["name"], domain=r.get("domain"), score=float(r.get("score", 0.0))
+                )
+                for r in data_res
+            ]
+
+            total_pages = (total_count + pagination.page_size - 1) // pagination.page_size
+            return QueryResult(
+                total_count=total_count,
+                page=pagination.page,
+                page_size=pagination.page_size,
+                total_pages=total_pages,
+                items=items,
+            )
+        except Exception as e:
+            logger.error(f"[ERROR] search_concepts failed: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to search concepts: {str(e)}")
 
     def get_documents_by_domain(
         self,
@@ -512,6 +687,55 @@ def get_authorities(
     """Get legal authorities with optional filters"""
     pagination = PaginationParams(page=page, page_size=page_size)
     return service.get_authorities(jurisdiction, authority_type, pagination)
+
+
+@router.get(
+    "/domains",
+    response_model=List[DomainSummary],
+    summary="List legal domains by tier",
+)
+def list_domains(
+    tier: int = Query(..., ge=1, le=3, description="Tier level (1..3)"),
+    service: LegalGraphQueryService = Depends(get_query_service),
+) -> List[DomainSummary]:
+    return service.list_domains_by_tier(tier)
+
+
+@router.get(
+    "/domain/{domain_id}/children",
+    response_model=List[DomainSummary],
+    summary="Get child domains for a given domain",
+)
+def get_children(
+    domain_id: str, service: LegalGraphQueryService = Depends(get_query_service)
+) -> List[DomainSummary]:
+    return service.get_domain_children(domain_id)
+
+
+@router.get(
+    "/domain/{domain_id}/path",
+    response_model=DomainPath,
+    summary="Get domain path to root",
+)
+def get_path(
+    domain_id: str, service: LegalGraphQueryService = Depends(get_query_service)
+) -> DomainPath:
+    return service.get_domain_path(domain_id)
+
+
+@router.get(
+    "/search",
+    response_model=QueryResult,
+    summary="Search legal concepts by keyword",
+)
+def search_concepts(
+    keyword: str = Query(..., min_length=2, description="Search keyword"),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+    service: LegalGraphQueryService = Depends(get_query_service),
+) -> QueryResult:
+    pagination = PaginationParams(page=page, page_size=page_size)
+    return service.search_concepts(keyword, pagination)
 
 
 # ============================================================================

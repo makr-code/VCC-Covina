@@ -9,6 +9,7 @@ dist/
 *.egg-info/
 venv/
 env/
+*.bak
 
 # IDE
 .vscode/

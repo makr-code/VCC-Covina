@@ -20,35 +20,17 @@ class UDS3Gateway:
 
         # Import hier, um harte Abhängigkeit beim Importieren zu vermeiden
         try:
-            from uds3.database.config import DatabaseManager, DatabaseType
-            from uds3.database.database_api_neo4j import Neo4jGraphBackend
+            from uds3.database.database_manager import DatabaseManager
         except Exception as e:  # pragma: no cover - harte Importfehler klar melden
             raise RuntimeError(f"UDS3 nicht verfügbar oder fehlerhaft installiert: {e}")
 
-        manager = DatabaseManager()
-        # Suche Graph-DB Konfiguration
-        graph_cfg = None
-        for db in manager.databases:
-            if db.db_type.name.lower() == DatabaseType.GRAPH.value:
-                graph_cfg = db
-                break
-        if graph_cfg is None:
-            raise RuntimeError("Keine Graph-Datenbank in UDS3-Konfiguration gefunden")
+        # Starte nur Graph-Backend über den UDS3 DatabaseManager
+        manager = DatabaseManager({'graph': {'enabled': True}}, autostart=True)
+        adapter = getattr(manager, 'graph_backend', None)
+        if not adapter:
+            raise RuntimeError("Graph-Backend nicht verfügbar (UDS3 DatabaseManager hat kein graph_backend)")
 
-        # Neo4j-Backend mit UDS3-Config initialisieren
-        backend_cfg = {
-            'host': graph_cfg.host,
-            'port': graph_cfg.port,
-            'user': graph_cfg.username,
-            'password': graph_cfg.password,
-            'database': graph_cfg.database,
-            'uri': graph_cfg.get_connection_string().replace('bolt://', 'neo4j://'),
-            'settings': graph_cfg.settings or {},
-        }
-
-        adapter = Neo4jGraphBackend(backend_cfg)
-        adapter.connect()  # Soft-connect: Adapter handhabt Fallbacks/Retry
-
+        # Adapter ist bereits verbunden (manager.autostart=True sorgt für Connect)
         self._graph_adapter = adapter
         return self._graph_adapter
 

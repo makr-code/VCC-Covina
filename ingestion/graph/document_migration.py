@@ -173,24 +173,24 @@ class DocumentMigrationJob:
 
             # Build query with optional LIMIT and resume support
             query = """
-            SELECT id, file_path, classification, content_length, created_at
+            SELECT document_id, file_path, classification, content_length, created_at
             FROM documents
             """
 
             # Resume from last processed ID
             params = {}
             if self.state.last_processed_id:
-                query += " WHERE id > %(last_id)s"
+                query += " WHERE document_id > %(last_id)s"
                 params["last_id"] = self.state.last_processed_id
 
-            query += " ORDER BY id ASC"
+            query += " ORDER BY document_id ASC"
 
             if limit:
                 query += f" LIMIT {limit}"
 
             # Execute query (sync backend)
             def _execute():
-                return backend.execute_query(query, params)
+                return backend.execute_query(query, params, fetch=True)
 
             result = await asyncio.to_thread(_execute)
 
@@ -254,7 +254,7 @@ class DocumentMigrationJob:
         Returns:
             Processing stats (entities_extracted, errors, skipped)
         """
-        document_id = doc_record.get("id")
+        document_id = doc_record.get("document_id")
         file_path = doc_record.get("file_path", "unknown")
 
         stats = {
