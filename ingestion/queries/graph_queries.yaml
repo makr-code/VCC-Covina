@@ -1,0 +1,10 @@
+# Cypher Query Templates for Multi-Hop Reasoner
+
+authority_for_concept: |
+  MATCH (c:LegalConcept {id: $id})-[:REFERENCES_AUTHORITY]->(a:Authority)
+  RETURN a.id AS id
+  LIMIT 1
+
+explain_relationship: |
+  MATCH p=shortestPath((a {id:$a})-[*..5]-(b {id:$b}))
+  RETURN p

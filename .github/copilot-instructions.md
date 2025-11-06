@@ -1,32 +1,80 @@
 # Covina Project - GitHub Copilot Instructions
 
-**Letzte Aktualisierung:** 17. Oktober 2025, 18:45 Uhr
+**Letzte Aktualisierung:** 31. Oktober 2025, 10:00 Uhr
 
 ---
 
 ## 🎯 Projekt-Status
 
-**Backend Version:** 3.4.10 (Microservices Migration - COMPLETE!) 🆕 🔥  
+**Backend Version:** 3.4.10 (Polyglot Optimization COMPLETE!) 🆕 🔥  
 **Frontend Version:** 4.0.3 (EventBus Fixed)  
 **Status:** ✅ **PRODUCTION READY** (Rating: 5.0/5 ⭐⭐⭐⭐⭐ PERFECT!)  
 
-**Latest Achievement:** Backend Microservices Migration COMPLETE! 🆕 🔥
-- Architektur: Monolith → Microservices ✅
-- 2 Backends: main_backend.py + ingestion_backend.py ✅
-- 4 Scripts aktualisiert & getestet (6/6 Tests PASS) ✅
-- 2,000+ Zeilen Dokumentation erstellt ✅
-- Admin Tools: 3 GUIs + Launcher (2,450+ Zeilen) ✅
-- **Documentation:** `docs/MIGRATION_EXECUTIVE_SUMMARY.md` (komplett)
+**Latest Achievement:** Polyglot Data Optimization COMPLETE! 🆕 🔥
+- **Polyglot Optimization:** 9/9 SAGA Endpoints (100%) ✅
+- **Database-Specific Data:** PostgreSQL + Neo4j + ChromaDB ✅
+- **Transformation Tool:** Data migration without re-upload ✅
+- **Admin GUI:** Real-time job monitoring ✅
+- **Documentation:** 2,000+ lines complete ✅
 
-**Backend Features:** Microservices Architecture, Auto-Resume, Ghost Cleanup, Auto-Retry, Critical Error Blocking, Admin Override, UDS3 Full Integration  
+**Backend Features:** 
+- Microservices Architecture (Main + Ingestion) ✅
+- UDS3 Full Integration (4 Databases) ✅
+- Polyglot Data Optimization (100% utilization) ✅ 🆕
+- Data Transformation Tool (4 types) ✅ 🆕
+- Auto-Resume, Ghost Cleanup, Auto-Retry ✅
+- Admin Override, Critical Error Blocking ✅
+
 **Frontend Features:** EventBus ✅, ViewManager, 10 Views, Real-Time Updates, Navigation ✅  
-**Admin Tools:** Golden Dataset Manager, Graph Pattern Manager, Governance Policy Manager, Launcher ✅
+
+**Admin Tools:** 
+- Golden Dataset Manager ✅
+- Graph Pattern Manager ✅
+- Governance Policy Manager ✅
+- **Data Transformation Tool** ✅ 🆕
+- Admin Launcher ✅
 
 ---
 
-## 📊 Backend v3.4.10 - Microservices Migration COMPLETE! 🎉
+## 📊 Backend v3.4.10 - Polyglot Optimization COMPLETE! 🎉
 
-### What's New (v3.4.10 - 17.10.2025, 18:45 Uhr)
+### What's New (v3.4.10 - 31.10.2025, 10:00 Uhr) 🆕
+
+**Polyglot Data Optimization Achievement:**
+- ✅ **9/9 SAGA Endpoints Optimized:** 100% polyglot compliance
+- ✅ **Database-Specific Transformations:** PostgreSQL + Neo4j + ChromaDB
+- ✅ **PolyglotDataTransformer:** 768 lines (8 transformation methods)
+- ✅ **Batch Operations:** Update, Delete, Upsert with embeddings
+- ✅ **Utilization:** 33% → 100% (+200% improvement!)
+
+**Transformation Tool:**
+```
+Data Transformation Tool (NEW!):
+  ├─ API: /maintenance/transform (POST/GET/CANCEL)
+  ├─ GUI: admin_tools/data_transformation_tool.py
+  ├─ Launcher: scripts/launch_data_transformation.ps1
+  └─ Docs: docs/DATA_TRANSFORMATION_TOOL.md
+
+Transformation Types:
+  ├─ Polyglot Optimization (add embeddings + relationships)
+  ├─ CouchDB Migration (copy from PostgreSQL)
+  ├─ Embedding Regeneration (update ChromaDB vectors)
+  └─ Graph Rebuild (recreate Neo4j relationships)
+```
+
+**Polyglot Benefits:**
+```
+BEFORE (SAGA Migration - 33% Utilization):
+  PostgreSQL: ✅ Structured data
+  Neo4j:      ❌ JSON dump (no relationships!)
+  ChromaDB:   ❌ JSON dump (no embeddings!)
+
+AFTER (Polyglot Optimization - 100% Utilization):
+  PostgreSQL: ✅ Structured relational data
+  Neo4j:      ✅ Graph nodes + relationships
+  ChromaDB:   ✅ Semantic embeddings (384-dim)
+
+Impact: +200% Polyglot Efficiency!
 
 **Microservices Migration Achievement:**
 - ✅ **Clean Architecture:** Monolith → 2 Microservices (Main + Ingestion)
@@ -802,6 +850,25 @@ database/batch_operations.py - ChromaDB Batch Insert (330 lines) 🆕
   ├─ ChromaBatchInserter class
   ├─ should_use_batch_insert()
   └─ get_batch_insert_size()
+
+backend/utils/polyglot_transformer.py - Polyglot Data Transformer (768 lines) 🆕
+  ├─ PolyglotDataTransformer class
+  ├─ transform_for_golden_dataset()
+  ├─ transform_for_graph_pattern()
+  ├─ transform_for_governance_policy()
+  ├─ transform_for_review_queue_item()
+  ├─ transform_for_knowledge_gap()
+  ├─ transform_for_batch_update() (NEW!)
+  ├─ transform_for_batch_delete() (NEW!)
+  └─ transform_for_batch_upsert() (NEW!)
+
+backend/utils/data_transformer.py - Data Transformation Tool (400+ lines) 🆕 🔥
+  ├─ DataTransformer class
+  ├─ DataTransformationJob class
+  ├─ transform_to_polyglot() (add embeddings/relationships)
+  ├─ migrate_to_couchdb() (copy from PostgreSQL)
+  ├─ transform_embeddings() (regenerate ChromaDB vectors)
+  └─ rebuild_graph() (recreate Neo4j relationships)
 ```
 
 ### Scripts

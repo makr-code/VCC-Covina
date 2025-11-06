@@ -196,6 +196,12 @@ def batch_extract(directory: str) -> List[Dict[str, Any]]:
         jsonl_fh = open(out_path, "w", encoding="utf-8")
 
     count = 0
+    # Optional limiter to keep smoke-runs fast
+    max_files_env = os.environ.get("NLP_MAX_FILES")
+    try:
+        max_files = int(max_files_env) if max_files_env else None
+    except ValueError:
+        max_files = None
     errors = 0
     try:
         for path in _iter_markdown_files(directory):
@@ -219,6 +225,10 @@ def batch_extract(directory: str) -> List[Dict[str, Any]]:
                 count += 1
                 if count % 100 == 0:
                     print(f"[NLP] Processed: {count} files (errors: {errors})")
+                # Respect limiter
+                if max_files and count >= max_files:
+                    print(f"[NLP] Limit reached via NLP_MAX_FILES={max_files}; stopping early.")
+                    break
             except Exception as e:
                 errors += 1
                 # Fehler pro Datei isolieren

@@ -34,6 +34,7 @@ import asyncio
 import json
 import logging
 import time
+import csv
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -94,6 +95,8 @@ class DocumentMigrationJob:
         delay: float = 0.5,
         dry_run: bool = False,
         state_file: Path = Path("data/migration_state.json"),
+        error_csv_path: Path = Path("data/migration_failed.csv"),
+        init_backends: bool = True,
     ):
         """
         Initialize migration job.
@@ -103,40 +106,53 @@ class DocumentMigrationJob:
             delay: Delay in seconds between batches (rate limiting)
             dry_run: If True, skip Neo4j writes (preview only)
             state_file: Path to migration state file
+            error_csv_path: Path to error logging CSV file
+            init_backends: If True, initialize backends
         """
         self.batch_size = batch_size
         self.delay = delay
         self.dry_run = dry_run
         self.state_file = state_file
+        self.error_csv_path = error_csv_path
         self.state = MigrationState.load(state_file)
 
-        # Initialize UDS3 DatabaseManager (backend orchestrator)
-        # Import from database.database_manager (correct path in Covina project)
-        from database.database_manager import DatabaseManager
-        
-        backend_config = {
-            'relational': {'enabled': True},  # PostgreSQL for documents
-            'file': {'enabled': True},        # CouchDB for content (optional)
-        }
-        if not dry_run:
-            backend_config['graph'] = {'enabled': True}  # Neo4j for graph writes
-        
-        logger.info(f"[INIT] Initializing UDS3 DatabaseManager (autostart=True)...")
-        self.db_manager = DatabaseManager(backend_config, autostart=True)
-        
-        # Log which backends are available
-        backends_status = []
-        if hasattr(self.db_manager, 'relational_backend') and self.db_manager.relational_backend:
-            backends_status.append("PostgreSQL")
-        if hasattr(self.db_manager, 'file_backend') and self.db_manager.file_backend:
-            backends_status.append("CouchDB")
-        if hasattr(self.db_manager, 'graph_backend') and self.db_manager.graph_backend:
-            backends_status.append("Neo4j")
-        logger.info(f"[BACKENDS] Available: {', '.join(backends_status) if backends_status else 'None'}")
+        # Initialize UDS3 DatabaseManager (backend orchestrator) only if desired
+        self.db_manager = None
+        self.extractor = LegalEntityExtractor()  # extractor available even without backends
+        self.writer = None
+        if init_backends:
+            try:
+                from database.database_manager import DatabaseManager
 
-        # Initialize extractor and writer
-        self.extractor = LegalEntityExtractor()
-        self.writer = None if dry_run else EntityGraphWriter()
+                backend_config = {
+                    'relational': {'enabled': True},  # PostgreSQL for documents
+                    'file': {'enabled': True},        # CouchDB for content (optional)
+                }
+                if not dry_run:
+                    backend_config['graph'] = {'enabled': True}  # Neo4j for graph writes
+
+                logger.info(f"[INIT] Initializing UDS3 DatabaseManager (autostart=True)...")
+                self.db_manager = DatabaseManager(backend_config, autostart=True)
+
+                # Log which backends are available
+                backends_status = []
+                if hasattr(self.db_manager, 'relational_backend') and self.db_manager.relational_backend:
+                    backends_status.append("PostgreSQL")
+                if hasattr(self.db_manager, 'file_backend') and self.db_manager.file_backend:
+                    backends_status.append("CouchDB")
+                if hasattr(self.db_manager, 'graph_backend') and self.db_manager.graph_backend:
+                    backends_status.append("Neo4j")
+                logger.info(f"[BACKENDS] Available: {', '.join(backends_status) if backends_status else 'None'}")
+
+            except Exception as e:
+                logger.warning(f"[INIT] Skipping UDS3 DatabaseManager initialization: {e}")
+
+        # Initialize writer only in non-dry-run mode and when backends are available
+        if not dry_run:
+            try:
+                self.writer = EntityGraphWriter()
+            except Exception as e:
+                logger.warning(f"[INIT] Could not initialize EntityGraphWriter: {e}")
 
         logger.info(f"[INIT] Migration Job initialized")
         logger.info(f"[CONFIG] Batch size: {batch_size}, Delay: {delay}s, Dry-run: {dry_run}")
@@ -148,8 +164,8 @@ class DocumentMigrationJob:
         Returns:
             Database connection object
         """
-        # Access relational_backend attribute directly
-        relational_backend = self.db_manager.relational_backend
+        # Access relational_backend attribute directly (if available)
+        relational_backend = getattr(self.db_manager, 'relational_backend', None) if self.db_manager else None
 
         if not relational_backend:
             raise RuntimeError("PostgreSQL backend not available in UDS3")
@@ -203,7 +219,14 @@ class DocumentMigrationJob:
                 records = []
 
             logger.info(f"[FETCH] Retrieved {len(records)} documents from PostgreSQL")
-            return [dict(r) for r in records] if records else []
+            docs = [dict(r) for r in records] if records else []
+            # Normalize keys to support tests: ensure both 'id' and 'document_id'
+            for d in docs:
+                if 'document_id' in d and 'id' not in d:
+                    d['id'] = d['document_id']
+                if 'id' in d and 'document_id' not in d:
+                    d['document_id'] = d['id']
+            return docs
 
         except Exception as e:
             logger.error(f"[ERROR] Failed to fetch documents: {e}")
@@ -221,7 +244,7 @@ class DocumentMigrationJob:
         """
         try:
             # Access file_backend attribute directly
-            document_backend = self.db_manager.file_backend
+            document_backend = getattr(self.db_manager, 'file_backend', None) if self.db_manager else None
 
             if not document_backend:
                 logger.warning(f"[WARN] CouchDB backend not available, skipping content fetch")
@@ -254,7 +277,7 @@ class DocumentMigrationJob:
         Returns:
             Processing stats (entities_extracted, errors, skipped)
         """
-        document_id = doc_record.get("document_id")
+        document_id = doc_record.get("document_id") or doc_record.get("id")
         file_path = doc_record.get("file_path", "unknown")
 
         stats = {
@@ -346,9 +369,28 @@ class DocumentMigrationJob:
 
         except Exception as e:
             logger.error(f"[ERROR] Failed to process {document_id}: {e}")
+            # Fehler-CSV protokollieren, aber Lauf nicht abbrechen
+            try:
+                self._append_error(document_id, e)
+            except Exception:
+                pass
             stats["errors"] += 1
 
         return stats
+
+    def _append_error(self, doc_id: str, error: Exception) -> None:
+        """Append error details to CSV, never raising exceptions."""
+        try:
+            self.error_csv_path.parent.mkdir(parents=True, exist_ok=True)
+            new_file = not self.error_csv_path.exists()
+            with open(self.error_csv_path, "a", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                if new_file:
+                    writer.writerow(["timestamp", "document_id", "error"])
+                writer.writerow([datetime.now().isoformat(), doc_id, str(error)])
+        except Exception:
+            # Never break migration due to logging issues
+            pass
 
     async def run(self, limit: Optional[int] = None) -> dict[str, Any]:
         """
@@ -504,3 +546,6 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+    
+    

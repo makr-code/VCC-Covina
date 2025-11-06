@@ -5,6 +5,10 @@ from fastapi import FastAPI
 from .router import router as ingestion_router
 from utils.json_logging import setup_json_logging, create_correlation_id_middleware
 from utils.pii_redaction import PIIRedactionFilter
+from ingestion.infrastructure.api.versioning import (
+    configure_api_versioning,
+    configure_openapi_metadata,
+)
 
 
 def get_app() -> FastAPI:
@@ -31,5 +35,19 @@ def get_app() -> FastAPI:
     except Exception:
         # Continue without middleware if unavailable
         pass
+    # OpenAPI metadata and API versioning (/v1 prefix)
+    try:
+        configure_openapi_metadata(
+            app,
+            title="Covina Ingestion Server",
+            version=os.getenv("COVINA_VERSION", "4.0.3"),
+            description="File ingestion, NLP extraction, and multi-DB persistence",
+        )
+        configure_api_versioning(app, prefix="/v1", add_docs_redirect=True)
+    except Exception:
+        # Safe fallback: continue without versioned docs if utilities unavailable
+        pass
+
+    # Routes
     app.include_router(ingestion_router, prefix="/ingestion", tags=["ingestion"])
     return app

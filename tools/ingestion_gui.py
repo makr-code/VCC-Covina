@@ -50,9 +50,70 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Configuration
-INGESTION_BACKEND_URL = "http://127.0.0.1:45679"
-WEBSOCKET_URL = "ws://127.0.0.1:45679/ws/jobs"
+# Configuration (client-side)
+# Base HTTP origin of the ingestion service (no trailing slash)
+INGESTION_BACKEND_URL = os.getenv("INGESTION_BACKEND_URL", "http://127.0.0.1:45679")
+
+# API prefix and base path for new microservice layout
+# New ingestion service exposes routes under "/ingestion" and also supports "/v1" via middleware
+API_VERSION_PREFIX = "/v1"   # set to "" to disable versioned calls
+INGESTION_BASE_PATH = "/ingestion"
+
+def _build_http_urls(*paths: str) -> list[str]:
+    """Build candidate HTTP URLs by combining base URL with provided paths.
+
+    The first entries should prefer versioned variants; later entries cover legacy paths.
+    """
+    urls: list[str] = []
+    base = INGESTION_BACKEND_URL.rstrip("/")
+    for p in paths:
+        if not p.startswith("/"):
+            p = "/" + p
+        urls.append(base + p)
+    return urls
+
+def _build_ws_urls(*paths: str) -> list[str]:
+    base_http = INGESTION_BACKEND_URL.rstrip("/")
+    # derive ws scheme from http/https
+    if base_http.startswith("https://"):
+        ws_origin = "wss://" + base_http[len("https://"):]
+    elif base_http.startswith("http://"):
+        ws_origin = "ws://" + base_http[len("http://"):]
+    else:
+        ws_origin = "ws://" + base_http
+    urls: list[str] = []
+    for p in paths:
+        if not p.startswith("/"):
+            p = "/" + p
+        urls.append(ws_origin + p)
+    return urls
+
+# Candidate endpoints (ordered by preference)
+HEALTH_ENDPOINTS = [
+    f"{API_VERSION_PREFIX}{INGESTION_BASE_PATH}/health",
+    f"{INGESTION_BASE_PATH}/health",
+    "/health",  # legacy
+]
+
+CAPABILITIES_ENDPOINTS = [
+    f"{API_VERSION_PREFIX}{INGESTION_BASE_PATH}/capabilities/supported-filetypes",
+    f"{INGESTION_BASE_PATH}/capabilities/supported-filetypes",
+    "/capabilities/supported-filetypes",  # legacy
+]
+
+UPLOAD_ENDPOINTS = [
+    f"{API_VERSION_PREFIX}{INGESTION_BASE_PATH}/upload/files",  # new preferred
+    f"{INGESTION_BASE_PATH}/upload/files",
+    f"{API_VERSION_PREFIX}/upload/files",  # legacy layout with version prefix
+    "/upload/files",  # legacy
+]
+
+WS_JOB_ENDPOINTS = [
+    f"{API_VERSION_PREFIX}/ws/jobs",
+    "/ws/jobs",
+    f"{API_VERSION_PREFIX}{INGESTION_BASE_PATH}/ws/jobs",
+    f"{INGESTION_BASE_PATH}/ws/jobs",
+]
 
 # Supported file extensions
 SUPPORTED_EXTENSIONS = {
@@ -234,7 +295,7 @@ class StreamingMultipartUploader:
                     headers={'Content-Type': monitor.content_type},
                     timeout=timeout
                 )
-                
+
                 # Check response
                 if response.status_code == 200:
                     result = response.json()
@@ -524,7 +585,7 @@ class IngestionGUI:
         
         ttk.Label(
             tech_frame,
-            text=f"Backend: {INGESTION_BACKEND_URL}",
+            text=f"Backend: {INGESTION_BACKEND_URL} (prefix={API_VERSION_PREFIX or '/'} base={INGESTION_BASE_PATH})",
             font=('Courier New', 8),
             foreground='gray'
         ).pack()
@@ -564,8 +625,18 @@ class IngestionGUI:
     def _check_backend(self):
         """Check if backend is available"""
         try:
-            response = requests.get(f"{INGESTION_BACKEND_URL}/health", timeout=2)
-            if response.status_code == 200:
+            # Try versioned ingestion health first, then fall back
+            ok = False
+            for path in HEALTH_ENDPOINTS:
+                url = _build_http_urls(path)[0]
+                try:
+                    response = requests.get(url, timeout=2)
+                    if response.status_code == 200:
+                        ok = True
+                        break
+                except Exception:
+                    continue
+            if ok:
                 self.backend_status.config(
                     text="✅ Backend: Online", 
                     foreground="green"
@@ -590,16 +661,23 @@ class IngestionGUI:
         if self._capabilities_fetched:
             return
         try:
-            resp = requests.get(f"{INGESTION_BACKEND_URL}/capabilities/supported-filetypes", timeout=3)
-            if resp.status_code == 200:
-                data = resp.json()
-                all_ext = data.get("all_extensions", [])
-                if isinstance(all_ext, list) and all_ext:
-                    self.supported_extensions = {str(e).lower() for e in all_ext}
-                    self._capabilities_fetched = True
-                    logger.info(f"[CAPABILITIES] Loaded {len(self.supported_extensions)} extensions from backend")
-                    # Update UI hint
-                    self.status_label.config(text=f"Supported types loaded ({len(self.supported_extensions)}).", foreground="blue")
+            for path in CAPABILITIES_ENDPOINTS:
+                url = _build_http_urls(path)[0]
+                try:
+                    resp = requests.get(url, timeout=3)
+                except Exception:
+                    continue
+                if resp.status_code == 200:
+                    data = resp.json()
+                    all_ext = data.get("all_extensions", [])
+                    if isinstance(all_ext, list) and all_ext:
+                        self.supported_extensions = {str(e).lower() for e in all_ext}
+                        self._capabilities_fetched = True
+                        logger.info(f"[CAPABILITIES] Loaded {len(self.supported_extensions)} extensions from backend")
+                        # Update UI hint
+                        self.status_label.config(text=f"Supported types loaded ({len(self.supported_extensions)}).", foreground="blue")
+                if self._capabilities_fetched:
+                    break
         except Exception as e:
             # Silent fallback - keep defaults
             logger.debug(f"[CAPABILITIES] Using default extensions (fetch failed: {e})")
@@ -899,14 +977,22 @@ class IngestionGUI:
             messagebox.showwarning("No Files", "Please select files to upload.")
             return
         
-        # Check if backend is online before upload
+        # Check if backend is online before upload (with fallbacks)
         try:
-            response = requests.get(f"{INGESTION_BACKEND_URL}/health", timeout=2)
-            if response.status_code != 200:
+            health_ok = False
+            for path in HEALTH_ENDPOINTS:
+                url = _build_http_urls(path)[0]
+                try:
+                    response = requests.get(url, timeout=2)
+                    if response.status_code == 200:
+                        health_ok = True
+                        break
+                except Exception:
+                    continue
+            if not health_ok:
                 if not messagebox.askyesno(
                     "Backend Unhealthy",
-                    f"Backend is not responding correctly (Status: {response.status_code}).\n\n"
-                    f"Upload may fail. Continue anyway?"
+                    "Backend is not responding correctly.\n\nUpload may fail. Continue anyway?"
                 ):
                     return
         except Exception as e:
@@ -1009,19 +1095,67 @@ class IngestionGUI:
                             text=f"Batch {bi}/{tb}: Uploading... {p}% ({u} / {t})"
                         ))
                 
-                # Create streaming uploader
+                # Prepare candidate upload endpoints (prefer versioned + /ingestion)
+                candidate_upload_urls = _build_http_urls(*UPLOAD_ENDPOINTS)
+
+                # Create streaming uploader (we'll set the URL per attempt)
                 uploader = StreamingMultipartUploader(
-                    url=f"{INGESTION_BACKEND_URL}/upload/files",
+                    url=candidate_upload_urls[0],
                     progress_callback=progress_callback,
-                    timeout_base=300,  # 5 minutes base
-                    timeout_per_gb=600,  # +10 minutes per GB
+                    timeout_base=300,
+                    timeout_per_gb=600,
                     max_retries=3,
                     retry_delay=5
                 )
-                
+
                 try:
-                    # Execute streaming upload
-                    result = uploader.upload_files(batch_files)
+                    # Try upload against candidate endpoints in order
+                    last_error = None
+                    result = None
+                    for u in candidate_upload_urls:
+                        uploader.url = u
+                        try:
+                            result = uploader.upload_files(batch_files)
+                            break
+                        except Exception as ex:
+                            last_error = ex
+                            logger.warning(f"[BATCH] Upload attempt failed on {u}: {ex}")
+                            continue
+                    if result is None:
+                        # Fallback: try text ingest for small text-like files if available
+                        fallback_paths = [f"{API_VERSION_PREFIX}{INGESTION_BASE_PATH}/ingest", f"{INGESTION_BASE_PATH}/ingest", f"{API_VERSION_PREFIX}/ingest", "/ingest"]
+                        ingest_urls = _build_http_urls(*fallback_paths)
+                        sent = 0
+                        for file_path in batch_files:
+                            ext = Path(file_path).suffix.lower()
+                            if ext in {'.txt', '.md', '.json', '.csv', '.xml', '.html'}:
+                                try:
+                                    # Limit fallback size to 10 MB per file
+                                    if os.path.getsize(file_path) > 10 * 1024 * 1024:
+                                        logger.warning(f"[FALLBACK] Skipping large text file (>10MB): {file_path}")
+                                        continue
+                                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as fh:
+                                        content = fh.read()
+                                    success = False
+                                    for iu in ingest_urls:
+                                        try:
+                                            r = requests.post(iu, json={"text": content}, timeout=60)
+                                            if r.status_code == 200:
+                                                success = True
+                                                sent += 1
+                                                break
+                                        except Exception:
+                                            continue
+                                    if not success:
+                                        logger.warning(f"[FALLBACK] Failed to ingest text for: {file_path}")
+                                except Exception as ex2:
+                                    logger.warning(f"[FALLBACK] Error reading/sending {file_path}: {ex2}")
+                            else:
+                                logger.warning(f"[FALLBACK] Unsupported binary type for text ingest: {file_path}")
+                        if sent == 0:
+                            raise last_error or Exception("No suitable upload endpoint available")
+                        # Simulate a result dict for status messaging in fallback mode
+                        result = {"job_id": self.current_job_id or "fallback-ingest"}
                     
                     # Store job_id from first successful batch
                     if batch_num == 0:
@@ -1103,7 +1237,20 @@ class IngestionGUI:
         """Monitor job progress via WebSocket"""
         try:
             self.ws = websocket.WebSocket()
-            self.ws.connect(WEBSOCKET_URL)
+            # Try to connect to a suitable WS endpoint (versioned first)
+            connected = False
+            for p in WS_JOB_ENDPOINTS:
+                try:
+                    ws_urls = _build_ws_urls(p)
+                    self.ws.connect(ws_urls[0])
+                    connected = True
+                    break
+                except Exception as ex:
+                    logger.debug(f"WebSocket connect failed on {p}: {ex}")
+                    continue
+            if not connected:
+                logger.info("WebSocket endpoint not available; skipping live job monitoring")
+                return
             logger.info(f"WebSocket connected for job {self.current_job_id}")
             
             while True:

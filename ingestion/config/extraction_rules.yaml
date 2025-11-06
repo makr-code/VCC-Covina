@@ -1,0 +1,21 @@
+# Extraction Rules Configuration
+extraction_rules:
+  enabled_extractors:
+    - legal_entity_extractor
+    - norm_extractor
+    - authority_extractor
+  confidence_threshold: 0.7
+  max_entities_per_document: 100
+
+concept_synonyms:
+  BImSchG:
+    - Bundes-Immissionsschutzgesetz
+    - Bundesimmissionsschutzgesetz
+  BauGB:
+    - Baugesetzbuch
+  VwVfG:
+    - Verwaltungsverfahrensgesetz
+
+nlp:
+  spacy_model: de_core_news_md
+  batch_size: 50

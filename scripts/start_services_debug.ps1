@@ -48,7 +48,7 @@ Write-Host "Starting Main Backend (Port 45678) in new window..." -ForegroundColo
 # Pass log file targets via environment so the app can write JSON logs to files itself
 $env:COVINA_LOG_FILE = $MainLog
 $env:COVINA_ERR_FILE = "$MainLog.err"
-Start-Process -FilePath "python" -ArgumentList "main.py" `
+Start-Process -FilePath "python" -ArgumentList "main_backend.py" `
     -WorkingDirectory "C:\VCC\Covina\backend" `
     -WindowStyle Normal
 
@@ -60,7 +60,7 @@ Write-Host "Starting Ingestion Backend (Port 45679) in new window..." -Foregroun
 # Update env for ingestion log targets (inherited by child process)
 $env:COVINA_LOG_FILE = $IngestionLog
 $env:COVINA_ERR_FILE = "$IngestionLog.err"
-Start-Process -FilePath "python" -ArgumentList "ingestion.py" `
+Start-Process -FilePath "python" -ArgumentList "ingestion_backend.py" `
     -WorkingDirectory "C:\VCC\Covina\backend" `
     -WindowStyle Normal
 

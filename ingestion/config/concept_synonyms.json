@@ -1,0 +1,7 @@
+{
+  "BauGB": ["Baugesetzbuch", "BauGB"],
+  "BImSchG": ["Bundes-Immissionsschutzgesetz", "Bundesimmissionsschutzgesetz", "BImSchG"],
+  "VwVfG": ["Verwaltungsverfahrensgesetz", "VwVfG"],
+  "§ 3 BauGB": ["§ 3 Baugesetzbuch", "Paragraph 3 BauGB"],
+  "§ 5 BImSchG": ["§ 5 Bundes-Immissionsschutzgesetz", "Paragraph 5 BImSchG"]
+}
