@@ -164,12 +164,41 @@ except Exception as e:
     logger.warning(f"⚠️ Gap Detection nicht verfügbar: {e}")
     KnowledgeGapDB = None  # Define as None if import fails
 
+USE_THEMIS = os.getenv("USE_THEMIS", "false").lower() == "true"
+THEMIS_URL = os.getenv("THEMIS_URL", "http://localhost:8765")
+THEMIS_TIMEOUT = int(os.getenv("THEMIS_TIMEOUT", "30"))
+THEMIS_MAX_RETRIES = int(os.getenv("THEMIS_MAX_RETRIES", "3"))
+
+# Themis Adapter (optional replacement for UDS3)
+THEMIS_AVAILABLE = False
+themis_adapter = None
 try:
-    from uds3.core.polyglot_manager import UDS3PolyglotManager
-    UDS3_AVAILABLE = True
-    logger.info("✅ UDS3 PolyglotManager Module geladen")
+    if USE_THEMIS:
+        from database import ThemisAdapter, ThemisConfig
+        themis_adapter = ThemisAdapter(
+            ThemisConfig(
+                url=THEMIS_URL,
+                timeout=THEMIS_TIMEOUT,
+                max_retries=THEMIS_MAX_RETRIES,
+            )
+        )
+        THEMIS_AVAILABLE = True
+        logger.info(f"✅ ThemisAdapter aktiviert (USE_THEMIS=true, URL={THEMIS_URL})")
 except Exception as e:
-    logger.warning(f"⚠️ UDS3 PolyglotManager nicht verfügbar: {e}")
+    logger.error(f"❌ ThemisAdapter Initialisierung fehlgeschlagen: {e}")
+    THEMIS_AVAILABLE = False
+
+# Fallback: UDS3 PolyglotManager wenn Themis nicht aktiv
+try:
+    if not THEMIS_AVAILABLE:
+        from uds3.core.polyglot_manager import UDS3PolyglotManager
+        UDS3_AVAILABLE = True
+        logger.info("✅ UDS3 PolyglotManager Module geladen (Fallback)")
+    else:
+        UDS3_AVAILABLE = False
+except Exception as e:
+    if not THEMIS_AVAILABLE:
+        logger.warning(f"⚠️ Weder Themis noch UDS3 PolyglotManager verfügbar: {e}")
     UDS3_AVAILABLE = False
 
 # Import UDS3 Batch Operations (Phase 3 - READ) - Using installed UDS3 package
@@ -204,6 +233,47 @@ except Exception as e:
     COMPLIANCE_AVAILABLE = False
     ComplianceService = None  # Define as None if import fails
 
+# ================================================================
+# BACKEND ACCESSORS (UDS3 vs. THEMIS)
+# ================================================================
+
+def get_relational_backend():
+    """Return relational backend depending on active mode."""
+    if THEMIS_AVAILABLE and themis_adapter:
+        return themis_adapter.get_relational_backend()
+    # Fallback: UDS3 strategy relational backend (if available)
+    strat = get_uds3_strategy()
+    if strat and hasattr(strat, 'db_manager') and hasattr(strat.db_manager, 'get_relational_backend'):
+        return strat.db_manager.get_relational_backend()
+    return None
+
+def get_vector_backend():
+    if THEMIS_AVAILABLE and themis_adapter:
+        return themis_adapter.get_vector_backend()
+    strat = get_uds3_strategy()
+    if strat and hasattr(strat, 'db_manager') and hasattr(strat.db_manager, 'get_vector_backend'):
+        return strat.db_manager.get_vector_backend()
+    return None
+
+def get_graph_backend():
+    if THEMIS_AVAILABLE and themis_adapter:
+        return themis_adapter.get_graph_backend()
+    strat = get_uds3_strategy()
+    if strat and hasattr(strat, 'db_manager') and hasattr(strat.db_manager, 'get_graph_backend'):
+        return strat.db_manager.get_graph_backend()
+    return None
+
+def get_document_backend():
+    if THEMIS_AVAILABLE and themis_adapter:
+        return themis_adapter.get_document_backend()
+    strat = get_uds3_strategy()
+    if strat and hasattr(strat, 'db_manager') and hasattr(strat.db_manager, 'get_document_backend'):
+        return strat.db_manager.get_document_backend()
+    return None
+
+def is_themis_mode() -> bool:
+    return THEMIS_AVAILABLE
+
 # ChromaDB availability will be checked via UDS3 Strategy
 CHROMADB_AVAILABLE = False  # Will be set after UDS3 initialization
 
@@ -234,11 +304,12 @@ def get_uds3_strategy():
     """
     global _uds3_strategy
     
-    if _uds3_strategy is None:
+    if THEMIS_AVAILABLE:
+        # Themis nutzt eigenen Adapter – keine SAGA Strategy nötig
+        return None
+    if _uds3_strategy is None and not THEMIS_AVAILABLE:
         try:
             from uds3.core.database import UnifiedDatabaseStrategy
-            
-            # UDS3 Config (from environment)
             config = {
                 "neo4j": {
                     "uri": os.getenv("NEO4J_URI", "bolt://192.168.178.94:7687"),
@@ -261,18 +332,18 @@ def get_uds3_strategy():
                     "port": int(os.getenv("COUCHDB_PORT", "32931")),
                 }
             }
-            
             _uds3_strategy = UnifiedDatabaseStrategy(config)
-            logger.info("✅ UDS3 SAGA Strategy initialized (4 databases) for Main Backend")
-            
-        except ImportError:
-            logger.warning("⚠️ UDS3 not available - SAGA pattern disabled")
-            _uds3_strategy = None
+            logger.info("✅ UDS3 SAGA Strategy initialized (Fallback Mode)")
         except Exception as e:
             logger.error(f"❌ UDS3 initialization failed: {e}")
             _uds3_strategy = None
-    
     return _uds3_strategy
+
+def get_themis_adapter():
+    """Return active Themis adapter if feature flag enabled."""
+    if THEMIS_AVAILABLE:
+        return themis_adapter
+    return None
 
 # Rate Limiting Setup (slowapi)
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -814,6 +885,14 @@ async def lifespan(app: FastAPI):
     # ============================================================
     logger.info("🛑 Covina Main Backend wird heruntergefahren...")
     
+    # Cleanup Themis Adapter (if active)
+    if THEMIS_AVAILABLE and themis_adapter:
+        try:
+            await themis_adapter.close()
+            logger.info("✅ Themis Adapter geschlossen")
+        except Exception as e:
+            logger.error(f"❌ Themis Adapter Cleanup Fehler: {e}")
+    
     # Cleanup Gap Detection
     if gap_db:
         try:
@@ -1208,6 +1287,58 @@ async def readiness_probe():
     }
     ready = all(deps.values()) if any(deps.values()) else True
     return {"ready": ready, "dependencies": deps}
+
+@app.get("/themis/mode", summary="Themis Adapter Mode", tags=["Themis"])
+async def themis_mode():
+    """
+    Returns Themis adapter configuration status.
+    
+    Indicates whether Themis is active and backend access details.
+    """
+    return {
+        "enabled": THEMIS_AVAILABLE,
+        "url": THEMIS_URL if THEMIS_AVAILABLE else None,
+        "timeout": THEMIS_TIMEOUT if THEMIS_AVAILABLE else None,
+        "max_retries": THEMIS_MAX_RETRIES if THEMIS_AVAILABLE else None,
+        "fallback": "UDS3" if not THEMIS_AVAILABLE else None,
+        "backends": {
+            "relational": get_relational_backend() is not None,
+            "vector": get_vector_backend() is not None,
+            "graph": get_graph_backend() is not None,
+            "document": get_document_backend() is not None
+        }
+    }
+
+@app.get("/themis/health", summary="Themis Health Check", tags=["Themis"])
+async def themis_health():
+    """
+    Performs health check against Themis adapter.
+    
+    Pings Themis API and returns latency + status.
+    """
+    if not THEMIS_AVAILABLE or not themis_adapter:
+        raise HTTPException(
+            status_code=503,
+            detail="Themis not available (USE_THEMIS=false or initialization failed)"
+        )
+    
+    import time
+    start = time.perf_counter()
+    try:
+        health_status = await themis_adapter.health()
+        latency_ms = (time.perf_counter() - start) * 1000
+        return {
+            "status": "healthy",
+            "latency_ms": round(latency_ms, 2),
+            "themis_response": health_status
+        }
+    except Exception as e:
+        latency_ms = (time.perf_counter() - start) * 1000
+        raise HTTPException(
+            status_code=503,
+            detail=f"Themis health check failed: {str(e)}",
+            headers={"X-Latency-Ms": str(round(latency_ms, 2))}
+        )
 
 @app.get("/db/pool", summary="PostgreSQL Connection Pool Stats")
 async def get_db_pool_stats():

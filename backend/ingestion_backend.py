@@ -295,6 +295,34 @@ logger.info(f"[CONFIG] Legal Graph NLP: {'ENABLED' if should_use_legal_graph_nlp
 
 
 # ================================================================
+# ================================================================
+# THEMIS FEATURE FLAG / ADAPTER (optional replacement for UDS3)
+# ================================================================
+
+USE_THEMIS = os.getenv("USE_THEMIS", "false").lower() == "true"
+THEMIS_URL = os.getenv("THEMIS_URL", "http://localhost:8765")
+THEMIS_TIMEOUT = int(os.getenv("THEMIS_TIMEOUT", "30"))
+THEMIS_MAX_RETRIES = int(os.getenv("THEMIS_MAX_RETRIES", "3"))
+
+THEMIS_AVAILABLE = False
+themis_adapter = None
+if USE_THEMIS:
+    try:
+        from database import ThemisAdapter, ThemisConfig
+        themis_adapter = ThemisAdapter(
+            ThemisConfig(
+                url=THEMIS_URL,
+                timeout=THEMIS_TIMEOUT,
+                max_retries=THEMIS_MAX_RETRIES,
+            )
+        )
+        THEMIS_AVAILABLE = True
+        logger.info(f"✅ ThemisAdapter aktiviert (USE_THEMIS=true, URL={THEMIS_URL})")
+    except Exception as e:
+        logger.error(f"❌ ThemisAdapter Initialisierung fehlgeschlagen: {e}")
+        THEMIS_AVAILABLE = False
+
+# ================================================================
 # UDS3 PHASE 2: POSTGRESQL + COUCHDB BATCH OPERATIONS
 # ================================================================
 
@@ -311,16 +339,22 @@ try:
         get_neo4j_batch_size
     )
     BATCH_OPERATIONS_AVAILABLE = True
-    logger.info("✅ UDS3 Phase 2 Batch Operations imported")
-    logger.info(f"[CONFIG] PostgreSQL Batch Insert: {'ENABLED' if should_use_postgres_batch_insert() else 'DISABLED'}")
-    if should_use_postgres_batch_insert():
-        logger.info(f"[CONFIG] PostgreSQL Batch Size: {get_postgres_batch_size()}")
-    logger.info(f"[CONFIG] CouchDB Batch Insert: {'ENABLED' if should_use_couchdb_batch_insert() else 'DISABLED'}")
-    if should_use_couchdb_batch_insert():
-        logger.info(f"[CONFIG] CouchDB Batch Size: {get_couchdb_batch_size()}")
-    logger.info(f"[CONFIG] Neo4j Batch Insert: {'ENABLED' if should_use_neo4j_batching() else 'DISABLED'}")
-    if should_use_neo4j_batching():
-        logger.info(f"[CONFIG] Neo4j Batch Size: {get_neo4j_batch_size()}")
+    if THEMIS_AVAILABLE:
+        logger.info("ℹ️ UDS3 Batch Operations übersprungen (Themis aktiv)")
+    else:
+        logger.info("✅ UDS3 Phase 2 Batch Operations imported")
+    if not THEMIS_AVAILABLE:
+        logger.info(f"[CONFIG] PostgreSQL Batch Insert: {'ENABLED' if should_use_postgres_batch_insert() else 'DISABLED'}")
+        if should_use_postgres_batch_insert():
+            logger.info(f"[CONFIG] PostgreSQL Batch Size: {get_postgres_batch_size()}")
+        logger.info(f"[CONFIG] CouchDB Batch Insert: {'ENABLED' if should_use_couchdb_batch_insert() else 'DISABLED'}")
+        if should_use_couchdb_batch_insert():
+            logger.info(f"[CONFIG] CouchDB Batch Size: {get_couchdb_batch_size()}")
+        logger.info(f"[CONFIG] Neo4j Batch Insert: {'ENABLED' if should_use_neo4j_batching() else 'DISABLED'}")
+        if should_use_neo4j_batching():
+            logger.info(f"[CONFIG] Neo4j Batch Size: {get_neo4j_batch_size()}")
+    else:
+        logger.info("[CONFIG] Batch Insert Settings übersprungen (Themis Modus)")
 except ImportError as e:
     BATCH_OPERATIONS_AVAILABLE = False
     logger.warning(f"⚠️ UDS3 Phase 2 Batch Operations not available: {e}")
@@ -1284,7 +1318,16 @@ class IngestionJobManager:
         - UDS3 Database Manager: Übernimmt komplette Konfiguration (Credentials, Connections, etc.)
         
         Keine ENV-Variablen nötig - alles zentral in UDS3!
+        
+        NOTE: Skipped wenn Themis aktiv (THEMIS_AVAILABLE=True)
         """
+        # Skip UDS3 setup if Themis is active
+        if THEMIS_AVAILABLE:
+            logger.info("ℹ️ UDS3 Setup übersprungen (Themis Modus aktiv)")
+            self.uds3_ready = False
+            self.uds3_strategy = None
+            return
+        
         try:
             logger.info("=" * 80)
             logger.info("🔧 UDS3 v2.0.0 AUTO-CONFIG (Ingestion)")
@@ -1352,25 +1395,34 @@ class IngestionJobManager:
             logger.error(traceback.format_exc())
             self.uds3_ready = False
     
-    # Helper methods for backend access (UDS3 v2.0 compatibility)
+    # Helper methods for backend access (UDS3 v2.0 compatibility + Themis support)
     def get_relational_backend(self):
-        """Get relational (PostgreSQL) backend from UDS3"""
+        """Get relational (PostgreSQL/Themis) backend"""
+        if THEMIS_AVAILABLE and themis_adapter:
+            return themis_adapter.get_relational_backend()
         return self.uds3_strategy.db_manager.get_relational_backend() if self.uds3_strategy else None
     
     def get_vector_backend(self):
-        """Get vector (ChromaDB) backend from UDS3"""
+        """Get vector (ChromaDB/Themis) backend"""
+        if THEMIS_AVAILABLE and themis_adapter:
+            return themis_adapter.get_vector_backend()
         return self.uds3_strategy.db_manager.get_vector_backend() if self.uds3_strategy else None
     
     def get_graph_backend(self):
-        """Get graph (Neo4j) backend from UDS3"""
+        """Get graph (Neo4j/Themis) backend"""
+        if THEMIS_AVAILABLE and themis_adapter:
+            return themis_adapter.get_graph_backend()
         return self.uds3_strategy.db_manager.get_graph_backend() if self.uds3_strategy else None
     
     def get_document_backend(self):
-        """Get document (CouchDB) backend from UDS3"""
+        """Get document (CouchDB/Themis) backend"""
+        if THEMIS_AVAILABLE and themis_adapter:
+            return themis_adapter.get_document_backend()
         if not self.uds3_strategy:
             return None
         db_manager = self.uds3_strategy.db_manager
         return getattr(db_manager, 'get_document_backend', lambda: None)()
+
     
     def create_job(self, file_count: int, temp_directory: str = None, scan_job_id: str = None, correlation_id: str = None) -> str:
         """Erstelle neuen Job mit Persistent Storage"""
@@ -2360,11 +2412,11 @@ async def process_document_with_saga(
         # Clean OOP implementation with PostgreSQL state backend
         from saga.saga_orchestrator_production import SagaOrchestrator
         
-        # Get all available backends
-        relational_backend = job_manager.uds3_strategy.db_manager.get_relational_backend()
-        vector_backend = job_manager.uds3_strategy.db_manager.get_vector_backend()
-        graph_backend = job_manager.uds3_strategy.db_manager.get_graph_backend()
-        document_backend = job_manager.uds3_strategy.db_manager.get_document_backend() if hasattr(job_manager.uds3_strategy.db_manager, 'get_document_backend') else None
+        # Get all available backends (via unified getters - Themis or UDS3)
+        relational_backend = job_manager.get_relational_backend()
+        vector_backend = job_manager.get_vector_backend()
+        graph_backend = job_manager.get_graph_backend()
+        document_backend = job_manager.get_document_backend()
         
         db_backends = {
             'relational': relational_backend,
@@ -2679,7 +2731,7 @@ async def process_documents_batch(
         neo4j_batch = None
         
         if BATCH_OPERATIONS_AVAILABLE and should_use_postgres_batch_insert():
-            relational_backend = jm.uds3_strategy.db_manager.get_relational_backend() if jm.uds3_strategy else None
+            relational_backend = jm.get_relational_backend()
             if relational_backend:
                 try:
                     postgres_batch = PostgreSQLBatchInserter(
@@ -2696,7 +2748,8 @@ async def process_documents_batch(
                     logger.warning("   Falling back to single-insert mode")
         
         if BATCH_OPERATIONS_AVAILABLE and should_use_couchdb_batch_insert():
-            if jm.uds3_strategy and hasattr(jm.uds3_strategy, 'document_backend') and jm.get_document_backend():
+            # Use unified getter (Themis or UDS3)
+            if jm.get_document_backend():
                 try:
                     couchdb_batch = CouchDBBatchInserter(
                         couchdb_backend=jm.get_document_backend(),
@@ -2712,7 +2765,7 @@ async def process_documents_batch(
                     logger.warning("   Falling back to single-insert mode")
         
         if BATCH_OPERATIONS_AVAILABLE and should_use_neo4j_batching():
-            if jm.uds3_strategy and hasattr(jm.uds3_strategy, 'graph_backend') and jm.get_graph_backend():
+            if jm.get_graph_backend():
                 try:
                     neo4j_batch = Neo4jBatchCreator(
                         neo4j_backend=jm.get_graph_backend(),
@@ -3041,6 +3094,14 @@ async def lifespan(app: FastAPI):
     # [NEW] Graceful shutdown of production systems
     logger.info("[HARDENING] Shutting down production systems...")
     
+    # 0. Cleanup Themis Adapter (if active)
+    if THEMIS_AVAILABLE and themis_adapter:
+        try:
+            await themis_adapter.close()
+            logger.info("✅ Themis Adapter geschlossen")
+        except Exception as e:
+            logger.error(f"❌ Themis Adapter Cleanup Fehler: {e}")
+    
     # 1. Stop accepting new tasks
     logger.info("[SHUTDOWN] Stopping new task submissions...")
     
@@ -3257,6 +3318,58 @@ async def health_check(delay: int = 0):
 async def liveness_probe():
     """Einfache Liveness-Probe (keine externen Abhängigkeiten)."""
     return {"status": "alive"}
+
+@app.get("/themis/mode", summary="Themis Adapter Mode", tags=["Themis"])
+async def themis_mode():
+    """
+    Returns Themis adapter configuration status.
+    
+    Indicates whether Themis is active and backend access details.
+    """
+    return {
+        "enabled": THEMIS_AVAILABLE,
+        "url": THEMIS_URL if THEMIS_AVAILABLE else None,
+        "timeout": THEMIS_TIMEOUT if THEMIS_AVAILABLE else None,
+        "max_retries": THEMIS_MAX_RETRIES if THEMIS_AVAILABLE else None,
+        "fallback": "UDS3" if not THEMIS_AVAILABLE else None,
+        "backends": {
+            "relational": get_job_manager().get_relational_backend() is not None if get_job_manager() else False,
+            "vector": get_job_manager().get_vector_backend() is not None if get_job_manager() else False,
+            "graph": get_job_manager().get_graph_backend() is not None if get_job_manager() else False,
+            "document": get_job_manager().get_document_backend() is not None if get_job_manager() else False
+        }
+    }
+
+@app.get("/themis/health", summary="Themis Health Check", tags=["Themis"])
+async def themis_health():
+    """
+    Performs health check against Themis adapter.
+    
+    Pings Themis API and returns latency + status.
+    """
+    if not THEMIS_AVAILABLE or not themis_adapter:
+        raise HTTPException(
+            status_code=503,
+            detail="Themis not available (USE_THEMIS=false or initialization failed)"
+        )
+    
+    import time
+    start = time.perf_counter()
+    try:
+        health_status = await themis_adapter.health()
+        latency_ms = (time.perf_counter() - start) * 1000
+        return {
+            "status": "healthy",
+            "latency_ms": round(latency_ms, 2),
+            "themis_response": health_status
+        }
+    except Exception as e:
+        latency_ms = (time.perf_counter() - start) * 1000
+        raise HTTPException(
+            status_code=503,
+            detail=f"Themis health check failed: {str(e)}",
+            headers={"X-Latency-Ms": str(round(latency_ms, 2))}
+        )
 
 @app.get("/metrics")
 async def metrics_endpoint():
