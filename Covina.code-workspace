@@ -4,19 +4,7 @@
             "path": "."
         },
         {
-            "path": "../uds3"
-        },
-        {
-            "path": "../PKI"
-        },
-        {
-            "path": "../user"
-        },
-        {
-            "path": "../QM"
-        },
-        {
-            "path": "../VPB"
+            "path": "../themis"
         }
     ],
     "settings": {
