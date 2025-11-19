@@ -2291,6 +2291,77 @@ async def process_document_with_uds3(
                 db_results["graph"] = f"error: {str(e)[:50]}"
         
         # ═══════════════════════════════════════════════════════════
+        # POLYGLOT AGGREGATION: Create complete JSON with all database data
+        # ═══════════════════════════════════════════════════════════
+        try:
+            from ingestion.polyglot_aggregator import PolyglotDocumentAggregator
+            
+            aggregator = PolyglotDocumentAggregator()
+            
+            # Prepare relational data
+            relational_data = {
+                "document_id": document_id,
+                "file_path": file_path,
+                "classification": classification,
+                "content_length": len(content),
+                "legal_terms_count": legal_count,
+                "quality_score": quality_score,
+                "word_count": word_count,
+                "timestamp": timestamp
+            }
+            
+            # Prepare vector data (chunks with metadata)
+            vector_data = []
+            if 'chunks' in locals() and 'chunk_metadata_list' in locals():
+                for idx, (chunk_text, chunk_meta) in enumerate(zip(chunks, chunk_metadata_list)):
+                    vector_chunk = {
+                        "chunk_id": f"{document_id}_chunk_{idx}",
+                        "chunk_index": idx,
+                        "text": chunk_text,
+                        "metadata": chunk_meta
+                    }
+                    vector_data.append(vector_chunk)
+            
+            # Prepare graph data
+            graph_data = {
+                "node_id": document_id,
+                "node_type": "Document",
+                "properties": {
+                    "file_path": file_path,
+                    "classification": classification,
+                    "legal_terms_count": legal_count,
+                    "quality_score": quality_score
+                },
+                "relationships": []  # Could be extended with cross-references
+            }
+            
+            # Create complete polyglot JSON
+            polyglot_json = aggregator.aggregate_document(
+                document_id=document_id,
+                file_path=file_path,
+                classification=classification,
+                relational_data=relational_data,
+                vector_data=vector_data,
+                graph_data=graph_data,
+                text_content=content,
+                binary_file_path=file_path  # Original file
+            )
+            
+            # Save polyglot JSON to file system (for Themis integration)
+            polyglot_dir = Path("data/polyglot")
+            polyglot_dir.mkdir(parents=True, exist_ok=True)
+            polyglot_path = polyglot_dir / f"{document_id}.json"
+            
+            aggregator.save_to_json(polyglot_json, str(polyglot_path))
+            
+            logger.info(f"[POLYGLOT] Complete JSON created: {polyglot_path}")
+            logger.info(f"[POLYGLOT] Completeness: {polyglot_json['statistics']['polyglot_completeness']:.0%}")
+            
+        except Exception as e:
+            logger.warning(f"[POLYGLOT] Aggregation failed (non-critical): {e}")
+            # Don't fail the whole process if aggregation fails
+        
+        # ═══════════════════════════════════════════════════════════
         # METRICS: Record document processing success
         # ═══════════════════════════════════════════════════════════
         if METRICS_AVAILABLE and documents_processed:
@@ -2306,7 +2377,8 @@ async def process_document_with_uds3(
             "quality_score": quality_score,
             "database_writes": db_results,
             "document_id": document_id,
-            "processing_mode": "UDS3_FULL_POLYGLOT"  # All 4 databases!
+            "processing_mode": "UDS3_FULL_POLYGLOT",  # All 4 databases!
+            "polyglot_json_path": str(polyglot_path) if 'polyglot_path' in locals() else None
         }
     
     except FileNotFoundError as e:
