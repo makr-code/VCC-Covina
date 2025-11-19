@@ -1578,6 +1578,90 @@ def classify_document_sync(
         }
 
 
+def create_smart_chunks(content: str, file_path: str = "", classification: str = "DOCUMENT") -> List[Dict[str, Any]]:
+    """
+    Create intelligent chunks based on document type.
+    
+    For legal texts (GESETZ, RECHTSTEXT), uses hierarchical structure parsing.
+    For other documents, uses simple character-based chunking.
+    
+    Args:
+        content: Document content
+        file_path: File path for metadata
+        classification: Document classification (GESETZ, DOCUMENT, etc.)
+        
+    Returns:
+        List of chunk dictionaries with text and metadata
+    """
+    # Check if this is a legal document that should use structure-based chunking
+    is_legal = classification in ["GESETZ", "RECHTSTEXT", "RECHTSPRECHUNG"]
+    
+    # Try legal parsing if appropriate
+    if is_legal:
+        try:
+            from ingestion.parsers.german_law_parser import GermanLawParser
+            
+            parser = GermanLawParser()
+            
+            # Check if content has legal structure
+            if parser.is_legal_text(content, file_path):
+                logger.info(f"Using legal structure parser for: {file_path}")
+                
+                # Parse into legal chunks
+                legal_chunks = parser.parse(content, filename=file_path)
+                
+                # Convert to standard chunk format
+                chunks = []
+                for i, legal_chunk in enumerate(legal_chunks):
+                    chunk_dict = {
+                        'text': legal_chunk.text,
+                        'index': i,
+                        'metadata': {
+                            'chunk_type': 'legal_structure',
+                            'paragraph': legal_chunk.paragraph,
+                            'paragraph_title': legal_chunk.paragraph_title,
+                            'absatz': legal_chunk.absatz,
+                            'nummer': legal_chunk.nummer,
+                            'buchstabe': legal_chunk.buchstabe,
+                            'level': legal_chunk.level.value,
+                            'reference': legal_chunk.reference,
+                            'parent_reference': legal_chunk.parent_reference,
+                            **legal_chunk.metadata
+                        }
+                    }
+                    chunks.append(chunk_dict)
+                
+                logger.info(f"Created {len(chunks)} legal structure chunks")
+                return chunks
+                
+        except ImportError:
+            logger.warning("Legal parser not available, falling back to simple chunking")
+        except Exception as e:
+            logger.warning(f"Legal parsing failed, falling back to simple chunking: {e}")
+    
+    # Fallback: Simple character-based chunking
+    logger.debug(f"Using simple chunking for: {file_path}")
+    chunks = []
+    chunk_size = 500
+    
+    for i in range(0, len(content), chunk_size):
+        chunk_text = content[i:i+chunk_size]
+        chunks.append({
+            'text': chunk_text,
+            'index': i // chunk_size,
+            'metadata': {
+                'chunk_type': 'simple',
+                'start_pos': i,
+                'end_pos': min(i + chunk_size, len(content))
+            }
+        })
+    
+    # Limit to 10 chunks for performance
+    chunks = chunks[:10]
+    logger.debug(f"Created {len(chunks)} simple chunks")
+    return chunks
+
+
 async def process_document_with_uds3(
     file_path: str, 
     content: str, 
@@ -1744,8 +1828,13 @@ async def process_document_with_uds3(
             db_results["vector"] = "skipped (kill-switch)"
         elif job_manager.get_vector_backend():
             try:
-                # Chunk content for better semantic search
-                chunks = [content[i:i+500] for i in range(0, len(content), 500)][:10]  # Max 10 chunks
+                # Smart chunking: Use legal structure parser for legal texts, simple chunking otherwise
+                smart_chunks = create_smart_chunks(content, file_path, classification)
+                
+                # Extract text from chunk dictionaries
+                chunks = [chunk['text'] for chunk in smart_chunks]
+                chunk_metadata_list = [chunk['metadata'] for chunk in smart_chunks]
+                
                 chunk_count = 0
                 
                 # [OK] CHECK: Batch Embeddings aktiviert?
@@ -1799,6 +1888,8 @@ async def process_document_with_uds3(
                                     
                                     for idx, (chunk, vector) in enumerate(zip(chunks, embeddings)):
                                         chunk_id = f"{document_id}_chunk_{idx}"
+                                        
+                                        # Base metadata
                                         metadata = {
                                             "file_path": file_path,
                                             "classification": classification,
@@ -1808,6 +1899,21 @@ async def process_document_with_uds3(
                                             "batch_processed": True,
                                             "batch_insert": True
                                         }
+                                        
+                                        # Add legal structure metadata if available
+                                        if idx < len(chunk_metadata_list):
+                                            chunk_meta = chunk_metadata_list[idx]
+                                            metadata.update({
+                                                'chunk_type': chunk_meta.get('chunk_type', 'simple'),
+                                                'legal_paragraph': chunk_meta.get('paragraph'),
+                                                'legal_paragraph_title': chunk_meta.get('paragraph_title'),
+                                                'legal_absatz': chunk_meta.get('absatz'),
+                                                'legal_nummer': chunk_meta.get('nummer'),
+                                                'legal_buchstabe': chunk_meta.get('buchstabe'),
+                                                'legal_level': chunk_meta.get('level'),
+                                                'legal_reference': chunk_meta.get('reference'),
+                                                'legal_parent_reference': chunk_meta.get('parent_reference')
+                                            })
                                         
                                         # Add to buffer (auto-flush at batch_size)
                                         batch_inserter.add_vector(chunk_id, vector, metadata)
@@ -1834,6 +1940,8 @@ async def process_document_with_uds3(
                             
                             for idx, (chunk, vector) in enumerate(zip(chunks, embeddings)):
                                 chunk_id = f"{document_id}_chunk_{idx}"
+                                
+                                # Base metadata
                                 metadata = {
                                     "file_path": file_path,
                                     "classification": classification,
@@ -1843,6 +1951,21 @@ async def process_document_with_uds3(
                                     "batch_processed": True,
                                     "batch_insert": False
                                 }
+                                
+                                # Add legal structure metadata if available
+                                if idx < len(chunk_metadata_list):
+                                    chunk_meta = chunk_metadata_list[idx]
+                                    metadata.update({
+                                        'chunk_type': chunk_meta.get('chunk_type', 'simple'),
+                                        'legal_paragraph': chunk_meta.get('paragraph'),
+                                        'legal_paragraph_title': chunk_meta.get('paragraph_title'),
+                                        'legal_absatz': chunk_meta.get('absatz'),
+                                        'legal_nummer': chunk_meta.get('nummer'),
+                                        'legal_buchstabe': chunk_meta.get('buchstabe'),
+                                        'legal_level': chunk_meta.get('level'),
+                                        'legal_reference': chunk_meta.get('reference'),
+                                        'legal_parent_reference': chunk_meta.get('parent_reference')
+                                    })
                                 
                                 # [NEW] ChromaDB API: add_vector() with Circuit Breaker
                                 def _add_vector():
@@ -1900,6 +2023,7 @@ async def process_document_with_uds3(
                             vector = vector[:384] + [0.0] * (384 - len(vector))
                             logger.debug(f"[WARNING] Fallback hash-based vector: {len(vector)}-dim")
                         
+                        # Base metadata
                         metadata = {
                             "file_path": file_path,
                             "classification": classification,
@@ -1908,6 +2032,21 @@ async def process_document_with_uds3(
                             "embedding_model": EMBEDDING_MODEL_NAME if embedding_model != "FALLBACK" else "hash-fallback",
                             "batch_processed": False
                         }
+                        
+                        # Add legal structure metadata if available
+                        if idx < len(chunk_metadata_list):
+                            chunk_meta = chunk_metadata_list[idx]
+                            metadata.update({
+                                'chunk_type': chunk_meta.get('chunk_type', 'simple'),
+                                'legal_paragraph': chunk_meta.get('paragraph'),
+                                'legal_paragraph_title': chunk_meta.get('paragraph_title'),
+                                'legal_absatz': chunk_meta.get('absatz'),
+                                'legal_nummer': chunk_meta.get('nummer'),
+                                'legal_buchstabe': chunk_meta.get('buchstabe'),
+                                'legal_level': chunk_meta.get('level'),
+                                'legal_reference': chunk_meta.get('reference'),
+                                'legal_parent_reference': chunk_meta.get('parent_reference')
+                            })
                         
                         # [NEW] ChromaDB API: add_vector() with Circuit Breaker
                         breaker_mgr = get_breaker_manager()
