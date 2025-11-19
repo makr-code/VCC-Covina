@@ -1580,10 +1580,15 @@ def classify_document_sync(
 
 def create_smart_chunks(content: str, file_path: str = "", classification: str = "DOCUMENT") -> List[Dict[str, Any]]:
     """
-    Create intelligent chunks based on document type.
+    Create intelligent chunks based on document type with best practices.
     
-    For legal texts (GESETZ, RECHTSTEXT), uses hierarchical structure parsing.
-    For other documents, uses simple character-based chunking.
+    Implements:
+    - Structure detection (legal, technical, business docs)
+    - Semantic chunking (respects document hierarchy)
+    - Context overlap (improves boundary queries)
+    - Metadata enrichment (keywords, cross-refs, headings)
+    - Adaptive sizing (min/max constraints)
+    - Quality validation
     
     Args:
         content: Document content
@@ -1591,74 +1596,103 @@ def create_smart_chunks(content: str, file_path: str = "", classification: str =
         classification: Document classification (GESETZ, DOCUMENT, etc.)
         
     Returns:
-        List of chunk dictionaries with text and metadata
+        List of enriched chunk dictionaries with text and metadata
     """
-    # Check if this is a legal document that should use structure-based chunking
-    is_legal = classification in ["GESETZ", "RECHTSTEXT", "RECHTSPRECHUNG"]
+    from ingestion.parsers import (
+        StructuredDocumentParser,
+        BestPracticeChunker,
+        ChunkingConfig
+    )
     
-    # Try legal parsing if appropriate
-    if is_legal:
-        try:
-            from ingestion.parsers.german_law_parser import GermanLawParser
-            
-            parser = GermanLawParser()
-            
-            # Check if content has legal structure
-            if parser.is_legal_text(content, file_path):
-                logger.info(f"Using legal structure parser for: {file_path}")
-                
-                # Parse into legal chunks
-                legal_chunks = parser.parse(content, filename=file_path)
-                
-                # Convert to standard chunk format
-                chunks = []
-                for i, legal_chunk in enumerate(legal_chunks):
-                    chunk_dict = {
-                        'text': legal_chunk.text,
-                        'index': i,
-                        'metadata': {
-                            'chunk_type': 'legal_structure',
-                            'paragraph': legal_chunk.paragraph,
-                            'paragraph_title': legal_chunk.paragraph_title,
-                            'absatz': legal_chunk.absatz,
-                            'nummer': legal_chunk.nummer,
-                            'buchstabe': legal_chunk.buchstabe,
-                            'level': legal_chunk.level.value,
-                            'reference': legal_chunk.reference,
-                            'parent_reference': legal_chunk.parent_reference,
-                            **legal_chunk.metadata
-                        }
-                    }
-                    chunks.append(chunk_dict)
-                
-                logger.info(f"Created {len(chunks)} legal structure chunks")
-                return chunks
-                
-        except ImportError:
-            logger.warning("Legal parser not available, falling back to simple chunking")
-        except Exception as e:
-            logger.warning(f"Legal parsing failed, falling back to simple chunking: {e}")
+    # Step 1: Try structure detection
+    struct_parser = StructuredDocumentParser()
+    structured_chunks = None
     
-    # Fallback: Simple character-based chunking
-    logger.debug(f"Using simple chunking for: {file_path}")
+    # Check if this is a structured document
+    if struct_parser.is_structured_document(content, file_path):
+        logger.info(f"[SMART_CHUNK] Using structured parser for: {file_path}")
+        
+        # Parse structure
+        parsed = struct_parser.parse(content, filename=file_path)
+        structured_chunks = struct_parser.chunks_to_dict(parsed)
+        
+        logger.info(f"[SMART_CHUNK] Detected structure: {len(structured_chunks)} semantic chunks")
+    else:
+        logger.info(f"[SMART_CHUNK] No structure detected, using best-practice chunking: {file_path}")
+    
+    # Step 2: Apply best-practice chunking
+    config = ChunkingConfig(
+        min_chunk_size=100,
+        max_chunk_size=2000,
+        target_chunk_size=500,
+        enable_overlap=True,
+        overlap_tokens=50,
+        respect_sentences=True,
+        extract_keywords=True,
+        extract_headings=True,
+        detect_cross_references=True
+    )
+    
+    chunker = BestPracticeChunker(config)
+    
+    # Generate document ID
+    import hashlib
+    doc_id = hashlib.sha256(f"{file_path}:{content[:200]}".encode()).hexdigest()[:16]
+    
+    # Create enriched chunks
+    enriched = chunker.chunk_document(
+        text=content,
+        document_id=doc_id,
+        structured_chunks=structured_chunks
+    )
+    
+    # Convert to dict format for pipeline
     chunks = []
-    chunk_size = 500
-    
-    for i in range(0, len(content), chunk_size):
-        chunk_text = content[i:i+chunk_size]
-        chunks.append({
-            'text': chunk_text,
-            'index': i // chunk_size,
+    for chunk in enriched:
+        chunk_dict = {
+            'text': chunk.text,
+            'index': chunk.chunk_index,
             'metadata': {
-                'chunk_type': 'simple',
-                'start_pos': i,
-                'end_pos': min(i + chunk_size, len(content))
+                # Best practice metadata
+                'chunk_type': 'structured' if structured_chunks else 'best_practice',
+                'chunk_id': chunk.chunk_id,
+                'document_id': chunk.document_id,
+                'total_chunks': chunk.total_chunks,
+                
+                # Structure metadata
+                'section': chunk.section,
+                'section_title': chunk.section_title,
+                'subsection': chunk.subsection,
+                'reference': chunk.reference,
+                'parent_reference': chunk.parent_reference,
+                
+                # Enhanced metadata
+                'heading_path': chunk.heading_path,
+                'keywords': chunk.keywords,
+                'cross_references': chunk.cross_references,
+                
+                # Context overlap
+                'prev_overlap': chunk.prev_overlap,
+                'next_overlap': chunk.next_overlap,
+                
+                # Text metrics
+                'char_count': chunk.char_count,
+                'word_count': chunk.word_count,
+                'sentence_count': chunk.sentence_count,
+                
+                # Quality
+                'completeness_score': chunk.completeness_score,
+                
+                # Original metadata
+                **chunk.metadata
             }
-        })
+        }
+        chunks.append(chunk_dict)
     
-    # Limit to 10 chunks for performance
-    chunks = chunks[:10]
-    logger.debug(f"Created {len(chunks)} simple chunks")
+    logger.info(
+        f"[SMART_CHUNK] Created {len(chunks)} enriched chunks "
+        f"(overlap: {config.enable_overlap}, keywords: {config.extract_keywords})"
+    )
     return chunks
 
 
