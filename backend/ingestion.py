@@ -1578,6 +1578,124 @@ def classify_document_sync(
         }
 
 
+def create_smart_chunks(content: str, file_path: str = "", classification: str = "DOCUMENT") -> List[Dict[str, Any]]:
+    """
+    Create intelligent chunks based on document type with best practices.
+    
+    Implements:
+    - Structure detection (legal, technical, business docs)
+    - Semantic chunking (respects document hierarchy)
+    - Context overlap (improves boundary queries)
+    - Metadata enrichment (keywords, cross-refs, headings)
+    - Adaptive sizing (min/max constraints)
+    - Quality validation
+    
+    Args:
+        content: Document content
+        file_path: File path for metadata
+        classification: Document classification (GESETZ, DOCUMENT, etc.)
+        
+    Returns:
+        List of enriched chunk dictionaries with text and metadata
+    """
+    from ingestion.parsers import (
+        StructuredDocumentParser,
+        BestPracticeChunker,
+        ChunkingConfig
+    )
+    
+    # Step 1: Try structure detection
+    struct_parser = StructuredDocumentParser()
+    structured_chunks = None
+    
+    # Check if this is a structured document
+    if struct_parser.is_structured_document(content, file_path):
+        logger.info(f"[SMART_CHUNK] Using structured parser for: {file_path}")
+        
+        # Parse structure
+        parsed = struct_parser.parse(content, filename=file_path)
+        structured_chunks = struct_parser.chunks_to_dict(parsed)
+        
+        logger.info(f"[SMART_CHUNK] Detected structure: {len(structured_chunks)} semantic chunks")
+    else:
+        logger.info(f"[SMART_CHUNK] No structure detected, using best-practice chunking: {file_path}")
+    
+    # Step 2: Apply best-practice chunking
+    config = ChunkingConfig(
+        min_chunk_size=100,
+        max_chunk_size=2000,
+        target_chunk_size=500,
+        enable_overlap=True,
+        overlap_tokens=50,
+        respect_sentences=True,
+        extract_keywords=True,
+        extract_headings=True,
+        detect_cross_references=True
+    )
+    
+    chunker = BestPracticeChunker(config)
+    
+    # Generate document ID
+    import hashlib
+    doc_id = hashlib.sha256(f"{file_path}:{content[:200]}".encode()).hexdigest()[:16]
+    
+    # Create enriched chunks
+    enriched = chunker.chunk_document(
+        text=content,
+        document_id=doc_id,
+        structured_chunks=structured_chunks
+    )
+    
+    # Convert to dict format for pipeline
+    chunks = []
+    for chunk in enriched:
+        chunk_dict = {
+            'text': chunk.text,
+            'index': chunk.chunk_index,
+            'metadata': {
+                # Best practice metadata
+                'chunk_type': 'structured' if structured_chunks else 'best_practice',
+                'chunk_id': chunk.chunk_id,
+                'document_id': chunk.document_id,
+                'total_chunks': chunk.total_chunks,
+                
+                # Structure metadata
+                'section': chunk.section,
+                'section_title': chunk.section_title,
+                'subsection': chunk.subsection,
+                'reference': chunk.reference,
+                'parent_reference': chunk.parent_reference,
+                
+                # Enhanced metadata
+                'heading_path': chunk.heading_path,
+                'keywords': chunk.keywords,
+                'cross_references': chunk.cross_references,
+                
+                # Context overlap
+                'prev_overlap': chunk.prev_overlap,
+                'next_overlap': chunk.next_overlap,
+                
+                # Text metrics
+                'char_count': chunk.char_count,
+                'word_count': chunk.word_count,
+                'sentence_count': chunk.sentence_count,
+                
+                # Quality
+                'completeness_score': chunk.completeness_score,
+                
+                # Original metadata
+                **chunk.metadata
+            }
+        }
+        chunks.append(chunk_dict)
+    
+    logger.info(
+        f"[SMART_CHUNK] Created {len(chunks)} enriched chunks "
+        f"(overlap: {config.enable_overlap}, keywords: {config.extract_keywords})"
+    )
+    return chunks
+
+
 async def process_document_with_uds3(
     file_path: str, 
     content: str, 
@@ -1744,8 +1862,13 @@ async def process_document_with_uds3(
             db_results["vector"] = "skipped (kill-switch)"
         elif job_manager.get_vector_backend():
             try:
-                # Chunk content for better semantic search
-                chunks = [content[i:i+500] for i in range(0, len(content), 500)][:10]  # Max 10 chunks
+                # Smart chunking: Use legal structure parser for legal texts, simple chunking otherwise
+                smart_chunks = create_smart_chunks(content, file_path, classification)
+                
+                # Extract text from chunk dictionaries
+                chunks = [chunk['text'] for chunk in smart_chunks]
+                chunk_metadata_list = [chunk['metadata'] for chunk in smart_chunks]
+                
                 chunk_count = 0
                 
                 # [OK] CHECK: Batch Embeddings aktiviert?
@@ -1799,6 +1922,8 @@ async def process_document_with_uds3(
                                     
                                     for idx, (chunk, vector) in enumerate(zip(chunks, embeddings)):
                                         chunk_id = f"{document_id}_chunk_{idx}"
+                                        
+                                        # Base metadata
                                         metadata = {
                                             "file_path": file_path,
                                             "classification": classification,
@@ -1808,6 +1933,21 @@ async def process_document_with_uds3(
                                             "batch_processed": True,
                                             "batch_insert": True
                                         }
+                                        
+                                        # Add legal structure metadata if available
+                                        if idx < len(chunk_metadata_list):
+                                            chunk_meta = chunk_metadata_list[idx]
+                                            metadata.update({
+                                                'chunk_type': chunk_meta.get('chunk_type', 'simple'),
+                                                'legal_paragraph': chunk_meta.get('paragraph'),
+                                                'legal_paragraph_title': chunk_meta.get('paragraph_title'),
+                                                'legal_absatz': chunk_meta.get('absatz'),
+                                                'legal_nummer': chunk_meta.get('nummer'),
+                                                'legal_buchstabe': chunk_meta.get('buchstabe'),
+                                                'legal_level': chunk_meta.get('level'),
+                                                'legal_reference': chunk_meta.get('reference'),
+                                                'legal_parent_reference': chunk_meta.get('parent_reference')
+                                            })
                                         
                                         # Add to buffer (auto-flush at batch_size)
                                         batch_inserter.add_vector(chunk_id, vector, metadata)
@@ -1834,6 +1974,8 @@ async def process_document_with_uds3(
                             
                             for idx, (chunk, vector) in enumerate(zip(chunks, embeddings)):
                                 chunk_id = f"{document_id}_chunk_{idx}"
+                                
+                                # Base metadata
                                 metadata = {
                                     "file_path": file_path,
                                     "classification": classification,
@@ -1843,6 +1985,21 @@ async def process_document_with_uds3(
                                     "batch_processed": True,
                                     "batch_insert": False
                                 }
+                                
+                                # Add legal structure metadata if available
+                                if idx < len(chunk_metadata_list):
+                                    chunk_meta = chunk_metadata_list[idx]
+                                    metadata.update({
+                                        'chunk_type': chunk_meta.get('chunk_type', 'simple'),
+                                        'legal_paragraph': chunk_meta.get('paragraph'),
+                                        'legal_paragraph_title': chunk_meta.get('paragraph_title'),
+                                        'legal_absatz': chunk_meta.get('absatz'),
+                                        'legal_nummer': chunk_meta.get('nummer'),
+                                        'legal_buchstabe': chunk_meta.get('buchstabe'),
+                                        'legal_level': chunk_meta.get('level'),
+                                        'legal_reference': chunk_meta.get('reference'),
+                                        'legal_parent_reference': chunk_meta.get('parent_reference')
+                                    })
                                 
                                 # [NEW] ChromaDB API: add_vector() with Circuit Breaker
                                 def _add_vector():
@@ -1900,6 +2057,7 @@ async def process_document_with_uds3(
                             vector = vector[:384] + [0.0] * (384 - len(vector))
                             logger.debug(f"[WARNING] Fallback hash-based vector: {len(vector)}-dim")
                         
+                        # Base metadata
                         metadata = {
                             "file_path": file_path,
                             "classification": classification,
@@ -1908,6 +2066,21 @@ async def process_document_with_uds3(
                             "embedding_model": EMBEDDING_MODEL_NAME if embedding_model != "FALLBACK" else "hash-fallback",
                             "batch_processed": False
                         }
+                        
+                        # Add legal structure metadata if available
+                        if idx < len(chunk_metadata_list):
+                            chunk_meta = chunk_metadata_list[idx]
+                            metadata.update({
+                                'chunk_type': chunk_meta.get('chunk_type', 'simple'),
+                                'legal_paragraph': chunk_meta.get('paragraph'),
+                                'legal_paragraph_title': chunk_meta.get('paragraph_title'),
+                                'legal_absatz': chunk_meta.get('absatz'),
+                                'legal_nummer': chunk_meta.get('nummer'),
+                                'legal_buchstabe': chunk_meta.get('buchstabe'),
+                                'legal_level': chunk_meta.get('level'),
+                                'legal_reference': chunk_meta.get('reference'),
+                                'legal_parent_reference': chunk_meta.get('parent_reference')
+                            })
                         
                         # [NEW] ChromaDB API: add_vector() with Circuit Breaker
                         breaker_mgr = get_breaker_manager()
@@ -2118,6 +2291,77 @@ async def process_document_with_uds3(
                 db_results["graph"] = f"error: {str(e)[:50]}"
         
         # ═══════════════════════════════════════════════════════════
+        # POLYGLOT AGGREGATION: Create complete JSON with all database data
+        # ═══════════════════════════════════════════════════════════
+        try:
+            from ingestion.polyglot_aggregator import PolyglotDocumentAggregator
+            
+            aggregator = PolyglotDocumentAggregator()
+            
+            # Prepare relational data
+            relational_data = {
+                "document_id": document_id,
+                "file_path": file_path,
+                "classification": classification,
+                "content_length": len(content),
+                "legal_terms_count": legal_count,
+                "quality_score": quality_score,
+                "word_count": word_count,
+                "timestamp": timestamp
+            }
+            
+            # Prepare vector data (chunks with metadata)
+            vector_data = []
+            if 'chunks' in locals() and 'chunk_metadata_list' in locals():
+                for idx, (chunk_text, chunk_meta) in enumerate(zip(chunks, chunk_metadata_list)):
+                    vector_chunk = {
+                        "chunk_id": f"{document_id}_chunk_{idx}",
+                        "chunk_index": idx,
+                        "text": chunk_text,
+                        "metadata": chunk_meta
+                    }
+                    vector_data.append(vector_chunk)
+            
+            # Prepare graph data
+            graph_data = {
+                "node_id": document_id,
+                "node_type": "Document",
+                "properties": {
+                    "file_path": file_path,
+                    "classification": classification,
+                    "legal_terms_count": legal_count,
+                    "quality_score": quality_score
+                },
+                "relationships": []  # Could be extended with cross-references
+            }
+            
+            # Create complete polyglot JSON
+            polyglot_json = aggregator.aggregate_document(
+                document_id=document_id,
+                file_path=file_path,
+                classification=classification,
+                relational_data=relational_data,
+                vector_data=vector_data,
+                graph_data=graph_data,
+                text_content=content,
+                binary_file_path=file_path  # Original file
+            )
+            
+            # Save polyglot JSON to file system (for Themis integration)
+            polyglot_dir = Path("data/polyglot")
+            polyglot_dir.mkdir(parents=True, exist_ok=True)
+            polyglot_path = polyglot_dir / f"{document_id}.json"
+            
+            aggregator.save_to_json(polyglot_json, str(polyglot_path))
+            
+            logger.info(f"[POLYGLOT] Complete JSON created: {polyglot_path}")
+            logger.info(f"[POLYGLOT] Completeness: {polyglot_json['statistics']['polyglot_completeness']:.0%}")
+            
+        except Exception as e:
+            logger.warning(f"[POLYGLOT] Aggregation failed (non-critical): {e}")
+            # Don't fail the whole process if aggregation fails
+        
+        # ═══════════════════════════════════════════════════════════
         # METRICS: Record document processing success
         # ═══════════════════════════════════════════════════════════
         if METRICS_AVAILABLE and documents_processed:
@@ -2133,7 +2377,8 @@ async def process_document_with_uds3(
             "quality_score": quality_score,
             "database_writes": db_results,
             "document_id": document_id,
-            "processing_mode": "UDS3_FULL_POLYGLOT"  # All 4 databases!
+            "processing_mode": "UDS3_FULL_POLYGLOT",  # All 4 databases!
+            "polyglot_json_path": str(polyglot_path) if 'polyglot_path' in locals() else None
         }
     
     except FileNotFoundError as e:
