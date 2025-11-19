@@ -24,6 +24,7 @@ class OfficeIngestionHandler(BaseIngestionHandler):
     def __init__(self):
         super().__init__()
         self._ocr_processor = None
+        self._table_extractor = None
     
     def _get_ocr_processor(self):
         """Lazy-load OCR processor"""
@@ -36,6 +37,22 @@ class OfficeIngestionHandler(BaseIngestionHandler):
                 logger.warning(f"OCR processor unavailable: {e}")
                 self._ocr_processor = None
         return self._ocr_processor
+    
+    def _get_table_extractor(self):
+        """Lazy-load table extractor"""
+        if self._table_extractor is None:
+            try:
+                from ingestion.table_extractor import TableExtractor
+                self._table_extractor = TableExtractor()
+                if self._table_extractor.is_available():
+                    logger.info("✓ Table extractor initialized")
+                else:
+                    logger.warning("Table extraction libraries not available")
+                    self._table_extractor = None
+            except Exception as e:
+                logger.warning(f"Table extractor unavailable: {e}")
+                self._table_extractor = None
+        return self._table_extractor
     
     def extract_metadata(self, context: HandlerContext) -> Dict[str, Any]:
         """Extract metadata from office documents"""
@@ -50,6 +67,26 @@ class OfficeIngestionHandler(BaseIngestionHandler):
             metadata["file_size"] = Path(context.file_path).stat().st_size
         except:
             pass
+        
+        # Extract tables if available
+        table_extractor = self._get_table_extractor()
+        if table_extractor:
+            try:
+                tables = table_extractor.extract_tables(str(context.file_path))
+                if tables:
+                    # Add table statistics to metadata
+                    table_stats = table_extractor.get_table_statistics(tables)
+                    metadata['tables'] = table_stats
+                    metadata['has_tables'] = True
+                    metadata['table_count'] = len(tables)
+                    
+                    # Store extracted tables for later use
+                    context.tables = tables
+                    
+                    logger.info(f"✓ Extracted {len(tables)} tables from {context.file_path}")
+            except Exception as e:
+                logger.warning(f"Table extraction failed: {e}")
+                metadata['has_tables'] = False
         
         return metadata
     

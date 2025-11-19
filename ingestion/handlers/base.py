@@ -13,6 +13,7 @@ class HandlerContext:
     file_path: Path
     temp_dir: Optional[Path] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+    tables: Optional[list] = None  # NEW: Store extracted tables
     
     def __post_init__(self):
         """Ensure paths are Path objects"""
