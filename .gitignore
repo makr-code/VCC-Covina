@@ -46,6 +46,10 @@ config/secrets/
 data/uploads/
 data/temp/
 data/cache/
+*.tmp
+*.temp
+*.bak
+*.pyc
 
 # Test artifacts
 .pytest_cache/
