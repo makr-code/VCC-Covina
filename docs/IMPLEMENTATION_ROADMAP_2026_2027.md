@@ -352,10 +352,10 @@ Dieses Dokument konkretisiert die Evolution Strategy mit detaillierten Umsetzung
 
 **Epic 4.5: Performance Optimization (6 Sprints)**
 
-**Sprint 84-86 (6 Wochen): CDN & Edge**
-- [ ] Task: CloudFlare integration
-- [ ] Task: Edge computing
-- [ ] Task: Cache strategy
+**Sprint 84-86 (6 Wochen): Reverse Proxy & Edge Caching**
+- [ ] Task: Nginx/Varnish reverse proxy setup
+- [ ] Task: Self-hosted edge caching (on-premise)
+- [ ] Task: Cache strategy (Redis Cluster)
 - **Story Points:** 34
 
 **Sprint 87-89 (6 Wochen): Query Optimization**

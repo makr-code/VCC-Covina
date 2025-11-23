@@ -57,14 +57,14 @@ Diese Dokumentensammlung definiert die strategische Weiterentwicklung des VCC-Co
 - 4 Strategische Phasen (Q1 2026 - Q4 2027)
   - Phase 1: Foundation Enhancement
   - Phase 2: VCC Ecosystem Integration
-  - Phase 3: AI/ML Modernization
-  - Phase 4: Enterprise Scale & Cloud-Native
+  - Phase 3: AI/ML Modernization (Self-Hosted)
+  - Phase 4: Enterprise Scale & On-Premise Excellence
 - Technology Stack Evolution
 - VCC Ecosystem Integration Strategy
 - Security & Compliance Framework (Zero-Trust, SOC 2, ISO 27001)
 - Performance & Scalability Targets
 - Cost & Resource Planning (€1.4M-€1.9M)
-- Technology Radar (Adopt/Trial/Assess/Hold)
+- On-Premise Architecture (No Vendor Lock-in)
 - Implementation Best Practices
 - Knowledge Transfer & Training
 - Success Metrics & KPIs
@@ -182,11 +182,11 @@ Diese Dokumentensammlung definiert die strategische Weiterentwicklung des VCC-Co
 **Zielpunkt (v7.0 - Dez 2027):**
 ```
 🎯 Enterprise Scale
-🎯 Cloud-Native, Multi-Region
+🎯 On-Premise Container-Native, Multi-Datacenter
 🎯 10K+ docs/sec, <10ms latency
 🎯 99.99% SLA, SOC 2/ISO 27001
 🎯 VCC Ecosystem Integration
-🎯 AI-First (LLM, GraphRAG, XAI)
+🎯 AI-First (Self-Hosted LLM, GraphRAG, XAI)
 ```
 
 ### Transformation Journey (24 Monate)
@@ -272,8 +272,8 @@ Phase 1 Phase 2 Phase 2 Phase 3 Phase 3 Phase 4
 - Python 3.11+, FastAPI, gunicorn
 - React 18+, Next.js, TypeScript
 - Kong/Nginx Gateway, GraphQL, gRPC
-- LLM (GPT-4/Claude/Llama 3), LangChain, MLflow
-- Kubernetes, Istio, Terraform, ArgoCD
+- LLM (Llama 3.1/Mistral - Self-Hosted), LangChain, MLflow
+- Kubernetes (On-Premise), Istio, Terraform, ArgoCD
 - Prometheus, Grafana, Jaeger, ELK
 - Kafka, Redis Cluster
 

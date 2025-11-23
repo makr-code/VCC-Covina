@@ -15,8 +15,8 @@ Diese Strategie definiert die technologische und architektonische Weiterentwickl
 **Strategische Ziele:**
 1. **VCC-Integration:** Nahtlose Integration in das VCC-Ökosystem
 2. **Technologie-Modernisierung:** State-of-the-art Architektur und Technologien
-3. **Skalierbarkeit:** Cloud-native Transformation für Enterprise-Scale
-4. **AI/ML Excellence:** Advanced AI-Capabilities für intelligente Compliance
+3. **Skalierbarkeit:** On-Premise Container-Native Transformation für Enterprise-Scale
+4. **AI/ML Excellence:** Self-Hosted AI-Capabilities für intelligente Compliance
 5. **Security & Compliance:** Zero-Trust Architecture und regulatorische Compliance
 
 **Aktueller Status (v3.4.11):**
@@ -27,14 +27,51 @@ Diese Strategie definiert die technologische und architektonische Weiterentwickl
 
 **Vision 2027:**
 - 🎯 VCC-Native Architecture (Full Ecosystem Integration)
-- 🎯 Cloud-Native Platform (Kubernetes, Service Mesh)
-- 🎯 AI-First Compliance Engine (LLM-powered, Explainable AI)
+- 🎯 Container-Native Platform (Kubernetes, Service Mesh, On-Premise)
+- 🎯 AI-First Compliance Engine (Self-Hosted LLM, Explainable AI)
 - 🎯 Zero-Trust Security (End-to-End Encryption, RBAC)
 - 🎯 Enterprise-Scale (10K+ documents/sec, 99.99% SLA)
 
 ---
 
+## 🏢 Grundprinzip: On-Premise & Vendor-Independence
+
+**Strategische Vorgabe:** Alle Komponenten der VCC-Covina Plattform werden ausschließlich **on-premise** betrieben. Es gibt **keine Abhängigkeiten** von externen Cloud-Anbietern oder Diensten, die Vendor-Login erfordern.
+
+### Architektonische Konsequenzen
+
+**✅ Self-Hosted Solutions:**
+- **LLM/AI:** Llama 3.1, Mistral AI, DeepSeek (on-premise inference mit vLLM/TGI)
+- **Vector Database:** ChromaDB Cluster (self-hosted)
+- **Message Queue:** Apache Kafka (on-premise cluster)
+- **Container Orchestration:** Kubernetes (bare-metal oder private datacenter)
+- **Observability:** Prometheus, Grafana, Jaeger, ELK (self-hosted)
+- **Cache/CDN:** Nginx, Varnish, Redis (on-premise)
+
+**❌ Keine Vendor-Abhängigkeiten:**
+- Keine Cloud-LLM APIs (OpenAI, Anthropic, Google)
+- Keine Cloud-Vector-Databases (Pinecone, Weaviate Cloud)
+- Keine Cloud-Provider (AWS, Azure, GCP)
+- Keine externen CDN/DDoS-Services (CloudFlare, Fastly)
+
+### Vorteile
+
+1. **Datensouveränität:** Alle Daten bleiben im eigenen Rechenzentrum
+2. **Privacy & Compliance:** Keine Datenübertragung an Dritte (GDPR/DSGVO)
+3. **Vendor-Independence:** Keine Lock-in-Effekte, volle Kontrolle
+4. **Cost Predictability:** Keine variablen Cloud-Kosten
+5. **Security:** Komplette Kontrolle über Infrastruktur und Zugriffe
+
+### Implementation
+
+- **Multi-Datacenter:** Redundanz durch mehrere on-premise Standorte
+- **Open-Source First:** Bevorzugung von Open-Source-Lösungen
+- **Self-Service Infrastructure:** Eigene Container-Registry, CI/CD, etc.
+
+---
+
 ## 🏗️ Architektur-Evolution
+
 
 ### 1. Current State Analysis (v3.4.11)
 
@@ -255,7 +292,8 @@ Diese Strategie definiert die technologische und architektonische Weiterentwickl
 **Initiativen:**
 
 1. **LLM Integration & Fine-Tuning** (Aufwand: 8 Wochen)
-   - Model Selection (GPT-4, Claude, Llama 3)
+   - Self-Hosted Model Selection (Llama 3.1, Mistral AI, DeepSeek)
+   - On-Premise Inference (vLLM, TGI)
    - Domain-Specific Fine-Tuning (Legal, Compliance)
    - Prompt Engineering Framework
    - RAG (Retrieval-Augmented Generation)
@@ -299,9 +337,9 @@ Diese Strategie definiert die technologische und architektonische Weiterentwickl
 
 ---
 
-### Phase 4: Enterprise Scale & Cloud-Native (Q2-Q4 2027) - 9 Monate
+### Phase 4: Enterprise Scale & On-Premise Excellence (Q2-Q4 2027) - 9 Monate
 
-**Ziel:** Enterprise-ready Platform, Multi-Cloud Deployment
+**Ziel:** Enterprise-ready Platform, On-Premise Multi-Datacenter Deployment
 
 **Initiativen:**
 
@@ -330,8 +368,8 @@ Diese Strategie definiert die technologische und architektonische Weiterentwickl
    - CouchDB Multi-Master
 
 5. **Performance Optimization** (Aufwand: 6 Wochen)
-   - CDN Integration (CloudFlare/Fastly)
-   - Edge Computing (Lambda@Edge)
+   - Reverse Proxy/Cache (Nginx/Varnish) - On-Premise
+   - Edge Caching (Self-Hosted CDN)
    - Caching Strategy (Redis Cluster)
    - Query Optimization
 
@@ -400,11 +438,11 @@ Diese Strategie definiert die technologische und architektonische Weiterentwickl
 - WebSocket (Real-Time)
 
 **AI/ML:**
-- LLM: GPT-4-Turbo/Claude 3.5/Llama 3 - **NEW**
-- Embeddings: OpenAI text-embedding-3 - **NEW**
+- LLM: Llama 3.1/Mistral AI (Self-Hosted) - **NEW**
+- Embeddings: sentence-transformers (On-Premise) - **NEW**
 - Frameworks: LangChain, LlamaIndex - **NEW**
-- Vector DB: Pinecone/Weaviate (Cloud) - **NEW**
-- MLOps: Kubeflow, MLflow - **NEW**
+- Vector DB: ChromaDB Cluster (Self-Hosted) - **NEW**
+- MLOps: Kubeflow, MLflow (On-Premise) - **NEW**
 
 **Observability:**
 - Prometheus + Grafana (Metrics)
@@ -555,7 +593,7 @@ Diese Strategie definiert die technologische und architektonische Weiterentwickl
    - Service Mesh mTLS (Mutual TLS)
    - Network Policies (Kubernetes)
    - Zero-Trust Network Access (ZTNA)
-   - DDoS Protection (CloudFlare)
+   - DDoS Protection (iptables/nftables + Rate Limiting)
 
 3. **Data Security**
    - Encryption at Rest (AES-256)
@@ -774,7 +812,7 @@ jobs:
 **Recommended Certifications:**
 - ✅ CKA (Certified Kubernetes Administrator)
 - ✅ CKAD (Certified Kubernetes App Developer)
-- ✅ AWS/Azure/GCP Cloud Architect
+- ✅ On-Premise Infrastructure Architect
 - ✅ Prometheus Certified Associate
 - ✅ Istio Certified Associate
 
@@ -782,15 +820,15 @@ jobs:
 
 ## 🎉 Conclusion
 
-Diese Evolution Strategy definiert einen klaren, strukturierten Weg zur Transformation von VCC-Covina in eine moderne, cloud-native, AI-first Enterprise-Plattform. Die 4-phasige Roadmap (2026-2027) balanciert Innovation mit Stabilität und bereitet das System optimal auf die Zukunft vor.
+Diese Evolution Strategy definiert einen klaren, strukturierten Weg zur Transformation von VCC-Covina in eine moderne, on-premise container-native, AI-first Enterprise-Plattform. Die 4-phasige Roadmap (2026-2027) balanciert Innovation mit Stabilität und bereitet das System optimal auf die Zukunft vor.
 
 **Kernaussagen:**
 
 1. **VCC-Integration:** Nahtlose Integration in das VCC-Ökosystem durch standardisierte APIs, Event-Driven Architecture und gemeinsame Datenmodelle
 
-2. **Cloud-Native:** Migration zu Kubernetes, Service Mesh und Infrastructure as Code ermöglicht Enterprise-Scale und Multi-Cloud Deployment
+2. **On-Premise Container-Native:** Migration zu Kubernetes, Service Mesh und Infrastructure as Code ermöglicht Enterprise-Scale on-premise Deployment ohne Vendor-Lock-in
 
-3. **AI-First:** State-of-the-art LLM Integration, Advanced Embeddings und GraphRAG etablieren Covina als intelligente Compliance-Plattform
+3. **AI-First (Self-Hosted):** State-of-the-art Self-Hosted LLM Integration (Llama 3.1, Mistral), Advanced Embeddings und GraphRAG etablieren Covina als intelligente Compliance-Plattform
 
 4. **Security:** Zero-Trust Architecture, Compliance-Grade Security und regulatorische Konformität (GDPR, SOC 2, ISO 27001)
 

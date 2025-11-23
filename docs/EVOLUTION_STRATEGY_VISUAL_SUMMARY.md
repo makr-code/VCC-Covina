@@ -20,7 +20,7 @@ Team: 2-3 Engineers
 ### Target State (v7.0 - Dec 2027)
 ```
 Status: 🎯 ENTERPRISE SCALE
-Architecture: Cloud-Native, Multi-Region, Service Mesh
+Architecture: On-Premise Container-Native, Multi-Datacenter, Service Mesh
 Performance: 10K+ docs/sec, <50ms latency
 Availability: 99.99% SLA
 Team: 4 Engineers + 2 SREs + 1 Architect
@@ -96,11 +96,12 @@ Team: 3 Engineers + 1 Architect
 ### Phase 3: AI/ML Modernization (Q4 2026 - Q1 2027)
 ```
 ┌─────────────────────────────────────────┐
-│ LLM Integration:                        │
-│   ├─ GPT-4-Turbo / Claude 3.5           │
+│ LLM Integration (Self-Hosted):          │
 │   ├─ Llama 3.1 (Open-Source)            │
+│   ├─ Mistral AI / DeepSeek              │
+│   ├─ vLLM / TGI Inference Engine        │
 │   └─ RAG (Retrieval-Augmented Gen)      │
-│ Advanced Embeddings                     │
+│ Advanced Embeddings (On-Premise)        │
 │   ├─ Multi-lingual Models               │
 │   ├─ Legal-BERT Fine-tuning             │
 │   └─ GPU Acceleration                   │
@@ -285,9 +286,9 @@ Frontend        Tkinter                   React 18+ / Next.js
 API             REST                      REST + GraphQL + gRPC
                 -                         Kong/Nginx Gateway
 
-AI/ML           sentence-transformers     GPT-4 / Claude / Llama 3
+AI/ML           sentence-transformers     Llama 3.1 / Mistral (Self-Hosted)
                 spaCy                     LangChain / LlamaIndex
-                scikit-learn              Kubeflow / MLflow
+                scikit-learn              Kubeflow / MLflow (On-Premise)
 
 Databases       PostgreSQL 14             PostgreSQL 16 (Sharded)
                 ChromaDB                  ChromaDB Cluster
