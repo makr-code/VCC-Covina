@@ -1,8 +1,29 @@
 # VCC-Covina Evolution Strategy - Visual Summary
 # Quick Reference Guide
 
-**Version:** 1.0.0  
-**Datum:** 23. November 2025  
+**Version:** 1.1.0  
+**Datum:** 25. November 2025  
+
+---
+
+## 🎯 Covina Core Mission
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    COVINA PRIMARY TASKS                         │
+│                                                                 │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
+│  │   1. INGESTION  │  │ 2. GAP DETECT   │  │ 3. VALIDATION   │ │
+│  │                 │  │                 │  │                 │ │
+│  │ • Doc Upload    │  │ • Missing Docs  │  │ • Data Quality  │ │
+│  │ • Extraction    │  │ • Incomplete    │  │ • Consistency   │ │
+│  │ • Classification│  │ • Cross-Ref     │  │ • Anomalies     │ │
+│  │ • Persistence   │  │ • Standards     │  │ • Audit Trail   │ │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘ │
+│                                                                 │
+│  ALL EVOLUTION PHASES SUPPORT THESE 3 CORE CAPABILITIES        │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
@@ -15,6 +36,7 @@ Architecture: Microservices (2 Backends)
 Databases: 4 (PostgreSQL, ChromaDB, Neo4j, CouchDB)
 Performance: 187 files/sec, 280 queries/sec
 Team: 2-3 Engineers
+Core Focus: Ingestion, Gap Detection, Validation
 ```
 
 ### Target State (v7.0 - Dec 2027)
@@ -25,6 +47,7 @@ Performance: 10K+ docs/sec, <50ms latency
 Availability: 99.99% SLA
 Team: 4 Engineers + 2 SREs + 1 Architect
 Budget: €1.4M-€1.9M
+Core Focus: Advanced Ingestion, AI-powered Gap Detection, Automated Validation
 ```
 
 ---

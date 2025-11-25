@@ -1,10 +1,35 @@
 # VCC-Covina Evolution Strategy
 # Strategische Weiterentwicklung nach Stand der Technik
 
-**Version:** 1.0.0  
+**Version:** 1.1.0  
 **Erstellt:** 23. November 2025  
+**Aktualisiert:** 25. November 2025  
 **Status:** Strategic Planning Document  
 **Gültigkeit:** 2025-2027
+
+---
+
+## 🎯 Covina Core Mission - Primäre Aufgaben
+
+**Covina ist spezialisiert auf drei Kernaufgaben:**
+
+### 1. Document Ingestion (Dokumenten-Aufnahme)
+- Automatisierte Erfassung von Dokumenten aller Formate
+- Intelligente Extraktion von Metadaten und Inhalten
+- Classification und Tagging von Dokumenten
+- Multi-Datenbank-Persistenz (UDS3 Polyglot)
+
+### 2. Knowledge Gap Detection (Wissenslücken-Erkennung)
+- Automatische Identifikation fehlender Informationen
+- Gap-Analyse in Dokumentenbeständen
+- Cross-Referenz-Prüfung zwischen Dokumenten
+- Vollständigkeitsprüfung gegen definierte Standards
+
+### 3. Continuous Data Validation (Daten-Validierung)
+- Permanente Überprüfung der Datenqualität
+- Konsistenzprüfung über alle Datenquellen
+- Erkennung von Anomalien und Inkonsistenzen
+- Audit-Trail für alle Änderungen
 
 ---
 
@@ -12,12 +37,12 @@
 
 Diese Strategie definiert die technologische und architektonische Weiterentwicklung des VCC-Covina Systems als integraler Bestandteil des Virtual Compliance Center (VCC) Ökosystems. Sie orientiert sich am aktuellen Stand der Technik, etablierten Best Practices und bereitet das System auf zukünftige Anforderungen vor.
 
-**Strategische Ziele:**
-1. **VCC-Integration:** Nahtlose Integration in das VCC-Ökosystem
-2. **Technologie-Modernisierung:** State-of-the-art Architektur und Technologien
-3. **Skalierbarkeit:** On-Premise Container-Native Transformation für Enterprise-Scale
-4. **AI/ML Excellence:** Self-Hosted AI-Capabilities für intelligente Compliance
-5. **Security & Compliance:** Zero-Trust Architecture und regulatorische Compliance
+**Strategische Ziele (fokussiert auf Core Mission):**
+1. **Ingestion Excellence:** Hochperformante Dokumenten-Aufnahme (10K+ docs/sec)
+2. **Gap Detection Intelligence:** KI-gestützte Wissenslücken-Erkennung
+3. **Validation Framework:** Automatisierte Datenvalidierung und Qualitätssicherung
+4. **VCC-Integration:** Nahtlose Integration via Event-Bus (Kafka)
+5. **Security & Compliance:** Zero-Trust Architecture, DSGVO-konform
 
 **Aktueller Status (v3.4.11):**
 - ✅ Microservices Architecture (Main + Ingestion Backend)
@@ -113,25 +138,29 @@ Diese Strategie definiert die technologische und architektonische Weiterentwickl
         ┌────────────▼────────────────────────────────────────────┐
         │              Covina Service Layer                       │
         │                                                         │
-        │  ┌─────────────────┐        ┌─────────────────────┐   │
-        │  │  Query Service  │        │ Ingestion Service   │   │
-        │  │  (Port 45678)   │        │  (Port 45679)       │   │
-        │  │                 │        │                     │   │
-        │  │ • Search API    │        │ • Document Upload  │   │
-        │  │ • DSGVO API     │        │ • Processing       │   │
-        │  │ • Review Queue  │        │ • Worker Pool      │   │
-        │  │ • Analytics     │        │ • Job Management   │   │
-        │  └─────────────────┘        └─────────────────────┘   │
-        │                                                         │
-        │  ┌─────────────────┐        ┌─────────────────────┐   │
-        │  │  AI/ML Service  │        │ Analytics Service   │   │
-        │  │  (NEW)          │        │  (NEW)              │   │
-        │  │                 │        │                     │   │
-        │  │ • LLM Engine    │        │ • Process Mining   │   │
-        │  │ • Embeddings    │        │ • Gap Detection    │   │
-        │  │ • Classification│        │ • Reporting        │   │
-        │  │ • NER/Entity    │        │ • Dashboards       │   │
-        │  └─────────────────┘        └─────────────────────┘   │
+        │  ┌─────────────────────────────────────────────────────┐ │
+        │  │          COVINA CORE SERVICES                        │ │
+        │  │                                                       │ │
+        │  │  ┌─────────────────┐        ┌─────────────────────┐  │ │
+        │  │  │ Ingestion Svc   │        │ Validation Service  │  │ │
+        │  │  │ (Port 45679)    │        │  (CORE)             │  │ │
+        │  │  │                 │        │                     │  │ │
+        │  │  │ • Doc Upload    │        │ • Data Quality     │  │ │
+        │  │  │ • Processing    │        │ • Consistency Check│  │ │
+        │  │  │ • Classification│        │ • Anomaly Detect   │  │ │
+        │  │  │ • Extraction    │        │ • Audit Trail      │  │ │
+        │  │  └─────────────────┘        └─────────────────────┘  │ │
+        │  │                                                       │ │
+        │  │  ┌─────────────────┐        ┌─────────────────────┐  │ │
+        │  │  │ Gap Detection   │        │ Query Service       │  │ │
+        │  │  │ Service (CORE)  │        │  (Port 45678)       │  │ │
+        │  │  │                 │        │                     │  │ │
+        │  │  │ • Missing Docs  │        │ • Search API       │  │ │
+        │  │  │ • Incomplete    │        │ • DSGVO API        │  │ │
+        │  │  │ • Cross-Ref     │        │ • Review Queue     │  │ │
+        │  │  │ • Standards     │        │ • Analytics        │  │ │
+        │  │  └─────────────────┘        └─────────────────────┘  │ │
+        │  └─────────────────────────────────────────────────────┘ │
         └────────────┬────────────────────────────────────────────┘
                      │
         ┌────────────▼────────────────────────────────────────────┐

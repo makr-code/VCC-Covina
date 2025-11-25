@@ -1,14 +1,28 @@
 # VCC-Covina Evolution Strategy - Documentation Index
 
-**Version:** 1.0.0  
-**Datum:** 23. November 2025  
+**Version:** 1.1.0  
+**Datum:** 25. November 2025  
 **Status:** ✅ Complete & Ready for Review
+
+---
+
+## 🎯 Covina Core Mission
+
+**Primäre Aufgaben von Covina:**
+
+| # | Aufgabe | Beschreibung |
+|---|---------|--------------|
+| 1 | **Document Ingestion** | Intelligente Erfassung, Extraktion und Klassifizierung von Dokumenten |
+| 2 | **Knowledge Gap Detection** | Erkennung von Wissenslücken, fehlenden Dokumenten und Inkonsistenzen |
+| 3 | **Continuous Validation** | Permanente Überprüfung und Validierung der Datenbestände |
+
+**Alle Entwicklungsphasen unterstützen diese drei Kernaufgaben.**
 
 ---
 
 ## 📚 Dokumenten-Übersicht
 
-Diese Dokumentensammlung definiert die strategische Weiterentwicklung des VCC-Covina Systems für die Jahre 2026-2027. Sie umfasst 3,100+ Zeilen professionelle Dokumentation über 5 Kernbereiche.
+Diese Dokumentensammlung definiert die strategische Weiterentwicklung des VCC-Covina Systems für die Jahre 2026-2027. Sie umfasst 3,500+ Zeilen professionelle Dokumentation über 5 Kernbereiche.
 
 ---
 
@@ -16,21 +30,21 @@ Diese Dokumentensammlung definiert die strategische Weiterentwicklung des VCC-Co
 
 ### Für Stakeholder & Management
 **Start hier:** [`EVOLUTION_STRATEGY_VISUAL_SUMMARY.md`](EVOLUTION_STRATEGY_VISUAL_SUMMARY.md)
+- Covina Core Mission Übersicht
 - Executive Dashboard mit Key Metrics
 - Timeline & Budgetübersicht
 - ROI & Business Impact
-- Visuell aufbereitet, schnell erfassbar
 
 ### Für Technical Leadership & Architekten
 **Start hier:** [`VCC_COVINA_EVOLUTION_STRATEGY.md`](VCC_COVINA_EVOLUTION_STRATEGY.md)
-- Vollständige Strategie (800+ Zeilen)
-- Architektur-Evolution
-- Technologie-Stack
+- Core Mission Definition
+- Vollständige Strategie (900+ Zeilen)
+- Architektur-Evolution (Ingestion, Gap Detection, Validation)
 - VCC-Integration
 
 ### Für Entwickler
 **Start hier:** [`IMPLEMENTATION_ROADMAP_2026_2027.md`](IMPLEMENTATION_ROADMAP_2026_2027.md)
-- Sprint-by-Sprint Planung
+- Core Mission fokussierte Sprints
 - Task Breakdown
 - Code-Beispiele
 - Testing Strategy

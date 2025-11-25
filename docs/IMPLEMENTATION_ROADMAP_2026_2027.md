@@ -1,10 +1,22 @@
 # VCC-Covina Implementation Roadmap 2026-2027
 # Konkrete Umsetzungsplanung der Evolution Strategy
 
-**Version:** 1.0.0  
+**Version:** 1.1.0  
 **Erstellt:** 23. November 2025  
-**Basierend auf:** VCC_COVINA_EVOLUTION_STRATEGY.md v1.0.0  
+**Aktualisiert:** 25. November 2025  
+**Basierend auf:** VCC_COVINA_EVOLUTION_STRATEGY.md v1.1.0  
 **Status:** Implementation Planning
+
+---
+
+## 🎯 Covina Core Mission Focus
+
+**Primäre Aufgaben von Covina:**
+1. **Document Ingestion** - Intelligente Dokumenten-Aufnahme
+2. **Knowledge Gap Detection** - Erkennung von Wissenslücken
+3. **Continuous Data Validation** - Ständige Validierung der Datenbestände
+
+Alle Phasen und Sprints sind auf diese drei Kernaufgaben ausgerichtet.
 
 ---
 
@@ -14,8 +26,8 @@ Dieses Dokument konkretisiert die Evolution Strategy mit detaillierten Umsetzung
 
 **Überblick:**
 - **Zeitraum:** 24 Monate (Jan 2026 - Dez 2027)
-- **4 Phasen:** Foundation, VCC Integration, AI/ML, Enterprise Scale
-- **54 Epics:** Strukturiert nach Phasen und Quartalen
+- **4 Phasen:** Foundation, VCC Integration, AI/ML (Core-focused), Enterprise Scale
+- **Core Services:** Ingestion, Gap Detection, Validation
 - **Budget:** €1.3M - €1.9M (Total)
 - **Team:** 2-4 Senior Engineers, 1 Architect, 2 SREs
 
