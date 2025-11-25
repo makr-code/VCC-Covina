@@ -1,22 +1,25 @@
 # VCC-Covina Evolution Strategy - Documentation Index
 
-**Version:** 1.1.0  
+**Version:** 1.2.0  
 **Datum:** 25. November 2025  
 **Status:** ✅ Complete & Ready for Review
 
 ---
 
-## 🎯 Covina Core Mission
+## 🔄 Covina: Geschlossener Prozesskreis
 
-**Primäre Aufgaben von Covina:**
+**Covina ist ein in sich geschlossener Prozesskreis mit starken Verbindungen zu VERITAS und Clara.**
 
-| # | Aufgabe | Beschreibung |
-|---|---------|--------------|
-| 1 | **Document Ingestion** | Intelligente Erfassung, Extraktion und Klassifizierung von Dokumenten |
-| 2 | **Knowledge Gap Detection** | Erkennung von Wissenslücken, fehlenden Dokumenten und Inkonsistenzen |
+| # | Kernaufgabe | Beschreibung |
+|---|-------------|--------------|
+| 1 | **Document Ingestion** | Intelligente Erfassung, Extraktion und Klassifizierung |
+| 2 | **Knowledge Gap Detection** | Erkennung von Wissenslücken und fehlenden Dokumenten |
 | 3 | **Continuous Validation** | Permanente Überprüfung und Validierung der Datenbestände |
 
-**Alle Entwicklungsphasen unterstützen diese drei Kernaufgaben.**
+**Starke VCC-Verbindungen:**
+- **VERITAS:** Legal Check, Compliance-Prüfung, Risk Assessment
+- **Clara:** OCR/NLP-Analyse, Entity Extraction, Metadaten
+- **ThemisDB:** VCC-weite Persistenz und Sharding
 
 ---
 

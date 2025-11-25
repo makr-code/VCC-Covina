@@ -1,28 +1,46 @@
 # VCC-Covina Evolution Strategy - Visual Summary
 # Quick Reference Guide
 
-**Version:** 1.1.0  
+**Version:** 1.2.0  
 **Datum:** 25. November 2025  
 
 ---
 
-## 🎯 Covina Core Mission
+## 🔄 Covina Prozesskreis (Closed-Loop mit VERITAS & Clara)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    COVINA PRIMARY TASKS                         │
+│                COVINA PROZESSKREIS (Closed-Loop)                │
 │                                                                 │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
-│  │   1. INGESTION  │  │ 2. GAP DETECT   │  │ 3. VALIDATION   │ │
-│  │                 │  │                 │  │                 │ │
-│  │ • Doc Upload    │  │ • Missing Docs  │  │ • Data Quality  │ │
-│  │ • Extraction    │  │ • Incomplete    │  │ • Consistency   │ │
-│  │ • Classification│  │ • Cross-Ref     │  │ • Anomalies     │ │
-│  │ • Persistence   │  │ • Standards     │  │ • Audit Trail   │ │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘ │
-│                                                                 │
-│  ALL EVOLUTION PHASES SUPPORT THESE 3 CORE CAPABILITIES        │
-└─────────────────────────────────────────────────────────────────┘
+│     ┌─────────────┐                                             │
+│     │  INGESTION  │◄────────────────────────────────────────┐  │
+│     │  (Aufnahme) │                                          │  │
+│     └──────┬──────┘                                          │  │
+│            │                                                  │  │
+│            ▼                                                  │  │
+│     ┌─────────────┐                                          │  │
+│     │    GAP      │                                          │  │
+│     │  DETECTION  │                                          │  │
+│     └──────┬──────┘                                          │  │
+│            │                                                  │  │
+│            ▼                                                  │  │
+│     ┌─────────────┐                                          │  │
+│     │ VALIDATION  │──────────────────────────────────────────┘  │
+│     │ (Prüfung)   │                                             │
+│     └──────┬──────┘                                             │
+│            │ Erkannte Lücken → Neue Ingestion                   │
+└────────────┼────────────────────────────────────────────────────┘
+             │
+             ├───────────────────┬───────────────────┐
+             │                   │                   │
+             ▼                   ▼                   ▼
+      ┌───────────┐       ┌───────────┐       ┌───────────┐
+      │  VERITAS  │       │   CLARA   │       │ ThemisDB  │
+      │  (Legal)  │       │(Document) │       │  (Data)   │
+      │           │       │           │       │           │
+      │•Compliance│       │•OCR/NLP   │       │•Storage   │
+      │•Risk Assess│      │•Extraction│       │•Sharding  │
+      └───────────┘       └───────────┘       └───────────┘
 ```
 
 ---

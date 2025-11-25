@@ -9,27 +9,65 @@
 
 ---
 
-## 🎯 Covina Core Mission - Primäre Aufgaben
+## 🎯 Covina Core Mission - Geschlossener Prozesskreis
 
-**Covina ist spezialisiert auf drei Kernaufgaben:**
+**Covina ist ein in sich geschlossener Prozesskreis mit starken Verbindungen zu VERITAS und Clara.**
 
-### 1. Document Ingestion (Dokumenten-Aufnahme)
-- Automatisierte Erfassung von Dokumenten aller Formate
-- Intelligente Extraktion von Metadaten und Inhalten
-- Classification und Tagging von Dokumenten
-- Multi-Datenbank-Persistenz (UDS3 Polyglot)
+### 🔄 Covina Prozesskreis (Closed-Loop)
 
-### 2. Knowledge Gap Detection (Wissenslücken-Erkennung)
-- Automatische Identifikation fehlender Informationen
-- Gap-Analyse in Dokumentenbeständen
-- Cross-Referenz-Prüfung zwischen Dokumenten
-- Vollständigkeitsprüfung gegen definierte Standards
+```
+    ┌─────────────────────────────────────────────────────────────┐
+    │                COVINA PROZESSKREIS (Closed-Loop)            │
+    │                                                             │
+    │     ┌─────────────┐                                         │
+    │     │  INGESTION  │◄────────────────────────────────────┐  │
+    │     │  (Aufnahme) │                                      │  │
+    │     └──────┬──────┘                                      │  │
+    │            │                                              │  │
+    │            ▼                                              │  │
+    │     ┌─────────────┐                                      │  │
+    │     │    GAP      │                                      │  │
+    │     │  DETECTION  │                                      │  │
+    │     └──────┬──────┘                                      │  │
+    │            │                                              │  │
+    │            ▼                                              │  │
+    │     ┌─────────────┐                                      │  │
+    │     │ VALIDATION  │──────────────────────────────────────┘  │
+    │     │ (Prüfung)   │                                         │
+    │     └──────┬──────┘                                         │
+    │            │ Erkannte Lücken führen zu neuer Ingestion      │
+    └────────────┼────────────────────────────────────────────────┘
+                 │
+                 ├─────────────────────┬─────────────────────┐
+                 │                     │                     │
+                 ▼                     ▼                     ▼
+          ┌───────────┐         ┌───────────┐         ┌───────────┐
+          │  VERITAS  │         │   CLARA   │         │ ThemisDB  │
+          │  (Legal)  │         │(Document) │         │  (Data)   │
+          └───────────┘         └───────────┘         └───────────┘
+```
 
-### 3. Continuous Data Validation (Daten-Validierung)
-- Permanente Überprüfung der Datenqualität
-- Konsistenzprüfung über alle Datenquellen
-- Erkennung von Anomalien und Inkonsistenzen
-- Audit-Trail für alle Änderungen
+### Covina Kernaufgaben
+
+| # | Aufgabe | Beschreibung |
+|---|---------|--------------|
+| 1 | **Document Ingestion** | Automatisierte Erfassung, Extraktion, Classification, Persistenz |
+| 2 | **Knowledge Gap Detection** | Fehlende Informationen, Gap-Analyse, Cross-Referenz-Prüfung |
+| 3 | **Continuous Data Validation** | Datenqualität, Konsistenz, Anomalien, Audit-Trail |
+
+### 🔗 Starke Verbindungen zu VCC-Services
+
+**Covina ↔ VERITAS (Legal Intelligence):**
+- Covina → VERITAS: Dokumente zur Compliance-Prüfung
+- VERITAS → Covina: Validation Results, Legal Gaps, Risk Assessment
+
+**Covina ↔ Clara (Document Intelligence):**
+- Covina → Clara: Dokumente zur OCR/NLP-Analyse
+- Clara → Covina: Extrahierte Inhalte, Strukturierte Metadaten
+
+**Covina ↔ ThemisDB (Persistence):**
+- Bidirektionale Synchronisation
+- ThemisDB als VCC-weite Sharding-Lösung
 
 ---
 
