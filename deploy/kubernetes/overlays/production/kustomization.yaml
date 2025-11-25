@@ -1,0 +1,20 @@
+# VCC-Covina Production Overlay
+# Phase 1: Foundation Enhancement
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: covina
+
+resources:
+  - ../../base
+
+patchesStrategicMerge:
+  - replicas-patch.yaml
+  - resources-patch.yaml
+
+configMapGenerator:
+  - name: covina-env
+    behavior: merge
+    literals:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=WARNING

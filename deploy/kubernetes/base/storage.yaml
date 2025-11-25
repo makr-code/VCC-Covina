@@ -1,0 +1,81 @@
+# VCC-Covina Persistent Volume Claims
+# Phase 1: Foundation Enhancement
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: covina-data-pvc
+  namespace: covina
+  labels:
+    app.kubernetes.io/name: covina
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: local-storage
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: covina-uploads-pvc
+  namespace: covina
+  labels:
+    app.kubernetes.io/name: covina
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: local-storage
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data-pvc
+  namespace: covina
+  labels:
+    app.kubernetes.io/name: covina
+    app.kubernetes.io/component: database
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-storage
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chromadb-data-pvc
+  namespace: covina
+  labels:
+    app.kubernetes.io/name: covina
+    app.kubernetes.io/component: database
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-storage
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: neo4j-data-pvc
+  namespace: covina
+  labels:
+    app.kubernetes.io/name: covina
+    app.kubernetes.io/component: database
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-storage
+  resources:
+    requests:
+      storage: 50Gi
