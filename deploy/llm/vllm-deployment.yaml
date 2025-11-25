@@ -1,0 +1,449 @@
+# VCC-Covina LLM Inference Deployment
+# Self-hosted vLLM for Llama 3.1/Mistral inference
+# On-premise, no vendor dependencies
+# ============================================
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: covina-llm
+  labels:
+    app: covina
+    component: llm
+    environment: production
+
+---
+# LLM Model Storage (for model weights)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: llm-models-pvc
+  namespace: covina-llm
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 200Gi  # Space for multiple models
+
+---
+# Hugging Face Model Cache
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hf-cache-pvc
+  namespace: covina-llm
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 100Gi
+
+---
+# vLLM Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vllm-config
+  namespace: covina-llm
+data:
+  # Primary model (Llama 3.1 8B - fits on single GPU)
+  PRIMARY_MODEL: "meta-llama/Meta-Llama-3.1-8B-Instruct"
+  # Alternative models (Mistral for multilingual)
+  ALTERNATE_MODEL: "mistralai/Mistral-7B-Instruct-v0.2"
+  # Embedding model (for RAG)
+  EMBEDDING_MODEL: "intfloat/multilingual-e5-large"
+  
+  # vLLM Server Configuration
+  MAX_MODEL_LEN: "8192"
+  GPU_MEMORY_UTILIZATION: "0.9"
+  TENSOR_PARALLEL_SIZE: "1"  # Increase for multi-GPU
+  MAX_NUM_BATCHED_TOKENS: "8192"
+  MAX_NUM_SEQS: "256"
+  
+  # API Configuration
+  API_KEY: "vcc-local-key"  # On-premise API key
+  HOST: "0.0.0.0"
+  PORT: "8000"
+  
+  # Model loading
+  DOWNLOAD_DIR: "/models/hub"
+  HF_HOME: "/models/hub"
+  
+  # Performance
+  ENABLE_CHUNKED_PREFILL: "true"
+  DTYPE: "bfloat16"
+
+---
+# vLLM Secrets (for model access if needed)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vllm-secrets
+  namespace: covina-llm
+type: Opaque
+stringData:
+  # Hugging Face token (optional, for gated models)
+  # Replace with actual token if using gated models
+  HF_TOKEN: ""
+  # Internal API key for authentication
+  API_KEY: "vcc-covina-llm-secret-key-replace-in-production"
+
+---
+# vLLM Deployment (Primary - Llama 3.1)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-llama
+  namespace: covina-llm
+  labels:
+    app: vllm
+    model: llama-3.1
+spec:
+  replicas: 1  # Scale based on GPU availability
+  selector:
+    matchLabels:
+      app: vllm
+      model: llama-3.1
+  template:
+    metadata:
+      labels:
+        app: vllm
+        model: llama-3.1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:latest
+          args:
+            - "--model"
+            - "$(PRIMARY_MODEL)"
+            - "--host"
+            - "$(HOST)"
+            - "--port"
+            - "$(PORT)"
+            - "--max-model-len"
+            - "$(MAX_MODEL_LEN)"
+            - "--gpu-memory-utilization"
+            - "$(GPU_MEMORY_UTILIZATION)"
+            - "--tensor-parallel-size"
+            - "$(TENSOR_PARALLEL_SIZE)"
+            - "--dtype"
+            - "$(DTYPE)"
+            - "--enable-chunked-prefill"
+            - "--api-key"
+            - "$(API_KEY)"
+          envFrom:
+            - configMapRef:
+                name: vllm-config
+            - secretRef:
+                name: vllm-secrets
+          ports:
+            - containerPort: 8000
+              name: http
+              protocol: TCP
+          resources:
+            requests:
+              memory: "32Gi"
+              cpu: "8"
+              nvidia.com/gpu: "1"  # Request 1 GPU
+            limits:
+              memory: "48Gi"
+              cpu: "16"
+              nvidia.com/gpu: "1"
+          volumeMounts:
+            - name: models
+              mountPath: /models
+            - name: hf-cache
+              mountPath: /root/.cache/huggingface
+            - name: shm
+              mountPath: /dev/shm
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 300  # Model loading takes time
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: llm-models-pvc
+        - name: hf-cache
+          persistentVolumeClaim:
+            claimName: hf-cache-pvc
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Gi
+      nodeSelector:
+        nvidia.com/gpu: "true"  # Schedule on GPU nodes
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+          effect: "NoSchedule"
+
+---
+# vLLM Deployment (Secondary - Mistral for multilingual)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-mistral
+  namespace: covina-llm
+  labels:
+    app: vllm
+    model: mistral-7b
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm
+      model: mistral-7b
+  template:
+    metadata:
+      labels:
+        app: vllm
+        model: mistral-7b
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:latest
+          args:
+            - "--model"
+            - "$(ALTERNATE_MODEL)"
+            - "--host"
+            - "$(HOST)"
+            - "--port"
+            - "$(PORT)"
+            - "--max-model-len"
+            - "$(MAX_MODEL_LEN)"
+            - "--gpu-memory-utilization"
+            - "$(GPU_MEMORY_UTILIZATION)"
+            - "--tensor-parallel-size"
+            - "$(TENSOR_PARALLEL_SIZE)"
+            - "--dtype"
+            - "$(DTYPE)"
+            - "--api-key"
+            - "$(API_KEY)"
+          envFrom:
+            - configMapRef:
+                name: vllm-config
+            - secretRef:
+                name: vllm-secrets
+          ports:
+            - containerPort: 8000
+              name: http
+              protocol: TCP
+          resources:
+            requests:
+              memory: "24Gi"
+              cpu: "8"
+              nvidia.com/gpu: "1"
+            limits:
+              memory: "32Gi"
+              cpu: "16"
+              nvidia.com/gpu: "1"
+          volumeMounts:
+            - name: models
+              mountPath: /models
+            - name: hf-cache
+              mountPath: /root/.cache/huggingface
+            - name: shm
+              mountPath: /dev/shm
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 300
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 10
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: llm-models-pvc
+        - name: hf-cache
+          persistentVolumeClaim:
+            claimName: hf-cache-pvc
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Gi
+      nodeSelector:
+        nvidia.com/gpu: "true"
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+          effect: "NoSchedule"
+
+---
+# vLLM Service (Llama)
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-llama-service
+  namespace: covina-llm
+  labels:
+    app: vllm
+    model: llama-3.1
+spec:
+  type: ClusterIP
+  selector:
+    app: vllm
+    model: llama-3.1
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      protocol: TCP
+
+---
+# vLLM Service (Mistral)
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-mistral-service
+  namespace: covina-llm
+  labels:
+    app: vllm
+    model: mistral-7b
+spec:
+  type: ClusterIP
+  selector:
+    app: vllm
+    model: mistral-7b
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      protocol: TCP
+
+---
+# LLM Gateway Service (Load balancer between models)
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-gateway
+  namespace: covina-llm
+  labels:
+    app: llm-gateway
+spec:
+  type: ClusterIP
+  selector:
+    app: vllm
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      protocol: TCP
+
+---
+# HorizontalPodAutoscaler for vLLM (when multi-GPU available)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: vllm-llama-hpa
+  namespace: covina-llm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: vllm-llama
+  minReplicas: 1
+  maxReplicas: 4  # Scale up to 4 replicas if GPUs available
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Pods
+      pods:
+        metric:
+          name: vllm_requests_running
+        target:
+          type: AverageValue
+          averageValue: "50"  # Scale when >50 concurrent requests
+
+---
+# PodDisruptionBudget for high availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: vllm-pdb
+  namespace: covina-llm
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: vllm
+
+---
+# NetworkPolicy for LLM namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: llm-network-policy
+  namespace: covina-llm
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from covina namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: covina
+      ports:
+        - protocol: TCP
+          port: 8000
+    # Allow from monitoring
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: covina-observability
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    # Allow to download models (initial setup only)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+    # Allow DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
