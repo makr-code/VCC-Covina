@@ -285,7 +285,7 @@ Diese Strategie definiert die technologische und architektonische Weiterentwickl
 - ✅ API Gateway deployed
 - ✅ Observability Dashboard
 - ✅ Kubernetes Cluster ready
-- ✅ CI/CD Pipeline (GitHub Actions)
+- ✅ CI/CD Pipeline (Argo Workflows - on-premise)
 
 **Success Metrics:**
 - Service Discovery latency < 10ms
@@ -805,41 +805,60 @@ Diese Strategie definiert die technologische und architektonische Weiterentwickl
 - ✅ Conventional Commits
 - ✅ Automated Changelogs
 
-**CI/CD Pipeline:**
+**CI/CD Pipeline (On-Premise - Keine GitHub Workflows):**
+
+> ⚠️ **WICHTIG:** GitHub Workflows werden vermieden! Stattdessen nutzen wir On-Premise CI/CD.
+
 ```yaml
-# .github/workflows/deploy.yml
-name: Deploy to Production
+# deploy/argo-workflows/ci-pipeline.yaml (On-Premise)
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: covina-ci-pipeline
+  namespace: argo
+spec:
+  entrypoint: ci-pipeline
+  templates:
+    - name: ci-pipeline
+      steps:
+        - - name: test
+            template: run-tests
+        - - name: security
+            template: security-scan
+        - - name: deploy
+            template: deploy-k8s
 
-on:
-  push:
-    branches: [main]
+    - name: run-tests
+      container:
+        image: python:3.11
+        command: [pytest]
+        args: ["--cov=src", "--cov-report=xml"]
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run Tests
-        run: pytest --cov=src --cov-report=xml
-      
-  security:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Security Scan
-        run: |
-          bandit -r src/
-          safety check
-          trivy image covina:latest
-  
-  deploy:
-    needs: [test, security]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to Kubernetes
-        run: |
-          kubectl apply -f k8s/
-          kubectl rollout status deployment/covina
+    - name: security-scan
+      container:
+        image: aquasec/trivy:latest
+        command: [sh, -c]
+        args:
+          - |
+            bandit -r src/
+            trivy image covina:latest
+
+    - name: deploy-k8s
+      container:
+        image: bitnami/kubectl:latest
+        command: [sh, -c]
+        args:
+          - |
+            kubectl apply -f k8s/
+            kubectl rollout status deployment/covina
 ```
+
+**On-Premise CI/CD Optionen:**
+- ✅ **Argo Workflows** (Kubernetes-native, empfohlen)
+- ✅ **Jenkins** (Self-hosted, etabliert)
+- ✅ **GitLab CI** (Self-hosted GitLab Runner)
+- ✅ **Tekton** (Cloud-native CI/CD)
+- ❌ **GitHub Actions** (vermeiden - externe Abhängigkeit)
 
 ### Deployment Strategies
 
