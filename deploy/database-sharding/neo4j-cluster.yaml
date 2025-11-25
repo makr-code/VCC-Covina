@@ -1,6 +1,26 @@
 # VCC-Covina Neo4j Causal Cluster Configuration
 # Phase 4: Enterprise Scale - Graph Database Clustering
 # All on-premise, no vendor dependencies
+#
+# ═══════════════════════════════════════════════════════════════════════════════
+# WICHTIG: ThemisDB Integration
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# ThemisDB unterstützt auch Graph-Datenbanken im VCC-Ökosystem.
+# Diese Neo4j-Konfiguration ist für:
+#
+# 1. Covina-spezifische Knowledge Graphs (UDS3 Relations)
+# 2. Document-Entity Relationships
+# 3. GraphRAG Pipeline
+#
+# Bei VCC-weiten Graph-Queries:
+# - ThemisDB kann Cross-Service-Graph-Traversals koordinieren
+# - Neo4j-Daten können in Themis registriert werden
+# - VERITAS nutzt ebenfalls Graph-Datenbanken (Rechtsdaten)
+#
+# Siehe: vcc_integration/adapters/themis_adapter.py
+# Siehe: vcc_integration/adapters/veritas_adapter.py (für Legal Graph Integration)
+# ═══════════════════════════════════════════════════════════════════════════════
 
 ---
 # Neo4j Core StatefulSet (Causal Cluster)

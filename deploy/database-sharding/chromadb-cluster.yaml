@@ -1,6 +1,25 @@
 # VCC-Covina ChromaDB Cluster Configuration
 # Phase 4: Enterprise Scale - Vector Database Sharding
 # All on-premise, no vendor dependencies
+#
+# ═══════════════════════════════════════════════════════════════════════════════
+# WICHTIG: ThemisDB Integration
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# ThemisDB unterstützt auch Vector-Datenbanken im VCC-Ökosystem.
+# Diese ChromaDB-Konfiguration ist für:
+#
+# 1. Covina-spezifische Embeddings (UDS3 Vector Storage)
+# 2. Lokale Semantic Search (RAG Pipeline)
+# 3. Document Classification Vectors
+#
+# Bei VCC-weiten Vector-Queries:
+# - ThemisDB kann als Routing-Layer für Cross-Service-Queries dienen
+# - ChromaDB-Daten können in Themis registriert werden
+# - Synchronisation erfolgt über Event-Bus (Kafka)
+#
+# Siehe: vcc_integration/adapters/themis_adapter.py
+# ═══════════════════════════════════════════════════════════════════════════════
 
 ---
 # ChromaDB Namespace (if needed separately)

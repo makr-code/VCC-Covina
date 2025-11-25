@@ -370,17 +370,22 @@ ai_ml/
 **Infrastructure-as-Code created:**
 - ✅ Istio Service Mesh - `deploy/istio/istio-config.yaml`
 - ✅ Auto-Scaling (HPA/VPA) - `deploy/autoscaling/hpa-vpa.yaml`
-- ✅ PostgreSQL Sharding (Citus) - `deploy/database-sharding/postgresql-citus.yaml`
-- ✅ ChromaDB Cluster - `deploy/database-sharding/chromadb-cluster.yaml`
-- ✅ Neo4j Causal Cluster - `deploy/database-sharding/neo4j-cluster.yaml`
+- ✅ PostgreSQL Sharding (Citus) - `deploy/database-sharding/postgresql-citus.yaml` *
+- ✅ ChromaDB Cluster - `deploy/database-sharding/chromadb-cluster.yaml` *
+- ✅ Neo4j Causal Cluster - `deploy/database-sharding/neo4j-cluster.yaml` *
 - ✅ Multi-Datacenter Configuration - `deploy/multi-datacenter/multi-dc-config.yaml`
 - ✅ Compliance Framework (SOC 2/ISO 27001) - `deploy/compliance/compliance-framework.yaml`
+
+**(*) Database Sharding - ThemisDB Integration:**
+ThemisDB bietet bereits integrierte Sharding-Funktionalität. Die obigen
+Datenbank-Konfigurationen dienen als Ergänzung für Covina-spezifische
+Workloads oder als Fallback. Siehe Kommentare in den jeweiligen Dateien.
 
 **All components on-premise (no vendor dependencies):**
 - ✅ Istio Service Mesh (self-hosted)
 - ✅ HAProxy Global Load Balancer (on-premise)
 - ✅ Kafka MirrorMaker for cross-DC replication
-- ✅ PostgreSQL Citus for distributed SQL
+- ✅ PostgreSQL Citus for distributed SQL (ergänzt ThemisDB)
 - ✅ Neo4j Enterprise Causal Cluster
 - ✅ OPA Gatekeeper for policy enforcement
 - ✅ Falco for runtime security
@@ -441,17 +446,27 @@ ai_ml/
 
 **Epic 4.4: Database Sharding (10 Sprints)**
 
+**HINWEIS:** ThemisDB als VCC Unified Database Service bietet bereits
+integrierte Sharding-Funktionalität. Die folgenden Konfigurationen sind:
+- Als Ergänzung zu ThemisDB für Covina-spezifische Workloads
+- Oder als Fallback für Covina-only Deployments
+Bei VCC-Produktionsumgebungen sollte ThemisDB als primäre Sharding-Lösung
+evaluiert werden.
+
 **Sprint 74-78 (10 Wochen): PostgreSQL Sharding**
 - [x] Task: Citus extension (StatefulSet config)
 - [x] Task: Shard key design (tenant_id distribution)
 - [x] Task: Migration strategy (init scripts)
+- [x] Task: ThemisDB Integration (sync via ThemisAdapter) - NEU
 - **Story Points:** 55
 - **Risk:** Critical (Data migration)
+- **ThemisDB:** Koordination mit Themis Team für Dual-Storage Strategie
 
 **Sprint 79-83 (10 Wochen): Other Databases**
-- [ ] Task: ChromaDB cluster
-- [ ] Task: Neo4j causal cluster
+- [ ] Task: ChromaDB cluster (Covina Vectors)
+- [ ] Task: Neo4j causal cluster (Covina Knowledge Graph)
 - [ ] Task: CouchDB multi-master
+- [ ] Task: Themis Registration (Datenbank-Katalog)
 - **Story Points:** 55
 
 ### Quarter 4/2027: Oktober - Dezember

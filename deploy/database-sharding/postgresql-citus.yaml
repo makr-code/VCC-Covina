@@ -1,6 +1,31 @@
 # VCC-Covina PostgreSQL Sharding with Citus
 # Phase 4: Enterprise Scale - Database Sharding
 # All on-premise, no vendor dependencies
+#
+# ═══════════════════════════════════════════════════════════════════════════════
+# WICHTIG: ThemisDB Integration
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# ThemisDB (VCC Unified Database Service) enthält bereits integrierte
+# Sharding-Funktionalität. Diese Citus-Konfiguration ist daher als:
+#
+# 1. OPTION A: Standalone Covina-Sharding (wenn Covina unabhängig von Themis läuft)
+#    - Für Szenarien wo Covina vor ThemisDB-Deployment benötigt wird
+#    - Für Development/Testing ohne vollständiges VCC-Ecosystem
+#
+# 2. OPTION B: Ergänzung zu ThemisDB (für Covina-spezifische Daten)
+#    - ThemisDB übernimmt VCC-weite Daten und Query-Routing
+#    - Citus hier nur für Covina-interne Workloads (z.B. Job-Queue, Temp-Daten)
+#    - Synchronisation via ThemisAdapter (vcc_integration/adapters/themis_adapter.py)
+#
+# EMPFEHLUNG:
+# - In Produktionsumgebungen mit vollständigem VCC-Ecosystem sollte
+#   ThemisDB als primäre Sharding-Lösung verwendet werden
+# - Covina-spezifische Tabellen können über ThemisDB verteilt werden
+# - Diese Citus-Konfiguration dient als Fallback oder für Covina-only Deployments
+#
+# Siehe: vcc_integration/adapters/themis_adapter.py für Integration
+# ═══════════════════════════════════════════════════════════════════════════════
 
 ---
 # Citus Coordinator StatefulSet

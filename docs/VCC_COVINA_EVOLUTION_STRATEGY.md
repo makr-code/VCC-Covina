@@ -362,10 +362,18 @@ Diese Strategie definiert die technologische und architektonische Weiterentwickl
    - Advanced Observability
 
 4. **Database Sharding & Federation** (Aufwand: 10 Wochen)
-   - PostgreSQL Sharding (Citus)
-   - ChromaDB Cluster Mode
-   - Neo4j Causal Cluster
+   - PostgreSQL Sharding (Citus) - *als Ergänzung zu ThemisDB*
+   - ChromaDB Cluster Mode - *für Covina-spezifische Vectors*
+   - Neo4j Causal Cluster - *für Covina Knowledge Graph*
    - CouchDB Multi-Master
+   
+   **Hinweis zu ThemisDB:**
+   ThemisDB als VCC Unified Database Service bietet bereits integrierte
+   Sharding-Funktionalität. Für VCC-weite Daten sollte ThemisDB als
+   primäre Sharding-Lösung verwendet werden. Die hier genannten
+   Datenbank-Cluster dienen primär für Covina-spezifische Workloads
+   oder als Fallback für Covina-only Deployments. Synchronisation
+   erfolgt über den ThemisAdapter.
 
 5. **Performance Optimization** (Aufwand: 6 Wochen)
    - Reverse Proxy/Cache (Nginx/Varnish) - On-Premise
