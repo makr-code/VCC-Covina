@@ -1,0 +1,598 @@
+# VCC-Covina Auto-Scaling Configuration
+# Phase 4: Enterprise Scale - HPA/VPA
+# All on-premise, no vendor dependencies
+
+---
+# HPA for Main Backend
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: main-backend-hpa
+  namespace: covina
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: main-backend
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+    # CPU-based scaling
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    
+    # Memory-based scaling
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+    
+    # Custom metrics: Requests per second
+    - type: Pods
+      pods:
+        metric:
+          name: http_requests_per_second
+        target:
+          type: AverageValue
+          averageValue: "100"
+    
+    # Custom metrics: Request latency
+    - type: Pods
+      pods:
+        metric:
+          name: http_request_duration_seconds_p95
+        target:
+          type: AverageValue
+          averageValue: "500m"  # 500ms
+  
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+      selectPolicy: Min
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+        - type: Pods
+          value: 4
+          periodSeconds: 15
+      selectPolicy: Max
+
+---
+# HPA for Ingestion Backend
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ingestion-backend-hpa
+  namespace: covina
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ingestion-backend
+  minReplicas: 2
+  maxReplicas: 15
+  metrics:
+    # CPU-based scaling (higher threshold for batch processing)
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+    
+    # Memory-based scaling
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 85
+    
+    # Custom metrics: Queue depth
+    - type: External
+      external:
+        metric:
+          name: covina_ingestion_queue_depth
+          selector:
+            matchLabels:
+              service: ingestion-backend
+        target:
+          type: AverageValue
+          averageValue: "50"
+    
+    # Custom metrics: Active jobs
+    - type: Pods
+      pods:
+        metric:
+          name: covina_active_ingestion_jobs
+        target:
+          type: AverageValue
+          averageValue: "10"
+  
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 600  # 10 min - longer for batch processing
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 120
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Percent
+          value: 200
+          periodSeconds: 30
+        - type: Pods
+          value: 5
+          periodSeconds: 30
+      selectPolicy: Max
+
+---
+# HPA for LLM Service (vLLM)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: llm-service-hpa
+  namespace: covina
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: llm-service
+  minReplicas: 1
+  maxReplicas: 8
+  metrics:
+    # GPU utilization (via DCGM exporter)
+    - type: Pods
+      pods:
+        metric:
+          name: DCGM_FI_DEV_GPU_UTIL
+        target:
+          type: AverageValue
+          averageValue: "80"
+    
+    # GPU memory
+    - type: Pods
+      pods:
+        metric:
+          name: DCGM_FI_DEV_FB_USED_PERCENT
+        target:
+          type: AverageValue
+          averageValue: "85"
+    
+    # LLM inference queue
+    - type: External
+      external:
+        metric:
+          name: vllm_pending_requests
+        target:
+          type: AverageValue
+          averageValue: "10"
+  
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 900  # 15 min - GPU pods are expensive
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 300
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+
+---
+# HPA for Embedding Service
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: embedding-service-hpa
+  namespace: covina
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: embedding-service
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+    
+    - type: Pods
+      pods:
+        metric:
+          name: embedding_batch_queue_size
+        target:
+          type: AverageValue
+          averageValue: "20"
+  
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 3
+          periodSeconds: 30
+
+---
+# HPA for Kong API Gateway
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: kong-gateway-hpa
+  namespace: covina
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: kong-gateway
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    
+    - type: Pods
+      pods:
+        metric:
+          name: kong_http_requests_total
+        target:
+          type: AverageValue
+          averageValue: "1000"
+  
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 180
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 15
+      policies:
+        - type: Pods
+          value: 3
+          periodSeconds: 15
+
+---
+# VPA for Main Backend (Recommendation mode)
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: main-backend-vpa
+  namespace: covina
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: main-backend
+  updatePolicy:
+    updateMode: "Off"  # Start with recommendations only
+  resourcePolicy:
+    containerPolicies:
+      - containerName: main-backend
+        minAllowed:
+          cpu: 500m
+          memory: 1Gi
+        maxAllowed:
+          cpu: 4000m
+          memory: 8Gi
+        controlledResources: ["cpu", "memory"]
+
+---
+# VPA for Ingestion Backend
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: ingestion-backend-vpa
+  namespace: covina
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ingestion-backend
+  updatePolicy:
+    updateMode: "Off"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: ingestion-backend
+        minAllowed:
+          cpu: 1000m
+          memory: 2Gi
+        maxAllowed:
+          cpu: 8000m
+          memory: 16Gi
+        controlledResources: ["cpu", "memory"]
+
+---
+# VPA for LLM Service
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: llm-service-vpa
+  namespace: covina
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: llm-service
+  updatePolicy:
+    updateMode: "Off"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: llm-service
+        minAllowed:
+          cpu: 2000m
+          memory: 16Gi
+        maxAllowed:
+          cpu: 16000m
+          memory: 64Gi
+        controlledResources: ["cpu", "memory"]
+
+---
+# PodDisruptionBudget for Main Backend
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: main-backend-pdb
+  namespace: covina
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: main-backend
+
+---
+# PodDisruptionBudget for Ingestion Backend
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ingestion-backend-pdb
+  namespace: covina
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: ingestion-backend
+
+---
+# PodDisruptionBudget for LLM Service
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: llm-service-pdb
+  namespace: covina
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: llm-service
+
+---
+# PodDisruptionBudget for Kong Gateway
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: kong-gateway-pdb
+  namespace: covina
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: kong-gateway
+
+---
+# Custom Metrics API - Prometheus Adapter Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-adapter-config
+  namespace: monitoring
+data:
+  config.yaml: |
+    rules:
+      # HTTP requests per second
+      - seriesQuery: 'http_server_requests_seconds_count{namespace="covina"}'
+        seriesFilters: []
+        resources:
+          overrides:
+            namespace:
+              resource: namespace
+            pod:
+              resource: pod
+        name:
+          matches: "^(.*)_total$"
+          as: "http_requests_per_second"
+        metricsQuery: 'rate(<<.Series>>{<<.LabelMatchers>>}[2m])'
+      
+      # HTTP request duration P95
+      - seriesQuery: 'http_server_requests_seconds_bucket{namespace="covina"}'
+        seriesFilters: []
+        resources:
+          overrides:
+            namespace:
+              resource: namespace
+            pod:
+              resource: pod
+        name:
+          matches: "^(.*)_bucket$"
+          as: "http_request_duration_seconds_p95"
+        metricsQuery: 'histogram_quantile(0.95, rate(<<.Series>>{<<.LabelMatchers>>}[5m]))'
+      
+      # Ingestion queue depth
+      - seriesQuery: 'covina_ingestion_queue_depth{namespace="covina"}'
+        seriesFilters: []
+        resources:
+          overrides:
+            namespace:
+              resource: namespace
+            service:
+              group: ""
+              resource: service
+        name:
+          matches: "^(.*)$"
+          as: "${1}"
+        metricsQuery: '<<.Series>>{<<.LabelMatchers>>}'
+      
+      # Active ingestion jobs
+      - seriesQuery: 'covina_active_jobs{namespace="covina"}'
+        seriesFilters: []
+        resources:
+          overrides:
+            namespace:
+              resource: namespace
+            pod:
+              resource: pod
+        name:
+          matches: "^(.*)$"
+          as: "covina_active_ingestion_jobs"
+        metricsQuery: '<<.Series>>{<<.LabelMatchers>>}'
+      
+      # vLLM pending requests
+      - seriesQuery: 'vllm_pending_requests{namespace="covina"}'
+        seriesFilters: []
+        resources:
+          overrides:
+            namespace:
+              resource: namespace
+        name:
+          matches: "^(.*)$"
+          as: "${1}"
+        metricsQuery: 'sum(<<.Series>>{<<.LabelMatchers>>})'
+      
+      # Embedding batch queue
+      - seriesQuery: 'embedding_batch_queue_size{namespace="covina"}'
+        seriesFilters: []
+        resources:
+          overrides:
+            namespace:
+              resource: namespace
+            pod:
+              resource: pod
+        name:
+          matches: "^(.*)$"
+          as: "${1}"
+        metricsQuery: '<<.Series>>{<<.LabelMatchers>>}'
+      
+      # Kong requests
+      - seriesQuery: 'kong_http_requests_total{namespace="covina"}'
+        seriesFilters: []
+        resources:
+          overrides:
+            namespace:
+              resource: namespace
+            pod:
+              resource: pod
+        name:
+          matches: "^(.*)_total$"
+          as: "${1}"
+        metricsQuery: 'rate(<<.Series>>{<<.LabelMatchers>>}[2m])'
+      
+      # GPU metrics (DCGM)
+      - seriesQuery: 'DCGM_FI_DEV_GPU_UTIL{namespace="covina"}'
+        seriesFilters: []
+        resources:
+          overrides:
+            namespace:
+              resource: namespace
+            pod:
+              resource: pod
+        name:
+          matches: "^(.*)$"
+          as: "${1}"
+        metricsQuery: '<<.Series>>{<<.LabelMatchers>>}'
+      
+      - seriesQuery: 'DCGM_FI_DEV_FB_USED_PERCENT{namespace="covina"}'
+        seriesFilters: []
+        resources:
+          overrides:
+            namespace:
+              resource: namespace
+            pod:
+              resource: pod
+        name:
+          matches: "^(.*)$"
+          as: "${1}"
+        metricsQuery: '<<.Series>>{<<.LabelMatchers>>}'
+
+---
+# Cluster Autoscaler Configuration (for on-premise node scaling)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-autoscaler-config
+  namespace: kube-system
+data:
+  config.yaml: |
+    # On-premise cluster autoscaler settings
+    # Note: Requires integration with on-premise VM provisioning
+    
+    cluster-autoscaler:
+      # Scaling settings
+      scale-down-enabled: true
+      scale-down-delay-after-add: 10m
+      scale-down-delay-after-delete: 0s
+      scale-down-delay-after-failure: 3m
+      scale-down-unneeded-time: 10m
+      scale-down-utilization-threshold: 0.5
+      
+      # Node groups (on-premise)
+      node-groups:
+        - name: covina-general
+          minSize: 3
+          maxSize: 20
+          labels:
+            node-type: general
+        - name: covina-gpu
+          minSize: 1
+          maxSize: 8
+          labels:
+            node-type: gpu
+            nvidia.com/gpu: "true"
+        - name: covina-memory
+          minSize: 2
+          maxSize: 10
+          labels:
+            node-type: high-memory
+      
+      # Expander settings
+      expander: least-waste
+      
+      # Skip nodes with local storage
+      skip-nodes-with-local-storage: false
+      
+      # Balance similar node groups
+      balance-similar-node-groups: true

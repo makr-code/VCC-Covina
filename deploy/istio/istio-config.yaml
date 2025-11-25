@@ -1,0 +1,569 @@
+# VCC-Covina Istio Service Mesh Configuration
+# Phase 4: Enterprise Scale - Service Mesh
+# All on-premise, no vendor dependencies
+
+---
+# Istio Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: istio-system
+  labels:
+    istio-injection: disabled
+
+---
+# IstioOperator Configuration
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  name: covina-istio
+  namespace: istio-system
+spec:
+  profile: default
+  
+  # Components configuration
+  components:
+    pilot:
+      k8s:
+        resources:
+          requests:
+            cpu: 500m
+            memory: 2Gi
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+        replicaCount: 2
+        hpaSpec:
+          minReplicas: 2
+          maxReplicas: 5
+          metrics:
+            - type: Resource
+              resource:
+                name: cpu
+                targetAverageUtilization: 80
+    
+    ingressGateways:
+      - name: istio-ingressgateway
+        enabled: true
+        k8s:
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+          replicaCount: 3
+          hpaSpec:
+            minReplicas: 3
+            maxReplicas: 10
+    
+    egressGateways:
+      - name: istio-egressgateway
+        enabled: true
+        k8s:
+          replicaCount: 2
+  
+  # Mesh configuration
+  meshConfig:
+    # Enable access logging
+    accessLogFile: /dev/stdout
+    accessLogFormat: |
+      {"timestamp":"%START_TIME%","method":"%REQ(:METHOD)%","path":"%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%","protocol":"%PROTOCOL%","response_code":"%RESPONSE_CODE%","response_flags":"%RESPONSE_FLAGS%","bytes_received":"%BYTES_RECEIVED%","bytes_sent":"%BYTES_SENT%","duration":"%DURATION%","upstream_service_time":"%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%","x_forwarded_for":"%REQ(X-FORWARDED-FOR)%","user_agent":"%REQ(USER-AGENT)%","request_id":"%REQ(X-REQUEST-ID)%","authority":"%REQ(:AUTHORITY)%","upstream_host":"%UPSTREAM_HOST%","upstream_cluster":"%UPSTREAM_CLUSTER%","upstream_local_address":"%UPSTREAM_LOCAL_ADDRESS%","downstream_local_address":"%DOWNSTREAM_LOCAL_ADDRESS%","downstream_remote_address":"%DOWNSTREAM_REMOTE_ADDRESS%","requested_server_name":"%REQUESTED_SERVER_NAME%","route_name":"%ROUTE_NAME%"}
+    
+    # Enable tracing (Jaeger)
+    enableTracing: true
+    defaultConfig:
+      tracing:
+        zipkin:
+          address: jaeger-collector.covina-observability.svc.cluster.local:9411
+        sampling: 100.0  # 100% sampling in production (adjust as needed)
+      
+      # Proxy configuration
+      proxyMetadata:
+        ISTIO_META_DNS_CAPTURE: "true"
+        ISTIO_META_DNS_AUTO_ALLOCATE: "true"
+    
+    # Outbound traffic policy
+    outboundTrafficPolicy:
+      mode: REGISTRY_ONLY  # Only allow registered services (security)
+    
+    # Enable locality load balancing
+    localityLbSetting:
+      enabled: true
+      distribute:
+        - from: "region/datacenter/*"
+          to:
+            "region/datacenter/*": 80
+            "region/datacenter-dr/*": 20
+    
+    # Protocol detection timeout
+    protocolDetectionTimeout: 100ms
+
+  # Global configuration
+  values:
+    global:
+      # mTLS configuration
+      mtls:
+        auto: true
+      
+      # Proxy configuration
+      proxy:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+      
+      # Pilot configuration
+      pilotCertProvider: istiod
+      
+      # Multi-cluster configuration (for multi-datacenter)
+      multiCluster:
+        enabled: false  # Enable when second datacenter is ready
+        clusterName: covina-primary
+
+---
+# PeerAuthentication - Strict mTLS
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: covina
+spec:
+  mtls:
+    mode: STRICT
+
+---
+# PeerAuthentication for observability namespace
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: covina-observability
+spec:
+  mtls:
+    mode: STRICT
+
+---
+# Gateway for external traffic
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: covina-gateway
+  namespace: covina
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "covina.vcc.internal"
+        - "api.covina.vcc.internal"
+      tls:
+        httpsRedirect: true
+    - port:
+        number: 443
+        name: https
+        protocol: HTTPS
+      hosts:
+        - "covina.vcc.internal"
+        - "api.covina.vcc.internal"
+      tls:
+        mode: SIMPLE
+        credentialName: covina-tls-secret
+
+---
+# VirtualService for Main Backend
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: main-backend
+  namespace: covina
+spec:
+  hosts:
+    - "api.covina.vcc.internal"
+    - "main-backend"
+  gateways:
+    - covina-gateway
+    - mesh
+  http:
+    # Health check route
+    - match:
+        - uri:
+            exact: /health
+      route:
+        - destination:
+            host: main-backend
+            port:
+              number: 45678
+    
+    # API routes with traffic management
+    - match:
+        - uri:
+            prefix: /api/v1
+      route:
+        - destination:
+            host: main-backend
+            subset: stable
+            port:
+              number: 45678
+          weight: 100
+        # Canary deployment (uncomment when ready)
+        # - destination:
+        #     host: main-backend
+        #     subset: canary
+        #     port:
+        #       number: 45678
+        #   weight: 0
+      retries:
+        attempts: 3
+        perTryTimeout: 10s
+        retryOn: gateway-error,connect-failure,refused-stream
+      timeout: 30s
+
+---
+# VirtualService for Ingestion Backend
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: ingestion-backend
+  namespace: covina
+spec:
+  hosts:
+    - "ingestion.covina.vcc.internal"
+    - "ingestion-backend"
+  gateways:
+    - covina-gateway
+    - mesh
+  http:
+    - match:
+        - uri:
+            prefix: /api/v1/ingest
+      route:
+        - destination:
+            host: ingestion-backend
+            subset: stable
+            port:
+              number: 45679
+          weight: 100
+      retries:
+        attempts: 2
+        perTryTimeout: 60s  # Longer timeout for file uploads
+        retryOn: gateway-error,connect-failure
+      timeout: 300s  # 5 minutes for large uploads
+
+---
+# DestinationRule for Main Backend
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: main-backend
+  namespace: covina
+spec:
+  host: main-backend
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 1000
+        connectTimeout: 10s
+      http:
+        h2UpgradePolicy: UPGRADE
+        http1MaxPendingRequests: 1000
+        http2MaxRequests: 1000
+        maxRequestsPerConnection: 100
+        maxRetries: 3
+    loadBalancer:
+      simple: LEAST_REQUEST
+      localityLbSetting:
+        enabled: true
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 60s
+      maxEjectionPercent: 50
+      minHealthPercent: 30
+  subsets:
+    - name: stable
+      labels:
+        version: stable
+    - name: canary
+      labels:
+        version: canary
+
+---
+# DestinationRule for Ingestion Backend
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: ingestion-backend
+  namespace: covina
+spec:
+  host: ingestion-backend
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 500
+        connectTimeout: 30s
+      http:
+        http1MaxPendingRequests: 500
+        http2MaxRequests: 500
+        maxRequestsPerConnection: 50
+    loadBalancer:
+      simple: ROUND_ROBIN
+    outlierDetection:
+      consecutive5xxErrors: 3
+      interval: 60s
+      baseEjectionTime: 120s
+      maxEjectionPercent: 30
+  subsets:
+    - name: stable
+      labels:
+        version: stable
+    - name: canary
+      labels:
+        version: canary
+
+---
+# Circuit Breaker for external VCC services
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: vcc-services-circuit-breaker
+  namespace: covina
+spec:
+  host: "*.vcc.internal"
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http1MaxPendingRequests: 100
+        http2MaxRequests: 100
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 100
+
+---
+# AuthorizationPolicy - Default deny
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: default-deny
+  namespace: covina
+spec:
+  {}  # Deny all by default
+
+---
+# AuthorizationPolicy - Allow health checks
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-health-checks
+  namespace: covina
+spec:
+  action: ALLOW
+  rules:
+    - to:
+        - operation:
+            paths: ["/health", "/ready", "/metrics"]
+
+---
+# AuthorizationPolicy - Allow Kong API Gateway
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-kong-gateway
+  namespace: covina
+spec:
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/covina/sa/kong-gateway"]
+      to:
+        - operation:
+            paths: ["/api/*"]
+
+---
+# AuthorizationPolicy - Allow VCC services
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-vcc-services
+  namespace: covina
+spec:
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            namespaces: ["vcc-veritas", "vcc-themis", "vcc-clara", "vcc-argus"]
+      to:
+        - operation:
+            paths: ["/api/v1/*"]
+
+---
+# AuthorizationPolicy - Allow observability
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-observability
+  namespace: covina
+spec:
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            namespaces: ["covina-observability", "istio-system"]
+      to:
+        - operation:
+            paths: ["/metrics", "/health", "/ready"]
+
+---
+# ServiceEntry for VCC internal services (on-premise)
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: vcc-veritas
+  namespace: covina
+spec:
+  hosts:
+    - veritas.vcc.internal
+  location: MESH_INTERNAL
+  ports:
+    - number: 8080
+      name: http
+      protocol: HTTP
+  resolution: DNS
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: vcc-themis
+  namespace: covina
+spec:
+  hosts:
+    - themis.vcc.internal
+  location: MESH_INTERNAL
+  ports:
+    - number: 8080
+      name: http
+      protocol: HTTP
+  resolution: DNS
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: vcc-clara
+  namespace: covina
+spec:
+  hosts:
+    - clara.vcc.internal
+  location: MESH_INTERNAL
+  ports:
+    - number: 8080
+      name: http
+      protocol: HTTP
+  resolution: DNS
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: vcc-argus
+  namespace: covina
+spec:
+  hosts:
+    - argus.vcc.internal
+  location: MESH_INTERNAL
+  ports:
+    - number: 8080
+      name: http
+      protocol: HTTP
+  resolution: DNS
+
+---
+# RequestAuthentication for JWT validation
+apiVersion: security.istio.io/v1beta1
+kind: RequestAuthentication
+metadata:
+  name: jwt-auth
+  namespace: covina
+spec:
+  jwtRules:
+    - issuer: "https://identity.vcc.internal"
+      jwksUri: "https://identity.vcc.internal/.well-known/jwks.json"
+      audiences:
+        - "covina-api"
+      forwardOriginalToken: true
+
+---
+# Telemetry configuration
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: covina-telemetry
+  namespace: covina
+spec:
+  tracing:
+    - providers:
+        - name: jaeger
+      randomSamplingPercentage: 100
+  metrics:
+    - providers:
+        - name: prometheus
+      overrides:
+        - match:
+            metric: ALL_METRICS
+            mode: CLIENT_AND_SERVER
+          tagOverrides:
+            request_protocol:
+              operation: UPSERT
+
+---
+# EnvoyFilter for custom headers
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: custom-headers
+  namespace: covina
+spec:
+  configPatches:
+    - applyTo: HTTP_FILTER
+      match:
+        context: SIDECAR_INBOUND
+        listener:
+          filterChain:
+            filter:
+              name: "envoy.filters.network.http_connection_manager"
+      patch:
+        operation: INSERT_BEFORE
+        value:
+          name: envoy.filters.http.lua
+          typed_config:
+            "@type": "type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua"
+            inlineCode: |
+              function envoy_on_request(request_handle)
+                -- Add correlation ID if not present
+                local correlation_id = request_handle:headers():get("x-correlation-id")
+                if correlation_id == nil then
+                  local uuid = request_handle:headers():get("x-request-id") or os.time()
+                  request_handle:headers():add("x-correlation-id", "covina-" .. uuid)
+                end
+              end
+              
+              function envoy_on_response(response_handle)
+                -- Add security headers
+                response_handle:headers():add("x-content-type-options", "nosniff")
+                response_handle:headers():add("x-frame-options", "DENY")
+                response_handle:headers():add("x-xss-protection", "1; mode=block")
+              end

@@ -1,0 +1,482 @@
+# VCC-Covina Multi-Datacenter Deployment
+# Phase 4: Enterprise Scale - Geographic Distribution
+# All on-premise, no vendor dependencies (private datacenters)
+
+---
+# Multi-Datacenter Configuration Overview
+# 
+# Primary Datacenter: DC-WEST (Active)
+# Secondary Datacenter: DC-EAST (Disaster Recovery)
+#
+# Architecture:
+# - Active-Passive with automatic failover
+# - Data replication via database clustering
+# - Global load balancing via HAProxy
+# - Cross-datacenter Kafka replication (MirrorMaker)
+
+---
+# Namespace for multi-datacenter resources
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: covina-multidc
+  labels:
+    app: covina
+    tier: infrastructure
+
+---
+# HAProxy Global Load Balancer Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: haproxy-multidc-config
+  namespace: covina-multidc
+data:
+  haproxy.cfg: |
+    global
+        log stdout format raw local0
+        maxconn 50000
+        tune.ssl.default-dh-param 2048
+        ssl-default-bind-ciphers ECDHE+AESGCM:DHE+AESGCM:ECDHE+RSA+AES:DHE+RSA+AES
+        ssl-default-bind-options ssl-min-ver TLSv1.2 no-tls-tickets
+    
+    defaults
+        log global
+        mode http
+        option httplog
+        option dontlognull
+        option forwardfor
+        option http-server-close
+        timeout connect 10s
+        timeout client 60s
+        timeout server 60s
+        timeout http-request 30s
+        timeout http-keep-alive 10s
+        timeout queue 60s
+        timeout tunnel 3600s
+        retries 3
+    
+    # Health check endpoint
+    frontend health
+        bind *:8405
+        http-request return status 200 content-type text/plain string "OK\n"
+    
+    # Stats endpoint
+    frontend stats
+        bind *:8404
+        stats enable
+        stats uri /stats
+        stats refresh 10s
+        stats admin if TRUE
+    
+    # Main API Frontend
+    frontend api_frontend
+        bind *:443 ssl crt /etc/ssl/covina/covina.pem
+        bind *:80
+        redirect scheme https if !{ ssl_fc }
+        
+        # Add headers
+        http-request set-header X-Forwarded-Proto https if { ssl_fc }
+        http-request set-header X-Real-IP %[src]
+        http-request set-header X-Datacenter %[var(txn.datacenter)]
+        
+        # Correlation ID
+        http-request set-header X-Correlation-ID %[uuid()] unless { req.hdr(X-Correlation-ID) -m found }
+        
+        # ACLs for routing
+        acl is_health path /health
+        acl is_api path_beg /api
+        acl is_ingest path_beg /api/v1/ingest
+        
+        # Datacenter selection (prefer primary)
+        acl dc_west_up nbsrv(api_dc_west) ge 1
+        acl dc_east_up nbsrv(api_dc_east) ge 1
+        
+        # Set datacenter variable
+        http-request set-var(txn.datacenter) str(dc-west) if dc_west_up
+        http-request set-var(txn.datacenter) str(dc-east) if !dc_west_up dc_east_up
+        
+        # Use backend based on path and datacenter availability
+        use_backend api_dc_west if is_api dc_west_up
+        use_backend api_dc_east if is_api !dc_west_up dc_east_up
+        use_backend ingest_dc_west if is_ingest dc_west_up
+        use_backend ingest_dc_east if is_ingest !dc_west_up dc_east_up
+        
+        # Default backend
+        default_backend api_dc_west
+    
+    # Primary Datacenter (DC-WEST) - API
+    backend api_dc_west
+        balance roundrobin
+        option httpchk GET /health
+        http-check expect status 200
+        
+        # Stick sessions to same server
+        stick-table type string len 64 size 100k expire 30m
+        stick on req.cook(session_id)
+        
+        # Primary servers
+        server dc-west-api-1 192.168.100.10:45678 check inter 5s fall 3 rise 2 weight 100
+        server dc-west-api-2 192.168.100.11:45678 check inter 5s fall 3 rise 2 weight 100
+        server dc-west-api-3 192.168.100.12:45678 check inter 5s fall 3 rise 2 weight 100
+    
+    # Secondary Datacenter (DC-EAST) - API (Backup)
+    backend api_dc_east
+        balance roundrobin
+        option httpchk GET /health
+        http-check expect status 200
+        
+        server dc-east-api-1 192.168.200.10:45678 check inter 5s fall 3 rise 2 weight 100 backup
+        server dc-east-api-2 192.168.200.11:45678 check inter 5s fall 3 rise 2 weight 100 backup
+        server dc-east-api-3 192.168.200.12:45678 check inter 5s fall 3 rise 2 weight 100 backup
+    
+    # Primary Datacenter (DC-WEST) - Ingestion
+    backend ingest_dc_west
+        balance leastconn
+        option httpchk GET /health
+        http-check expect status 200
+        timeout server 300s  # Longer timeout for uploads
+        
+        server dc-west-ingest-1 192.168.100.20:45679 check inter 5s fall 3 rise 2 weight 100
+        server dc-west-ingest-2 192.168.100.21:45679 check inter 5s fall 3 rise 2 weight 100
+    
+    # Secondary Datacenter (DC-EAST) - Ingestion (Backup)
+    backend ingest_dc_east
+        balance leastconn
+        option httpchk GET /health
+        http-check expect status 200
+        timeout server 300s
+        
+        server dc-east-ingest-1 192.168.200.20:45679 check inter 5s fall 3 rise 2 weight 100 backup
+        server dc-east-ingest-2 192.168.200.21:45679 check inter 5s fall 3 rise 2 weight 100 backup
+
+---
+# HAProxy Deployment (Active)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: haproxy-global-lb
+  namespace: covina-multidc
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: haproxy-global-lb
+  template:
+    metadata:
+      labels:
+        app: haproxy-global-lb
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8404"
+        prometheus.io/path: "/stats;csv"
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: haproxy-global-lb
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: haproxy
+          image: haproxy:2.8-alpine
+          ports:
+            - containerPort: 80
+              name: http
+            - containerPort: 443
+              name: https
+            - containerPort: 8404
+              name: stats
+            - containerPort: 8405
+              name: health
+          volumeMounts:
+            - name: config
+              mountPath: /usr/local/etc/haproxy/haproxy.cfg
+              subPath: haproxy.cfg
+            - name: certs
+              mountPath: /etc/ssl/covina
+              readOnly: true
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8405
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8405
+            initialDelaySeconds: 5
+            periodSeconds: 3
+      volumes:
+        - name: config
+          configMap:
+            name: haproxy-multidc-config
+        - name: certs
+          secret:
+            secretName: covina-tls-cert
+
+---
+# HAProxy Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: haproxy-global-lb
+  namespace: covina-multidc
+spec:
+  type: LoadBalancer  # Or NodePort for on-premise
+  externalTrafficPolicy: Local
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http
+    - port: 443
+      targetPort: 443
+      name: https
+  selector:
+    app: haproxy-global-lb
+
+---
+# Kafka MirrorMaker 2 for Cross-Datacenter Replication
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-mirrormaker-config
+  namespace: covina-multidc
+data:
+  connect-mirror-maker.properties: |
+    # MirrorMaker 2 Configuration for Cross-DC Replication
+    
+    # Cluster aliases
+    clusters = dc-west, dc-east
+    
+    # DC-WEST (Primary) connection
+    dc-west.bootstrap.servers = kafka-dc-west.covina.svc.cluster.local:9092
+    dc-west.security.protocol = PLAINTEXT
+    
+    # DC-EAST (Secondary) connection
+    dc-east.bootstrap.servers = kafka-dc-east.covina.svc.cluster.local:9092
+    dc-east.security.protocol = PLAINTEXT
+    
+    # Replication: DC-WEST -> DC-EAST
+    dc-west->dc-east.enabled = true
+    dc-west->dc-east.topics = vcc\..*
+    dc-west->dc-east.groups = covina-.*
+    
+    # Replication: DC-EAST -> DC-WEST (for failback)
+    dc-east->dc-west.enabled = false
+    dc-east->dc-west.topics = vcc\..*
+    
+    # Replication settings
+    replication.factor = 2
+    offset-syncs.topic.replication.factor = 2
+    heartbeats.topic.replication.factor = 2
+    checkpoints.topic.replication.factor = 2
+    
+    # Sync settings
+    refresh.topics.enabled = true
+    refresh.topics.interval.seconds = 30
+    refresh.groups.enabled = true
+    refresh.groups.interval.seconds = 30
+    sync.topic.configs.enabled = true
+    sync.topic.acls.enabled = false
+    
+    # Performance
+    tasks.max = 4
+    consumer.poll.timeout.ms = 1000
+    producer.acks = all
+    producer.batch.size = 65536
+    producer.linger.ms = 5
+    producer.compression.type = lz4
+
+---
+# Kafka MirrorMaker Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-mirrormaker
+  namespace: covina-multidc
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: kafka-mirrormaker
+  template:
+    metadata:
+      labels:
+        app: kafka-mirrormaker
+    spec:
+      containers:
+        - name: mirrormaker
+          image: apache/kafka:3.6.1
+          command:
+            - /opt/kafka/bin/connect-mirror-maker.sh
+            - /etc/kafka/connect-mirror-maker.properties
+          volumeMounts:
+            - name: config
+              mountPath: /etc/kafka/connect-mirror-maker.properties
+              subPath: connect-mirror-maker.properties
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 4Gi
+      volumes:
+        - name: config
+          configMap:
+            name: kafka-mirrormaker-config
+
+---
+# Database Replication Configuration (PostgreSQL Citus)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-multidc-config
+  namespace: covina-multidc
+data:
+  setup-replication.sql: |
+    -- Setup logical replication from DC-WEST to DC-EAST
+    
+    -- On DC-WEST (Primary):
+    -- 1. Create publication
+    CREATE PUBLICATION covina_pub FOR ALL TABLES;
+    
+    -- On DC-EAST (Secondary):
+    -- 1. Create subscription
+    CREATE SUBSCRIPTION covina_sub
+      CONNECTION 'host=citus-coordinator-dc-west.covina.svc.cluster.local port=5432 dbname=covina user=replication password=CHANGE_ME'
+      PUBLICATION covina_pub
+      WITH (copy_data = true, create_slot = true, enabled = true);
+    
+    -- Monitor replication
+    -- SELECT * FROM pg_stat_subscription;
+    -- SELECT * FROM pg_replication_slots;
+  
+  failover-procedure.sql: |
+    -- Failover procedure for DC-WEST -> DC-EAST
+    
+    -- Step 1: Check replication lag
+    SELECT pg_wal_lsn_diff(pg_current_wal_lsn(), received_lsn) as lag_bytes
+    FROM pg_stat_subscription;
+    
+    -- Step 2: Disable subscription (stop receiving changes)
+    ALTER SUBSCRIPTION covina_sub DISABLE;
+    
+    -- Step 3: Promote DC-EAST to primary
+    -- (Application config change to point to DC-EAST)
+    
+    -- Step 4: Create new publication on DC-EAST (for failback)
+    CREATE PUBLICATION covina_pub FOR ALL TABLES;
+
+---
+# Disaster Recovery Runbook ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dr-runbook
+  namespace: covina-multidc
+data:
+  failover-checklist.md: |
+    # VCC-Covina Disaster Recovery Runbook
+    
+    ## Prerequisites
+    - [ ] Verify DC-EAST is operational
+    - [ ] Check database replication lag < 1 minute
+    - [ ] Verify Kafka MirrorMaker is caught up
+    - [ ] Notify stakeholders
+    
+    ## Failover Steps
+    
+    ### 1. Database Failover
+    ```bash
+    # Check replication status
+    kubectl exec -n covina citus-coordinator-0 -- psql -U covina_admin -d covina \
+      -c "SELECT pg_wal_lsn_diff(pg_current_wal_lsn(), received_lsn) FROM pg_stat_subscription;"
+    
+    # Disable subscription on DC-EAST
+    kubectl exec -n covina-dc-east citus-coordinator-0 -- psql -U covina_admin -d covina \
+      -c "ALTER SUBSCRIPTION covina_sub DISABLE;"
+    ```
+    
+    ### 2. Update HAProxy
+    ```bash
+    # Edit HAProxy config to make DC-EAST primary
+    kubectl edit configmap haproxy-multidc-config -n covina-multidc
+    
+    # Reload HAProxy
+    kubectl rollout restart deployment/haproxy-global-lb -n covina-multidc
+    ```
+    
+    ### 3. Kafka Failover
+    ```bash
+    # Update MirrorMaker to reverse direction
+    kubectl edit configmap kafka-mirrormaker-config -n covina-multidc
+    
+    # Set dc-east->dc-west.enabled = true
+    # Set dc-west->dc-east.enabled = false
+    
+    # Restart MirrorMaker
+    kubectl rollout restart deployment/kafka-mirrormaker -n covina-multidc
+    ```
+    
+    ### 4. Verify Services
+    ```bash
+    # Check application health
+    curl -k https://api.covina.vcc.internal/health
+    
+    # Verify database connectivity
+    kubectl exec -n covina-dc-east main-backend-0 -- python -c "
+    import psycopg2
+    conn = psycopg2.connect('postgresql://...')
+    print('DB connection successful')
+    "
+    
+    # Check Kafka connectivity
+    kubectl exec -n covina-dc-east -it kafka-0 -- \
+      kafka-topics.sh --bootstrap-server localhost:9092 --list
+    ```
+    
+    ## Failback Steps
+    
+    After DC-WEST is restored:
+    
+    1. Setup reverse replication (DC-EAST -> DC-WEST)
+    2. Wait for sync to complete
+    3. Schedule maintenance window
+    4. Execute failover in reverse
+    5. Verify all services
+    6. Resume normal operations
+    
+    ## RTO/RPO Targets
+    - RTO (Recovery Time Objective): < 30 minutes
+    - RPO (Recovery Point Objective): < 5 minutes
+
+---
+# TLS Certificate Secret (Template)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: covina-tls-cert
+  namespace: covina-multidc
+type: kubernetes.io/tls
+stringData:
+  tls.crt: |
+    -----BEGIN CERTIFICATE-----
+    # Replace with actual certificate
+    -----END CERTIFICATE-----
+  tls.key: |
+    -----BEGIN PRIVATE KEY-----
+    # Replace with actual private key
+    -----END PRIVATE KEY-----
