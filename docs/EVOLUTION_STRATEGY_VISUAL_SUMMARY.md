@@ -36,10 +36,10 @@
              ▼                   ▼                   ▼
       ┌───────────┐       ┌───────────┐       ┌───────────┐
       │  VERITAS  │       │   CLARA   │       │ ThemisDB  │
-      │  (Legal)  │       │(Document) │       │  (Data)   │
+      │ (ChatAI)  │       │  (LoRa)   │       │  (Data)   │
       │           │       │           │       │           │
-      │•Compliance│       │•OCR/NLP   │       │•Storage   │
-      │•Risk Assess│      │•Extraction│       │•Sharding  │
+      │•Chat UI   │       │•LoRa Fine │       │•Storage   │
+      │•User Front│       │•Golden-DS │       │•Sharding  │
       └───────────┘       └───────────┘       └───────────┘
 ```
 

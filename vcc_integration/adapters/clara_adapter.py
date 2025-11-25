@@ -2,8 +2,10 @@
 Clara Adapter
 Phase 2: VCC Ecosystem Integration
 
-Adapter for Clara Document Intelligence Service.
-Provides document classification, parsing, and metadata extraction.
+Adapter for Clara LoRa, Golden-Dataset, and LLM-as-Judge Service.
+Clara handles model fine-tuning (LoRa), curated training datasets (Golden-Dataset),
+and automated quality evaluation (LLM-as-Judge).
+Covina provides validated documents as training data for Clara's golden-datasets.
 
 On-premise deployment - connects to self-hosted Clara service.
 """

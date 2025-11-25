@@ -2,8 +2,9 @@
 VERITAS Adapter
 Phase 2: VCC Ecosystem Integration
 
-Adapter for VERITAS Legal Intelligence Service.
-Provides legal reference extraction, entity recognition, and compliance checks.
+Adapter for VERITAS Legal ChatAI User Frontend.
+VERITAS provides a conversational AI interface for legal questions.
+Covina provides validated data as context for VERITAS chat responses.
 
 On-premise deployment - connects to self-hosted VERITAS service.
 """

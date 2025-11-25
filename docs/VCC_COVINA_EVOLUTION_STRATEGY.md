@@ -43,7 +43,7 @@
                  ▼                     ▼                     ▼
           ┌───────────┐         ┌───────────┐         ┌───────────┐
           │  VERITAS  │         │   CLARA   │         │ ThemisDB  │
-          │  (Legal)  │         │(Document) │         │  (Data)   │
+          │ (ChatAI)  │         │  (LoRa)   │         │  (Data)   │
           └───────────┘         └───────────┘         └───────────┘
 ```
 
@@ -57,13 +57,13 @@
 
 ### 🔗 Starke Verbindungen zu VCC-Services
 
-**Covina ↔ VERITAS (Legal Intelligence):**
-- Covina → VERITAS: Dokumente zur Compliance-Prüfung
-- VERITAS → Covina: Validation Results, Legal Gaps, Risk Assessment
+**Covina ↔ VERITAS (Legal ChatAI User Frontend):**
+- Covina → VERITAS: Validierte Daten für Chat-Kontext
+- VERITAS → Covina: User-Feedback, Chat-Insights, Anfragen für fehlende Dokumente
 
-**Covina ↔ Clara (Document Intelligence):**
-- Covina → Clara: Dokumente zur OCR/NLP-Analyse
-- Clara → Covina: Extrahierte Inhalte, Strukturierte Metadaten
+**Covina ↔ Clara (LoRa, Golden-Dataset, LLM-as-Judge):**
+- Covina → Clara: Validierte Dokumente als Training-Daten für Golden-Datasets
+- Clara → Covina: LLM-as-Judge Bewertungen, Model-Evaluations, Quality-Scores
 
 **Covina ↔ ThemisDB (Persistence):**
 - Bidirektionale Synchronisation

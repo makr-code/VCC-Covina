@@ -17,8 +17,8 @@
 | 3 | **Continuous Validation** | Permanente Überprüfung und Validierung der Datenbestände |
 
 **Starke VCC-Verbindungen:**
-- **VERITAS:** Legal Check, Compliance-Prüfung, Risk Assessment
-- **Clara:** OCR/NLP-Analyse, Entity Extraction, Metadaten
+- **VERITAS:** Legal ChatAI User Frontend
+- **Clara:** LoRa, Golden-Dataset, LLM-as-Judge
 - **ThemisDB:** VCC-weite Persistenz und Sharding
 
 ---
