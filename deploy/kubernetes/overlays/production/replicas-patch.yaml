@@ -1,0 +1,14 @@
+# Production Replicas Configuration
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: covina-main-backend
+spec:
+  replicas: 5
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: covina-ingestion-backend
+spec:
+  replicas: 3

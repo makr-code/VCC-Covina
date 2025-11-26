@@ -1,0 +1,20 @@
+# VCC-Covina Namespace Configuration
+# Phase 1: Foundation Enhancement
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: covina
+  labels:
+    app.kubernetes.io/name: covina
+    app.kubernetes.io/part-of: vcc-ecosystem
+    environment: production
+    team: vcc-covina
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: covina-observability
+  labels:
+    app.kubernetes.io/name: covina-observability
+    app.kubernetes.io/part-of: vcc-ecosystem
+    purpose: monitoring

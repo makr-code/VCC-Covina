@@ -1,0 +1,315 @@
+# VCC-Covina Embedding Service Deployment
+# Self-hosted embedding service for vector generation
+# On-premise, no vendor dependencies
+# ============================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: embedding-config
+  namespace: covina-llm
+data:
+  # Embedding Models (all self-hosted)
+  PRIMARY_MODEL: "intfloat/multilingual-e5-large"
+  LEGAL_MODEL: "nlpaueb/legal-bert-base-uncased"
+  GERMAN_MODEL: "deutsche-telekom/bert-multi-english-german-squad2"
+  
+  # Server Configuration
+  HOST: "0.0.0.0"
+  PORT: "8080"
+  MAX_BATCH_SIZE: "64"
+  MAX_SEQ_LENGTH: "512"
+  
+  # Performance
+  WORKERS: "4"
+  DEVICE: "cuda"  # Use GPU if available
+  HALF_PRECISION: "true"
+
+---
+# Embedding Service Deployment (Text Embedding Inference - TEI)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: embedding-service
+  namespace: covina-llm
+  labels:
+    app: embedding-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: embedding-service
+  template:
+    metadata:
+      labels:
+        app: embedding-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: tei
+          image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.2
+          args:
+            - "--model-id"
+            - "$(PRIMARY_MODEL)"
+            - "--port"
+            - "$(PORT)"
+            - "--max-batch-tokens"
+            - "16384"
+            - "--max-concurrent-requests"
+            - "512"
+          envFrom:
+            - configMapRef:
+                name: embedding-config
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          resources:
+            requests:
+              memory: "4Gi"
+              cpu: "2"
+            limits:
+              memory: "8Gi"
+              cpu: "4"
+          volumeMounts:
+            - name: models
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 120
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: llm-models-pvc
+
+---
+# Embedding Service (GPU version for high throughput)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: embedding-service-gpu
+  namespace: covina-llm
+  labels:
+    app: embedding-service-gpu
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: embedding-service-gpu
+  template:
+    metadata:
+      labels:
+        app: embedding-service-gpu
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      containers:
+        - name: tei-gpu
+          image: ghcr.io/huggingface/text-embeddings-inference:1.2
+          args:
+            - "--model-id"
+            - "$(PRIMARY_MODEL)"
+            - "--port"
+            - "$(PORT)"
+            - "--max-batch-tokens"
+            - "32768"
+            - "--max-concurrent-requests"
+            - "1024"
+          envFrom:
+            - configMapRef:
+                name: embedding-config
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            requests:
+              memory: "8Gi"
+              cpu: "4"
+              nvidia.com/gpu: "1"
+            limits:
+              memory: "16Gi"
+              cpu: "8"
+              nvidia.com/gpu: "1"
+          volumeMounts:
+            - name: models
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 180
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: llm-models-pvc
+      nodeSelector:
+        nvidia.com/gpu: "true"
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+          effect: "NoSchedule"
+
+---
+# Embedding Service (Kubernetes Service)
+apiVersion: v1
+kind: Service
+metadata:
+  name: embedding-service
+  namespace: covina-llm
+  labels:
+    app: embedding-service
+spec:
+  type: ClusterIP
+  selector:
+    app: embedding-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+
+---
+# Embedding Service GPU (Kubernetes Service)
+apiVersion: v1
+kind: Service
+metadata:
+  name: embedding-service-gpu
+  namespace: covina-llm
+  labels:
+    app: embedding-service-gpu
+spec:
+  type: ClusterIP
+  selector:
+    app: embedding-service-gpu
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+
+---
+# HPA for Embedding Service
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: embedding-service-hpa
+  namespace: covina-llm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: embedding-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+---
+# Reranker Service (for RAG result reranking)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reranker-service
+  namespace: covina-llm
+  labels:
+    app: reranker-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: reranker-service
+  template:
+    metadata:
+      labels:
+        app: reranker-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      containers:
+        - name: tei-reranker
+          image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.2
+          args:
+            - "--model-id"
+            - "BAAI/bge-reranker-large"
+            - "--port"
+            - "8080"
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            requests:
+              memory: "4Gi"
+              cpu: "2"
+            limits:
+              memory: "8Gi"
+              cpu: "4"
+          volumeMounts:
+            - name: models
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 120
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: llm-models-pvc
+
+---
+# Reranker Service (Kubernetes Service)
+apiVersion: v1
+kind: Service
+metadata:
+  name: reranker-service
+  namespace: covina-llm
+  labels:
+    app: reranker-service
+spec:
+  type: ClusterIP
+  selector:
+    app: reranker-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP

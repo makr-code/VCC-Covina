@@ -1,0 +1,280 @@
+# VCC-Covina ChromaDB Cluster Configuration
+# Phase 4: Enterprise Scale - Vector Database Sharding
+# All on-premise, no vendor dependencies
+#
+# ═══════════════════════════════════════════════════════════════════════════════
+# WICHTIG: ThemisDB Integration
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# ThemisDB unterstützt auch Vector-Datenbanken im VCC-Ökosystem.
+# Diese ChromaDB-Konfiguration ist für:
+#
+# 1. Covina-spezifische Embeddings (UDS3 Vector Storage)
+# 2. Lokale Semantic Search (RAG Pipeline)
+# 3. Document Classification Vectors
+#
+# Bei VCC-weiten Vector-Queries:
+# - ThemisDB kann als Routing-Layer für Cross-Service-Queries dienen
+# - ChromaDB-Daten können in Themis registriert werden
+# - Synchronisation erfolgt über Event-Bus (Kafka)
+#
+# Siehe: vcc_integration/adapters/themis_adapter.py
+# ═══════════════════════════════════════════════════════════════════════════════
+
+---
+# ChromaDB Namespace (if needed separately)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: covina-vector
+  labels:
+    app: chromadb
+
+---
+# ChromaDB StatefulSet (Distributed Mode)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: chromadb
+  namespace: covina
+  labels:
+    app: chromadb
+spec:
+  serviceName: chromadb
+  replicas: 3  # 3-node cluster
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: chromadb
+  template:
+    metadata:
+      labels:
+        app: chromadb
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        fsGroup: 1000
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - chromadb
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: chromadb
+          image: chromadb/chroma:0.4.22
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: CHROMA_SERVER_HOST
+              value: "0.0.0.0"
+            - name: CHROMA_SERVER_HTTP_PORT
+              value: "8000"
+            - name: CHROMA_SERVER_CORS_ALLOW_ORIGINS
+              value: '["*"]'
+            - name: CHROMA_SERVER_AUTH_CREDENTIALS_PROVIDER
+              value: "chromadb.auth.token.TokenConfigServerAuthCredentialsProvider"
+            - name: CHROMA_SERVER_AUTH_CREDENTIALS
+              valueFrom:
+                secretKeyRef:
+                  name: chromadb-credentials
+                  key: api-token
+            - name: CHROMA_SERVER_AUTH_TOKEN_TRANSPORT_HEADER
+              value: "Authorization"
+            - name: ANONYMIZED_TELEMETRY
+              value: "false"
+            - name: PERSIST_DIRECTORY
+              value: "/chroma/data"
+            - name: IS_PERSISTENT
+              value: "true"
+            # Distributed settings
+            - name: CHROMA_CLUSTER_ENABLED
+              value: "true"
+            - name: CHROMA_MEMBERLIST_PROVIDER
+              value: "kubernetes"
+            - name: CHROMA_MEMBERLIST_NAMESPACE
+              value: "covina"
+            - name: CHROMA_MEMBERLIST_LABEL_SELECTOR
+              value: "app=chromadb"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          resources:
+            requests:
+              cpu: 2000m
+              memory: 8Gi
+            limits:
+              cpu: 8000m
+              memory: 32Gi
+          volumeMounts:
+            - name: data
+              mountPath: /chroma/data
+          livenessProbe:
+            httpGet:
+              path: /api/v1/heartbeat
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /api/v1/heartbeat
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+  
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-ssd
+        resources:
+          requests:
+            storage: 500Gi
+
+---
+# ChromaDB Headless Service (for StatefulSet DNS)
+apiVersion: v1
+kind: Service
+metadata:
+  name: chromadb
+  namespace: covina
+  labels:
+    app: chromadb
+spec:
+  clusterIP: None
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: http
+  selector:
+    app: chromadb
+
+---
+# ChromaDB LoadBalancer Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: chromadb-lb
+  namespace: covina
+  labels:
+    app: chromadb
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: http
+  selector:
+    app: chromadb
+
+---
+# ChromaDB Credentials
+apiVersion: v1
+kind: Secret
+metadata:
+  name: chromadb-credentials
+  namespace: covina
+type: Opaque
+stringData:
+  api-token: CHANGE_ME_IN_PRODUCTION
+
+---
+# ChromaDB HPA
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: chromadb-hpa
+  namespace: covina
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: chromadb
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 600  # 10 min - data migration needed
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 300
+    scaleUp:
+      stabilizationWindowSeconds: 120
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+
+---
+# ChromaDB PodDisruptionBudget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: chromadb-pdb
+  namespace: covina
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: chromadb
+
+---
+# ChromaDB RBAC for Kubernetes memberlist
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: chromadb-memberlist
+  namespace: covina
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: chromadb-memberlist
+  namespace: covina
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: chromadb-memberlist
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: covina

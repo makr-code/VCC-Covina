@@ -1,0 +1,639 @@
+# VCC-Covina PostgreSQL Sharding with Citus
+# Phase 4: Enterprise Scale - Database Sharding
+# All on-premise, no vendor dependencies
+#
+# ═══════════════════════════════════════════════════════════════════════════════
+# WICHTIG: ThemisDB Integration
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# ThemisDB (VCC Unified Database Service) enthält bereits integrierte
+# Sharding-Funktionalität. Diese Citus-Konfiguration ist daher als:
+#
+# 1. OPTION A: Standalone Covina-Sharding (wenn Covina unabhängig von Themis läuft)
+#    - Für Szenarien wo Covina vor ThemisDB-Deployment benötigt wird
+#    - Für Development/Testing ohne vollständiges VCC-Ecosystem
+#
+# 2. OPTION B: Ergänzung zu ThemisDB (für Covina-spezifische Daten)
+#    - ThemisDB übernimmt VCC-weite Daten und Query-Routing
+#    - Citus hier nur für Covina-interne Workloads (z.B. Job-Queue, Temp-Daten)
+#    - Synchronisation via ThemisAdapter (vcc_integration/adapters/themis_adapter.py)
+#
+# EMPFEHLUNG:
+# - In Produktionsumgebungen mit vollständigem VCC-Ecosystem sollte
+#   ThemisDB als primäre Sharding-Lösung verwendet werden
+# - Covina-spezifische Tabellen können über ThemisDB verteilt werden
+# - Diese Citus-Konfiguration dient als Fallback oder für Covina-only Deployments
+#
+# Siehe: vcc_integration/adapters/themis_adapter.py für Integration
+# ═══════════════════════════════════════════════════════════════════════════════
+
+---
+# Citus Coordinator StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: citus-coordinator
+  namespace: covina
+  labels:
+    app: citus
+    role: coordinator
+spec:
+  serviceName: citus-coordinator
+  replicas: 2  # HA coordinator
+  selector:
+    matchLabels:
+      app: citus
+      role: coordinator
+  template:
+    metadata:
+      labels:
+        app: citus
+        role: coordinator
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9187"
+    spec:
+      serviceAccountName: citus-coordinator
+      securityContext:
+        fsGroup: 999
+      containers:
+        - name: citus-coordinator
+          image: citusdata/citus:12.1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+              name: postgres
+            - containerPort: 9187
+              name: metrics
+          env:
+            - name: POSTGRES_DB
+              value: covina
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: citus-credentials
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: citus-credentials
+                  key: password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: CITUS_ROLE
+              value: coordinator
+          resources:
+            requests:
+              cpu: 2000m
+              memory: 8Gi
+            limits:
+              cpu: 8000m
+              memory: 32Gi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: config
+              mountPath: /etc/postgresql/postgresql.conf
+              subPath: postgresql.conf
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - $(POSTGRES_USER)
+                - -d
+                - covina
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - $(POSTGRES_USER)
+                - -d
+                - covina
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+        
+        # Postgres Exporter sidecar
+        - name: postgres-exporter
+          image: prometheuscommunity/postgres-exporter:v0.15.0
+          ports:
+            - containerPort: 9187
+              name: metrics
+          env:
+            - name: DATA_SOURCE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: citus-credentials
+                  key: exporter-dsn
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      
+      volumes:
+        - name: config
+          configMap:
+            name: citus-config
+        - name: init-scripts
+          configMap:
+            name: citus-init-scripts
+  
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-ssd
+        resources:
+          requests:
+            storage: 500Gi
+
+---
+# Citus Worker StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: citus-worker
+  namespace: covina
+  labels:
+    app: citus
+    role: worker
+spec:
+  serviceName: citus-worker
+  replicas: 4  # 4 worker nodes for sharding
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: citus
+      role: worker
+  template:
+    metadata:
+      labels:
+        app: citus
+        role: worker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9187"
+    spec:
+      serviceAccountName: citus-worker
+      securityContext:
+        fsGroup: 999
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - citus
+                    - key: role
+                      operator: In
+                      values:
+                        - worker
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: citus-worker
+          image: citusdata/citus:12.1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+              name: postgres
+            - containerPort: 9187
+              name: metrics
+          env:
+            - name: POSTGRES_DB
+              value: covina
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: citus-credentials
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: citus-credentials
+                  key: password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: CITUS_ROLE
+              value: worker
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          resources:
+            requests:
+              cpu: 2000m
+              memory: 8Gi
+            limits:
+              cpu: 8000m
+              memory: 32Gi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: config
+              mountPath: /etc/postgresql/postgresql.conf
+              subPath: postgresql.conf
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - $(POSTGRES_USER)
+                - -d
+                - covina
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - $(POSTGRES_USER)
+                - -d
+                - covina
+            initialDelaySeconds: 5
+            periodSeconds: 5
+        
+        - name: postgres-exporter
+          image: prometheuscommunity/postgres-exporter:v0.15.0
+          ports:
+            - containerPort: 9187
+          env:
+            - name: DATA_SOURCE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: citus-credentials
+                  key: exporter-dsn
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      
+      volumes:
+        - name: config
+          configMap:
+            name: citus-config
+  
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-ssd
+        resources:
+          requests:
+            storage: 1Ti
+
+---
+# Citus Coordinator Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: citus-coordinator
+  namespace: covina
+  labels:
+    app: citus
+    role: coordinator
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+    - port: 9187
+      targetPort: 9187
+      name: metrics
+  selector:
+    app: citus
+    role: coordinator
+
+---
+# Citus Worker Headless Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: citus-worker
+  namespace: covina
+  labels:
+    app: citus
+    role: worker
+spec:
+  clusterIP: None
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+    - port: 9187
+      targetPort: 9187
+      name: metrics
+  selector:
+    app: citus
+    role: worker
+
+---
+# Citus Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: citus-config
+  namespace: covina
+data:
+  postgresql.conf: |
+    # Citus configuration
+    shared_preload_libraries = 'citus'
+    
+    # Connection settings
+    listen_addresses = '*'
+    port = 5432
+    max_connections = 500
+    
+    # Memory settings
+    shared_buffers = 8GB
+    effective_cache_size = 24GB
+    work_mem = 256MB
+    maintenance_work_mem = 2GB
+    
+    # WAL settings
+    wal_level = logical
+    max_wal_senders = 10
+    max_replication_slots = 10
+    wal_keep_size = 2GB
+    
+    # Checkpoint settings
+    checkpoint_timeout = 30min
+    checkpoint_completion_target = 0.9
+    max_wal_size = 8GB
+    min_wal_size = 2GB
+    
+    # Query planning
+    random_page_cost = 1.1
+    effective_io_concurrency = 200
+    default_statistics_target = 100
+    
+    # Parallelism
+    max_worker_processes = 16
+    max_parallel_workers_per_gather = 4
+    max_parallel_workers = 16
+    max_parallel_maintenance_workers = 4
+    
+    # Citus specific
+    citus.node_conninfo = 'sslmode=prefer'
+    citus.log_remote_commands = off
+    citus.shard_count = 32
+    citus.shard_replication_factor = 2
+    
+    # Logging
+    log_destination = 'stderr'
+    logging_collector = on
+    log_directory = 'pg_log'
+    log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log'
+    log_statement = 'ddl'
+    log_min_duration_statement = 1000
+    
+    # Autovacuum
+    autovacuum = on
+    autovacuum_max_workers = 4
+    autovacuum_naptime = 60s
+    autovacuum_vacuum_threshold = 50
+    autovacuum_analyze_threshold = 50
+    autovacuum_vacuum_scale_factor = 0.1
+    autovacuum_analyze_scale_factor = 0.05
+
+---
+# Citus Initialization Scripts
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: citus-init-scripts
+  namespace: covina
+data:
+  01-create-extension.sql: |
+    -- Enable Citus extension
+    CREATE EXTENSION IF NOT EXISTS citus;
+    
+    -- Enable other useful extensions
+    CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+    CREATE EXTENSION IF NOT EXISTS uuid-ossp;
+  
+  02-create-schemas.sql: |
+    -- Create schemas
+    CREATE SCHEMA IF NOT EXISTS documents;
+    CREATE SCHEMA IF NOT EXISTS compliance;
+    CREATE SCHEMA IF NOT EXISTS audit;
+    CREATE SCHEMA IF NOT EXISTS analytics;
+  
+  03-create-tables.sql: |
+    -- Documents table (distributed by document_id)
+    CREATE TABLE IF NOT EXISTS documents.documents (
+        document_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        job_id UUID NOT NULL,
+        filename TEXT NOT NULL,
+        file_type TEXT NOT NULL,
+        file_size BIGINT NOT NULL,
+        checksum TEXT NOT NULL,
+        content_hash TEXT,
+        metadata JSONB DEFAULT '{}',
+        classification JSONB DEFAULT '{}',
+        status TEXT DEFAULT 'pending',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        created_by TEXT,
+        tenant_id UUID NOT NULL
+    );
+    
+    -- Distribute by tenant_id for multi-tenant isolation
+    SELECT create_distributed_table('documents.documents', 'tenant_id');
+    
+    -- Document chunks (co-located with documents)
+    CREATE TABLE IF NOT EXISTS documents.chunks (
+        chunk_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        document_id UUID NOT NULL,
+        tenant_id UUID NOT NULL,
+        chunk_index INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        embedding_id TEXT,
+        metadata JSONB DEFAULT '{}',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+    
+    -- Distribute and colocate with documents
+    SELECT create_distributed_table('documents.chunks', 'tenant_id', colocate_with => 'documents.documents');
+    
+    -- Compliance events (distributed by tenant)
+    CREATE TABLE IF NOT EXISTS compliance.events (
+        event_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        tenant_id UUID NOT NULL,
+        document_id UUID,
+        event_type TEXT NOT NULL,
+        event_data JSONB NOT NULL,
+        severity TEXT DEFAULT 'info',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        processed_at TIMESTAMP WITH TIME ZONE,
+        status TEXT DEFAULT 'pending'
+    );
+    
+    SELECT create_distributed_table('compliance.events', 'tenant_id');
+    
+    -- Audit log (append-only, time-partitioned)
+    CREATE TABLE IF NOT EXISTS audit.log (
+        log_id UUID DEFAULT uuid_generate_v4(),
+        tenant_id UUID NOT NULL,
+        user_id TEXT,
+        action TEXT NOT NULL,
+        resource_type TEXT NOT NULL,
+        resource_id TEXT,
+        details JSONB DEFAULT '{}',
+        ip_address INET,
+        user_agent TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        PRIMARY KEY (tenant_id, created_at, log_id)
+    );
+    
+    -- Create time-series distributed table for audit
+    SELECT create_distributed_table('audit.log', 'tenant_id');
+    
+    -- Analytics aggregates (reference table for small lookup data)
+    CREATE TABLE IF NOT EXISTS analytics.document_stats (
+        stat_date DATE NOT NULL,
+        tenant_id UUID NOT NULL,
+        total_documents BIGINT DEFAULT 0,
+        total_size_bytes BIGINT DEFAULT 0,
+        documents_processed BIGINT DEFAULT 0,
+        documents_failed BIGINT DEFAULT 0,
+        avg_processing_time_ms NUMERIC,
+        PRIMARY KEY (stat_date, tenant_id)
+    );
+    
+    SELECT create_distributed_table('analytics.document_stats', 'tenant_id');
+    
+    -- Tenants table (reference table replicated to all nodes)
+    CREATE TABLE IF NOT EXISTS public.tenants (
+        tenant_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        name TEXT NOT NULL,
+        settings JSONB DEFAULT '{}',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        status TEXT DEFAULT 'active'
+    );
+    
+    SELECT create_reference_table('public.tenants');
+  
+  04-create-indexes.sql: |
+    -- Document indexes
+    CREATE INDEX IF NOT EXISTS idx_documents_job_id ON documents.documents(job_id);
+    CREATE INDEX IF NOT EXISTS idx_documents_status ON documents.documents(status);
+    CREATE INDEX IF NOT EXISTS idx_documents_created_at ON documents.documents(created_at);
+    CREATE INDEX IF NOT EXISTS idx_documents_metadata ON documents.documents USING GIN(metadata);
+    CREATE INDEX IF NOT EXISTS idx_documents_classification ON documents.documents USING GIN(classification);
+    
+    -- Chunk indexes
+    CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON documents.chunks(document_id);
+    CREATE INDEX IF NOT EXISTS idx_chunks_embedding_id ON documents.chunks(embedding_id);
+    
+    -- Compliance indexes
+    CREATE INDEX IF NOT EXISTS idx_compliance_document_id ON compliance.events(document_id);
+    CREATE INDEX IF NOT EXISTS idx_compliance_event_type ON compliance.events(event_type);
+    CREATE INDEX IF NOT EXISTS idx_compliance_status ON compliance.events(status);
+    CREATE INDEX IF NOT EXISTS idx_compliance_created_at ON compliance.events(created_at);
+    
+    -- Audit indexes
+    CREATE INDEX IF NOT EXISTS idx_audit_user_id ON audit.log(user_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_action ON audit.log(action);
+    CREATE INDEX IF NOT EXISTS idx_audit_resource ON audit.log(resource_type, resource_id);
+  
+  05-setup-workers.sh: |
+    #!/bin/bash
+    # This script runs on coordinator after all workers are ready
+    
+    # Wait for workers to be ready
+    for i in {0..3}; do
+      until pg_isready -h citus-worker-$i.citus-worker.covina.svc.cluster.local -p 5432; do
+        echo "Waiting for citus-worker-$i..."
+        sleep 5
+      done
+    done
+    
+    # Register workers with coordinator
+    psql -U $POSTGRES_USER -d covina -c "
+      SELECT citus_add_node('citus-worker-0.citus-worker.covina.svc.cluster.local', 5432);
+      SELECT citus_add_node('citus-worker-1.citus-worker.covina.svc.cluster.local', 5432);
+      SELECT citus_add_node('citus-worker-2.citus-worker.covina.svc.cluster.local', 5432);
+      SELECT citus_add_node('citus-worker-3.citus-worker.covina.svc.cluster.local', 5432);
+    "
+    
+    # Rebalance shards
+    psql -U $POSTGRES_USER -d covina -c "SELECT rebalance_table_shards();"
+
+---
+# Citus Credentials Secret (Template)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: citus-credentials
+  namespace: covina
+type: Opaque
+stringData:
+  username: covina_admin
+  password: CHANGE_ME_IN_PRODUCTION
+  exporter-dsn: postgresql://covina_admin:CHANGE_ME_IN_PRODUCTION@localhost:5432/covina?sslmode=disable
+
+---
+# ServiceAccount for Coordinator
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: citus-coordinator
+  namespace: covina
+
+---
+# ServiceAccount for Workers
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: citus-worker
+  namespace: covina
+
+---
+# PodDisruptionBudget for Coordinator
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: citus-coordinator-pdb
+  namespace: covina
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: citus
+      role: coordinator
+
+---
+# PodDisruptionBudget for Workers
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: citus-worker-pdb
+  namespace: covina
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: citus
+      role: worker

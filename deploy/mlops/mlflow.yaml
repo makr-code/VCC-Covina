@@ -1,0 +1,423 @@
+# VCC-Covina MLflow Deployment
+# Self-hosted MLOps platform for model tracking and registry
+# On-premise, no vendor dependencies
+# ============================================
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: covina-mlops
+  labels:
+    app: covina
+    component: mlops
+    environment: production
+
+---
+# MLflow PostgreSQL Backend Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlflow-postgres-pvc
+  namespace: covina-mlops
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 50Gi
+
+---
+# MLflow Artifact Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlflow-artifacts-pvc
+  namespace: covina-mlops
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 500Gi  # For model artifacts
+
+---
+# MLflow PostgreSQL Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow-postgres
+  namespace: covina-mlops
+  labels:
+    app: mlflow-postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mlflow-postgres
+  template:
+    metadata:
+      labels:
+        app: mlflow-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mlflow-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mlflow-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              value: "mlflow"
+          ports:
+            - containerPort: 5432
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "1"
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - mlflow
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - mlflow
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: mlflow-postgres-pvc
+
+---
+# MLflow PostgreSQL Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow-postgres
+  namespace: covina-mlops
+spec:
+  type: ClusterIP
+  selector:
+    app: mlflow-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+
+---
+# MLflow Secrets
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mlflow-secrets
+  namespace: covina-mlops
+type: Opaque
+stringData:
+  POSTGRES_USER: "mlflow"
+  POSTGRES_PASSWORD: "mlflow-secret-password-replace-in-production"
+  MLFLOW_TRACKING_USERNAME: "admin"
+  MLFLOW_TRACKING_PASSWORD: "admin-password-replace-in-production"
+
+---
+# MLflow ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mlflow-config
+  namespace: covina-mlops
+data:
+  MLFLOW_BACKEND_STORE_URI: "postgresql://mlflow:mlflow-secret-password-replace-in-production@mlflow-postgres:5432/mlflow"
+  MLFLOW_DEFAULT_ARTIFACT_ROOT: "/mlflow/artifacts"
+  MLFLOW_HOST: "0.0.0.0"
+  MLFLOW_PORT: "5000"
+  GUNICORN_CMD_ARGS: "--workers 4 --timeout 120"
+
+---
+# MLflow Server Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow-server
+  namespace: covina-mlops
+  labels:
+    app: mlflow-server
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: mlflow-server
+  template:
+    metadata:
+      labels:
+        app: mlflow-server
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5000"
+    spec:
+      containers:
+        - name: mlflow
+          image: ghcr.io/mlflow/mlflow:v2.9.2
+          command:
+            - mlflow
+            - server
+            - --backend-store-uri
+            - "$(MLFLOW_BACKEND_STORE_URI)"
+            - --default-artifact-root
+            - "$(MLFLOW_DEFAULT_ARTIFACT_ROOT)"
+            - --host
+            - "$(MLFLOW_HOST)"
+            - --port
+            - "$(MLFLOW_PORT)"
+          envFrom:
+            - configMapRef:
+                name: mlflow-config
+            - secretRef:
+                name: mlflow-secrets
+          ports:
+            - containerPort: 5000
+              name: http
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "1"
+          volumeMounts:
+            - name: artifacts
+              mountPath: /mlflow/artifacts
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: artifacts
+          persistentVolumeClaim:
+            claimName: mlflow-artifacts-pvc
+
+---
+# MLflow Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow-server
+  namespace: covina-mlops
+  labels:
+    app: mlflow-server
+spec:
+  type: ClusterIP
+  selector:
+    app: mlflow-server
+  ports:
+    - name: http
+      port: 5000
+      targetPort: 5000
+
+---
+# MLflow Model Registry (MinIO for S3-compatible artifact storage)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: covina-mlops
+  labels:
+    app: minio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+        - name: minio
+          image: minio/minio:RELEASE.2024-01-16T16-07-38Z
+          command:
+            - minio
+            - server
+            - /data
+            - --console-address
+            - ":9001"
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secrets
+                  key: MINIO_ROOT_USER
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secrets
+                  key: MINIO_ROOT_PASSWORD
+          ports:
+            - containerPort: 9000
+              name: api
+            - containerPort: 9001
+              name: console
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "1"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: 9000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: 9000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: mlflow-artifacts-pvc
+
+---
+# MinIO Secrets
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-secrets
+  namespace: covina-mlops
+type: Opaque
+stringData:
+  MINIO_ROOT_USER: "minioadmin"
+  MINIO_ROOT_PASSWORD: "minio-secret-password-replace-in-production"
+
+---
+# MinIO Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: covina-mlops
+spec:
+  type: ClusterIP
+  selector:
+    app: minio
+  ports:
+    - name: api
+      port: 9000
+      targetPort: 9000
+    - name: console
+      port: 9001
+      targetPort: 9001
+
+---
+# Model Serving (MLflow Models)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow-model-server
+  namespace: covina-mlops
+  labels:
+    app: mlflow-model-server
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: mlflow-model-server
+  template:
+    metadata:
+      labels:
+        app: mlflow-model-server
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      containers:
+        - name: model-server
+          image: ghcr.io/mlflow/mlflow:v2.9.2
+          command:
+            - mlflow
+            - models
+            - serve
+            - -m
+            - "models:/covina-classifier/Production"
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "8080"
+            - --no-conda
+          env:
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow-server:5000"
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "1"
+            limits:
+              memory: "4Gi"
+              cpu: "2"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+
+---
+# Model Server Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow-model-server
+  namespace: covina-mlops
+spec:
+  type: ClusterIP
+  selector:
+    app: mlflow-model-server
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

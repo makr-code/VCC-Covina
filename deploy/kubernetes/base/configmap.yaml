@@ -1,0 +1,48 @@
+# VCC-Covina Configuration
+# Phase 1: Foundation Enhancement
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: covina-config
+  namespace: covina
+  labels:
+    app.kubernetes.io/name: covina
+    app.kubernetes.io/component: config
+data:
+  # Service Configuration
+  WORKERS_IO: "36"
+  WORKERS_CPU: "36"
+  LOG_LEVEL: "INFO"
+  
+  # Database Configuration (on-premise)
+  POSTGRES_HOST: "postgres-service.covina.svc.cluster.local"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DATABASE: "covina"
+  
+  # ChromaDB Configuration (self-hosted)
+  CHROMA_HOST: "chromadb-service.covina.svc.cluster.local"
+  CHROMA_PORT: "8000"
+  
+  # Neo4j Configuration (on-premise)
+  NEO4J_URI: "bolt://neo4j-service.covina.svc.cluster.local:7687"
+  
+  # CouchDB Configuration (self-hosted)
+  COUCHDB_HOST: "couchdb-service.covina.svc.cluster.local"
+  COUCHDB_PORT: "5984"
+  
+  # Kafka Configuration (on-premise cluster)
+  KAFKA_BOOTSTRAP_SERVERS: "kafka-service.covina.svc.cluster.local:9092"
+  
+  # Redis Configuration (on-premise)
+  REDIS_HOST: "redis-service.covina.svc.cluster.local"
+  REDIS_PORT: "6379"
+  
+  # Feature Flags
+  ENABLE_BATCH_EMBEDDINGS: "true"
+  ENABLE_CHROMA_BATCH_INSERT: "true"
+  
+  # OpenTelemetry Configuration
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger-collector.covina-observability.svc.cluster.local:4317"
+  OTEL_SERVICE_NAME: "covina"
+  OTEL_TRACES_EXPORTER: "otlp"
+  OTEL_METRICS_EXPORTER: "prometheus"

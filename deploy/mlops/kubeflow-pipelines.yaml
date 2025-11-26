@@ -1,0 +1,431 @@
+# VCC-Covina Kubeflow Pipelines Deployment
+# Self-hosted ML Pipeline orchestration
+# On-premise, no vendor dependencies
+# ============================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubeflow-config
+  namespace: covina-mlops
+data:
+  # Pipeline Configuration
+  PIPELINE_NAMESPACE: "covina-mlops"
+  CACHE_ENABLED: "true"
+  MAX_CACHE_AGE: "7d"
+  
+  # Execution Configuration
+  DEFAULT_PIPELINE_ROOT: "/pipelines/artifacts"
+  LAUNCHER_IMAGE: "gcr.io/ml-pipeline/kfp-launcher:2.0.0"
+  
+  # Feature Flags
+  DISABLE_TELEMETRY: "true"  # On-premise, no telemetry
+  SKIP_AUTH_CHECK: "false"
+
+---
+# Kubeflow Pipelines Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kubeflow-pipelines-pvc
+  namespace: covina-mlops
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 200Gi
+
+---
+# Argo Workflows (Pipeline Executor)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argo-workflow-controller
+  namespace: covina-mlops
+  labels:
+    app: argo-workflow-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: argo-workflow-controller
+  template:
+    metadata:
+      labels:
+        app: argo-workflow-controller
+    spec:
+      serviceAccountName: argo-workflow
+      containers:
+        - name: workflow-controller
+          image: quay.io/argoproj/workflow-controller:v3.5.2
+          args:
+            - --configmap
+            - workflow-controller-configmap
+            - --executor-image
+            - quay.io/argoproj/argoexec:v3.5.2
+          env:
+            - name: LEADER_ELECTION_IDENTITY
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "200m"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 6060
+            initialDelaySeconds: 30
+            periodSeconds: 30
+
+---
+# Argo Workflow ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: workflow-controller-configmap
+  namespace: covina-mlops
+data:
+  config: |
+    containerRuntimeExecutor: k8sapi
+    parallelism: 20
+    resourceRateLimit:
+      limit: 100
+      burst: 200
+    persistence:
+      archive: true
+      clusterName: covina-mlops
+      archiveTTL: 30d
+
+---
+# Argo Server (UI)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argo-server
+  namespace: covina-mlops
+  labels:
+    app: argo-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: argo-server
+  template:
+    metadata:
+      labels:
+        app: argo-server
+    spec:
+      serviceAccountName: argo-server
+      containers:
+        - name: argo-server
+          image: quay.io/argoproj/argocli:v3.5.2
+          args:
+            - server
+            - --auth-mode=server
+            - --secure=false
+          ports:
+            - containerPort: 2746
+              name: web
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "200m"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 2746
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+---
+# Argo Server Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: argo-server
+  namespace: covina-mlops
+spec:
+  type: ClusterIP
+  selector:
+    app: argo-server
+  ports:
+    - name: web
+      port: 2746
+      targetPort: 2746
+
+---
+# ServiceAccounts
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argo-workflow
+  namespace: covina-mlops
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argo-server
+  namespace: covina-mlops
+
+---
+# RBAC for Argo Workflow
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argo-workflow-role
+  namespace: covina-mlops
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "pods/exec"]
+    verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["create", "delete", "get"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflows", "workflowtemplates", "cronworkflows"]
+    verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argo-workflow-binding
+  namespace: covina-mlops
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: argo-workflow-role
+subjects:
+  - kind: ServiceAccount
+    name: argo-workflow
+    namespace: covina-mlops
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argo-server-binding
+  namespace: covina-mlops
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: argo-workflow-role
+subjects:
+  - kind: ServiceAccount
+    name: argo-server
+    namespace: covina-mlops
+
+---
+# Model Training Job Template
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: covina-model-training
+  namespace: covina-mlops
+spec:
+  entrypoint: train-model
+  serviceAccountName: argo-workflow
+  volumeClaimTemplates:
+    - metadata:
+        name: workdir
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 50Gi
+  templates:
+    - name: train-model
+      dag:
+        tasks:
+          - name: prepare-data
+            template: data-prep
+          - name: train
+            template: training
+            dependencies: [prepare-data]
+          - name: evaluate
+            template: evaluation
+            dependencies: [train]
+          - name: register-model
+            template: model-registration
+            dependencies: [evaluate]
+    
+    - name: data-prep
+      container:
+        image: python:3.11-slim
+        command: [python, -c]
+        args:
+          - |
+            print("Preparing training data...")
+            # Data preparation logic here
+        volumeMounts:
+          - name: workdir
+            mountPath: /workdir
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "2"
+    
+    - name: training
+      container:
+        image: python:3.11-slim
+        command: [python, -c]
+        args:
+          - |
+            import os
+            print("Training model...")
+            # Training logic here
+        volumeMounts:
+          - name: workdir
+            mountPath: /workdir
+        resources:
+          requests:
+            memory: "16Gi"
+            cpu: "8"
+            nvidia.com/gpu: "1"
+          limits:
+            memory: "32Gi"
+            cpu: "16"
+            nvidia.com/gpu: "1"
+    
+    - name: evaluation
+      container:
+        image: python:3.11-slim
+        command: [python, -c]
+        args:
+          - |
+            print("Evaluating model...")
+            # Evaluation logic here
+        volumeMounts:
+          - name: workdir
+            mountPath: /workdir
+        resources:
+          requests:
+            memory: "8Gi"
+            cpu: "4"
+    
+    - name: model-registration
+      container:
+        image: ghcr.io/mlflow/mlflow:v2.9.2
+        command: [python, -c]
+        args:
+          - |
+            import mlflow
+            print("Registering model to MLflow...")
+            # Model registration logic here
+        env:
+          - name: MLFLOW_TRACKING_URI
+            value: "http://mlflow-server:5000"
+        volumeMounts:
+          - name: workdir
+            mountPath: /workdir
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1"
+
+---
+# Scheduled Model Retraining CronWorkflow
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: covina-model-retrain
+  namespace: covina-mlops
+spec:
+  schedule: "0 2 * * 0"  # Every Sunday at 2 AM
+  timezone: "Europe/Berlin"
+  concurrencyPolicy: "Replace"
+  startingDeadlineSeconds: 0
+  workflowSpec:
+    entrypoint: retrain
+    serviceAccountName: argo-workflow
+    templates:
+      - name: retrain
+        steps:
+          - - name: check-drift
+              template: drift-detection
+          - - name: retrain-if-needed
+              template: conditional-retrain
+              when: "{{steps.check-drift.outputs.result}} == 'drift-detected'"
+      
+      - name: drift-detection
+        container:
+          image: python:3.11-slim
+          command: [python, -c]
+          args:
+            - |
+              import random
+              # Drift detection logic here
+              drift_detected = random.choice([True, False])
+              if drift_detected:
+                  print("drift-detected")
+              else:
+                  print("no-drift")
+      
+      - name: conditional-retrain
+        templateRef:
+          name: covina-model-training
+          template: train-model
+
+---
+# NetworkPolicy for MLOps namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mlops-network-policy
+  namespace: covina-mlops
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from covina namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: covina
+      ports:
+        - protocol: TCP
+          port: 5000
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 2746
+    # Allow from monitoring
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: covina-observability
+  egress:
+    # Allow to LLM namespace
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: covina-llm
+    # Allow to databases
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: covina
+    # Allow DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
