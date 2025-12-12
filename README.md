@@ -152,11 +152,12 @@ curl http://localhost:45679/health  # Ingestion Backend
 ### Architektur & Design
 - [MICROSERVICES_ARCHITECTURE.md](docs/MICROSERVICES_ARCHITECTURE.md) - Microservices-Design
 - [VCC_COVINA_EVOLUTION_STRATEGY.md](docs/VCC_COVINA_EVOLUTION_STRATEGY.md) - Langfristige Strategie
-- [SYSTEM_ARCHITECTURE_ANALYSIS.md](docs/SYSTEM_ARCHITECTURE_ANALYSIS.md) - System-Architektur
+- [INGESTION_ARCHITECTURE_COMPLETE_ANALYSIS.md](docs/INGESTION_ARCHITECTURE_COMPLETE_ANALYSIS.md) - Ingestion-Architektur
 
 ### Performance & Optimierung
-- [LOAD_TEST_REPORT.md](docs/LOAD_TEST_REPORT.md) - Performance-Tests & Benchmarks
-- [PERFORMANCE_OPTIMIZATION_ROADMAP.md](docs/PERFORMANCE_OPTIMIZATION_ROADMAP.md) - Optimierungs-Roadmap
+- [PERFORMANCE_BASELINE_REPORT.md](docs/PERFORMANCE_BASELINE_REPORT.md) - Performance-Tests & Benchmarks
+- [UPLOAD_SOLUTIONS_ROADMAP.md](docs/UPLOAD_SOLUTIONS_ROADMAP.md) - Upload-Optimierungs-Roadmap
+- [PRODUCTION_DEPLOYMENT_OPTIMIZATIONS.md](docs/PRODUCTION_DEPLOYMENT_OPTIMIZATIONS.md) - Production Optimierungen
 
 ### Roadmap & Releases
 - [ROADMAP.md](ROADMAP.md) - Entwicklungs-Roadmap 2025-2027
@@ -216,7 +217,7 @@ Covina ist Teil des **Virtual Compliance Center (VCC)** Projekts:
 - **Phase 3 (Horizontal):** 2000-6000 docs/sec
 - **Phase 4 (Cloud-Native):** 10K-50K docs/sec
 
-Siehe [PERFORMANCE_OPTIMIZATION_ROADMAP.md](docs/PERFORMANCE_OPTIMIZATION_ROADMAP.md) für Details.
+Siehe [UPLOAD_SOLUTIONS_ROADMAP.md](docs/UPLOAD_SOLUTIONS_ROADMAP.md) für Details.
 
 ## 🛠️ Technologie-Stack
 
